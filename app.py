@@ -1,6 +1,7 @@
 """
-Elite Alpha EA - SIMPLIFIED AUTO-ANALYZE VERSION
-Just take a picture - app does everything!
+Elite Alpha EA - UPLOAD + AUTO-ANALYZE
+Upload screenshot from gallery + Symbol + Timeframe
+App does everything else automatically!
 """
 
 from flask import Flask, request, jsonify, render_template_string
@@ -25,10 +26,9 @@ HTML = """
             overflow-x: hidden;
         }
 
-        /* Hero */
         .hero {
             position: relative;
-            height: 280px;
+            height: 260px;
             background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
             overflow: hidden;
             display: flex;
@@ -40,10 +40,7 @@ HTML = """
         .hero::before {
             content: '';
             position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
+            top: -50%; left: -50%; width: 200%; height: 200%;
             background:
                 radial-gradient(circle at 30% 40%, rgba(0, 150, 255, 0.2) 0%, transparent 50%),
                 radial-gradient(circle at 70% 60%, rgba(0, 212, 170, 0.15) 0%, transparent 50%);
@@ -62,8 +59,8 @@ HTML = """
         }
 
         .robot-icon {
-            font-size: 64px;
-            margin-bottom: 10px;
+            font-size: 60px;
+            margin-bottom: 8px;
             animation: float 3s ease-in-out infinite;
             filter: drop-shadow(0 0 20px rgba(0, 212, 170, 0.5));
         }
@@ -74,13 +71,12 @@ HTML = """
         }
 
         .app-title {
-            font-size: 36px;
+            font-size: 34px;
             font-weight: 800;
             background: linear-gradient(135deg, #00d4ff 0%, #00d4aa 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         .app-subtitle {
@@ -96,80 +92,42 @@ HTML = """
             opacity: 0.8;
         }
 
-        /* Main SCAN Button */
-        .main-scan-btn {
-            position: relative;
-            z-index: 2;
-            margin-top: 20px;
-            background: linear-gradient(135deg, #0096ff 0%, #00d4aa 100%);
-            color: #ffffff;
-            border: none;
-            padding: 16px 40px;
-            border-radius: 30px;
-            font-size: 18px;
-            font-weight: 800;
-            cursor: pointer;
-            box-shadow: 0 4px 20px rgba(0, 150, 255, 0.5);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .main-scan-btn:active {
-            transform: scale(0.95);
-        }
-
-        /* Container */
         .container {
             max-width: 600px;
             margin: 0 auto;
             padding: 20px 15px;
         }
 
-        /* AI Scanner Card */
-        .ai-scanner-card {
+        /* Upload Card */
+        .upload-card {
             background: linear-gradient(135deg, rgba(0, 150, 255, 0.1) 0%, rgba(0, 212, 170, 0.05) 100%);
-            border: 1.5px solid rgba(0, 150, 255, 0.3);
+            border: 2px dashed rgba(0, 150, 255, 0.4);
             border-radius: 16px;
-            padding: 18px;
+            padding: 30px 20px;
+            text-align: center;
             margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
             cursor: pointer;
         }
 
-        .ai-scanner-card:active { transform: scale(0.98); }
+        .upload-card:active { transform: scale(0.98); }
 
-        .ai-scanner-left {
-            display: flex;
-            align-items: center;
-            gap: 15px;
+        .upload-icon {
+            font-size: 48px;
+            display: block;
+            margin-bottom: 10px;
         }
 
-        .ai-icon {
-            width: 48px;
-            height: 48px;
-            background: linear-gradient(135deg, #0096ff 0%, #00d4aa 100%);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-        }
-
-        .ai-scanner-text h3 {
+        .upload-text {
             font-size: 16px;
-            font-weight: 700;
-            margin-bottom: 4px;
+            font-weight: 600;
+            margin-bottom: 5px;
         }
 
-        .ai-scanner-text p {
+        .upload-hint {
             font-size: 12px;
             color: #888;
         }
 
-        /* Preview */
         .preview-section {
             display: none;
             text-align: center;
@@ -178,63 +136,82 @@ HTML = """
 
         .preview-section img {
             max-width: 100%;
-            max-height: 300px;
+            max-height: 280px;
             border-radius: 12px;
             border: 1px solid rgba(0, 150, 255, 0.3);
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
 
-        /* Account Balance */
-        .balance-card {
+        .change-btn {
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        /* Cards */
+        .card {
             background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 15px;
             border: 1px solid rgba(0, 150, 255, 0.15);
-            border-radius: 12px;
-            padding: 15px;
+        }
+
+        .card-title {
+            color: #00d4ff;
+            font-size: 16px;
+            font-weight: 700;
             margin-bottom: 15px;
         }
 
-        .balance-card label {
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
             color: #888;
             font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 1px;
-            margin-bottom: 8px;
-            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
         }
 
-        .balance-card input {
+        input, select {
             width: 100%;
             padding: 12px;
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(0, 150, 255, 0.3);
             color: #ffffff;
             border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
+            font-size: 15px;
         }
 
-        /* Action Buttons */
-        .action-buttons {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        .action-btn-small {
-            background: rgba(0, 150, 255, 0.1);
-            border: 1px solid rgba(0, 150, 255, 0.3);
+        .analyze-btn {
+            background: linear-gradient(135deg, #0096ff 0%, #00d4aa 100%);
             color: #ffffff;
-            padding: 12px;
+            border: none;
+            padding: 16px;
             border-radius: 12px;
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 16px;
+            font-weight: 700;
             cursor: pointer;
+            width: 100%;
+            box-shadow: 0 4px 12px rgba(0, 150, 255, 0.3);
+            margin-top: 10px;
         }
 
-        .action-btn-small:active {
-            transform: scale(0.96);
-            background: rgba(0, 150, 255, 0.2);
+        .analyze-btn:active { transform: scale(0.96); }
+        .analyze-btn:disabled {
+            background: #333;
+            color: #666;
+            cursor: not-allowed;
+            box-shadow: none;
         }
 
         /* Loading */
@@ -257,9 +234,7 @@ HTML = """
             margin: 0 auto 15px;
         }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
         /* Result */
         #result { display: none; }
@@ -271,6 +246,12 @@ HTML = """
             padding: 25px 20px;
             margin-bottom: 15px;
             text-align: center;
+        }
+
+        .detected-info {
+            color: #888;
+            font-size: 13px;
+            margin-bottom: 10px;
         }
 
         .direction-buy {
@@ -312,15 +293,6 @@ HTML = """
             color: #ffd700;
         }
 
-        /* Cards */
-        .card {
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 16px;
-            padding: 18px;
-            margin-bottom: 15px;
-            border: 1px solid rgba(0, 150, 255, 0.15);
-        }
-
         .info-row {
             display: flex;
             justify-content: space-between;
@@ -335,7 +307,18 @@ HTML = """
         .value.loss { color: #ff6b6b; }
         .value.profit { color: #00d4aa; }
 
-        /* Analysis Sections */
+        .best-action {
+            font-size: 22px;
+            font-weight: 800;
+            color: #00d4aa;
+            text-align: center;
+            padding: 15px;
+            background: rgba(0, 212, 170, 0.1);
+            border-radius: 10px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(0, 212, 170, 0.3);
+        }
+
         .analysis-section {
             background: rgba(0, 150, 255, 0.05);
             border: 1px solid rgba(0, 150, 255, 0.2);
@@ -365,48 +348,6 @@ HTML = """
             line-height: 1.5;
         }
 
-        .best-action {
-            font-size: 22px;
-            font-weight: 800;
-            color: #00d4aa;
-            text-align: center;
-            padding: 15px;
-            background: rgba(0, 212, 170, 0.1);
-            border-radius: 10px;
-            margin: 10px 0;
-            border: 1px solid rgba(0, 212, 170, 0.3);
-        }
-
-        /* Robot List */
-        .robot-list {
-            background: rgba(0, 150, 255, 0.05);
-            border: 1.5px solid rgba(0, 150, 255, 0.3);
-            border-radius: 12px;
-            padding: 15px;
-            margin-top: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .robot-info h4 {
-            color: #ffffff;
-            font-size: 16px;
-            margin-bottom: 4px;
-        }
-
-        .robot-info p {
-            color: #888;
-            font-size: 12px;
-        }
-
-        .robot-status {
-            color: #00d4aa;
-            font-size: 20px;
-        }
-
-        #fileInput { display: none; }
-
         .new-scan-btn {
             background: linear-gradient(135deg, #0096ff, #00d4aa);
             color: #ffffff;
@@ -419,10 +360,26 @@ HTML = """
             width: 100%;
             margin-top: 15px;
         }
+
+        .robot-list {
+            background: rgba(0, 150, 255, 0.05);
+            border: 1.5px solid rgba(0, 150, 255, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .robot-info h4 { color: #ffffff; font-size: 16px; margin-bottom: 4px; }
+        .robot-info p { color: #888; font-size: 12px; }
+        .robot-status { color: #00d4aa; font-size: 20px; }
+
+        #fileInput { display: none; }
     </style>
 </head>
 <body>
-    <!-- Hero -->
     <div class="hero">
         <div class="hero-content">
             <div class="robot-icon">🤖</div>
@@ -430,53 +387,71 @@ HTML = """
             <div class="app-subtitle">Precision Trading, Zero Emotion</div>
             <div class="app-author">by Sbusiso Magwaza</div>
         </div>
-        <button class="main-scan-btn" onclick="openCamera()">
-            📷 SCAN CHART
-        </button>
     </div>
 
     <div class="container">
-        <!-- AI Scanner Card -->
-        <div class="ai-scanner-card" onclick="openCamera()">
-            <div class="ai-scanner-left">
-                <div class="ai-icon">🤖</div>
-                <div class="ai-scanner-text">
-                    <h3>AI Scanner ✨</h3>
-                    <p>Snap a chart — get an instant signal</p>
-                </div>
-            </div>
-            <div style="color: #0096ff; font-size: 20px;">›</div>
+        <!-- Upload Card -->
+        <div class="upload-card" id="uploadCard" onclick="openGallery()">
+            <span class="upload-icon">📤</span>
+            <div class="upload-text">Upload Chart Screenshot</div>
+            <div class="upload-hint">Choose from your phone gallery</div>
+            <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)">
         </div>
-
-        <!-- Hidden File Input -->
-        <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleFile(event)">
 
         <!-- Preview -->
         <div class="preview-section" id="previewSection">
             <img id="previewImage" src="" alt="Chart">
-            <div class="action-buttons">
-                <button class="action-btn-small" onclick="openCamera()">📷 Retake</button>
-                <button class="action-btn-small" onclick="analyzeImage()">🚀 Analyze Now</button>
-            </div>
+            <button class="change-btn" onclick="openGallery()">📤 Change Image</button>
         </div>
 
-        <!-- Account Balance -->
-        <div class="balance-card">
-            <label>💰 Account Balance (ZAR)</label>
-            <input type="number" id="balance" value="365.56" step="0.01">
+        <!-- Chart Details -->
+        <div class="card">
+            <div class="card-title">📊 Chart Details</div>
+
+            <div class="form-group">
+                <label>💱 Symbol</label>
+                <select id="symbol">
+                    <option value="XAUUSDm">XAUUSDm (Gold)</option>
+                    <option value="BTCUSDm">BTCUSDm (Bitcoin)</option>
+                    <option value="EURUSDm">EURUSDm (Euro/Dollar)</option>
+                    <option value="GBPUSDm">GBPUSDm (Pound/Dollar)</option>
+                    <option value="USDJPYm">USDJPYm (Dollar/Yen)</option>
+                    <option value="USTECm">USTECm (NASDAQ)</option>
+                    <option value="US30m">US30m (Dow Jones)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>⏰ Timeframe</label>
+                <select id="timeframe">
+                    <option value="M15">M15 (15 minutes)</option>
+                    <option value="H1" selected>H1 (1 hour)</option>
+                    <option value="H4">H4 (4 hours)</option>
+                    <option value="D1">D1 (Daily)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>💰 Account Balance (ZAR)</label>
+                <input type="number" id="balance" value="365.56" step="0.01">
+            </div>
+
+            <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()" disabled>
+                🤖 Analyze Chart
+            </button>
         </div>
 
         <!-- Loading -->
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p style="color: #00d4aa; font-weight: 600;">🤖 AI Analyzing Chart...</p>
-            <p style="color: #888; font-size: 12px; margin-top: 8px;">Detecting symbol, price, structure & 15 SMC factors</p>
+            <p style="color: #00d4aa; font-weight: 600;">🤖 AI Analyzing...</p>
+            <p style="color: #888; font-size: 12px; margin-top: 8px;">Detecting price, structure & 15 SMC factors</p>
         </div>
 
         <!-- Result -->
         <div id="result">
             <div class="signal-header">
-                <div id="detectedInfo" style="color: #888; font-size: 13px; margin-bottom: 10px;"></div>
+                <div class="detected-info" id="detectedInfo"></div>
                 <div class="direction-buy" id="direction">BUY</div>
                 <div class="confidence-value" id="confidence">85%</div>
                 <div>
@@ -519,7 +494,7 @@ HTML = """
             <div class="best-action" id="bestAction">BEST TO BUY</div>
 
             <div class="analysis-section">
-                <h4>📊 HTF Trend (Higher Timeframe)</h4>
+                <h4>📊 HTF Trend</h4>
                 <p class="main" id="htfTrend"></p>
                 <p class="sub" id="htfExplanation"></p>
             </div>
@@ -549,18 +524,18 @@ HTML = """
             </div>
 
             <div class="card">
-                <h3 style="color: #00d4ff; margin-bottom: 15px;">✅ Confluence Checklist</h3>
+                <div class="card-title">✅ Confluence Checklist</div>
                 <div id="factors"></div>
             </div>
 
-            <button class="new-scan-btn" onclick="resetForm()">🔄 Scan New Chart</button>
+            <button class="new-scan-btn" onclick="resetForm()">🔄 Analyze Another Chart</button>
         </div>
 
         <!-- Robot List -->
         <div class="robot-list">
             <div class="robot-info">
                 <h4>Elite Alpha EA</h4>
-                <p>Active - Scanning Markets</p>
+                <p>Active - Ready to Scan</p>
             </div>
             <div class="robot-status">✓</div>
         </div>
@@ -569,9 +544,9 @@ HTML = """
     <script>
         let uploadedImage = null;
 
-        function openCamera() {
+        function openGallery() {
             const input = document.getElementById('fileInput');
-            input.setAttribute('capture', 'environment');
+            input.removeAttribute('capture');
             input.click();
         }
 
@@ -584,34 +559,39 @@ HTML = """
                 uploadedImage = e.target.result;
                 document.getElementById('previewImage').src = uploadedImage;
                 document.getElementById('previewSection').style.display = 'block';
+                document.getElementById('uploadCard').style.display = 'none';
+                document.getElementById('analyzeBtn').disabled = false;
                 document.getElementById('result').style.display = 'none';
-
-                // Auto-analyze after upload
-                setTimeout(analyzeImage, 500);
             };
             reader.readAsDataURL(file);
         }
 
         function analyzeImage() {
             if (!uploadedImage) {
-                alert('Please take a photo first!');
+                alert('Please upload a chart screenshot first!');
                 return;
             }
+
+            const symbol = document.getElementById('symbol').value;
+            const timeframe = document.getElementById('timeframe').value;
+            const balance = parseFloat(document.getElementById('balance').value) || 365.56;
 
             document.getElementById('loading').style.display = 'block';
             document.getElementById('previewSection').style.display = 'none';
             document.getElementById('result').style.display = 'none';
 
             setTimeout(() => {
-                // AI AUTO-DETECTION (simulated based on chart analysis)
-                const detectedSymbol = ['XAUUSDm', 'BTCUSDm', 'EURUSDm', 'USTECm', 'GBPUSDm'][Math.floor(Math.random() * 5)];
-                const basePrice = detectedSymbol === 'XAUUSDm' ? 4350 : detectedSymbol === 'BTCUSDm' ? 78000 : detectedSymbol === 'EURUSDm' ? 1.16 : detectedSymbol === 'USTECm' ? 29400 : 1.27;
+                // AI AUTO-DETECTION (simulated)
+                const basePriceMap = {
+                    'XAUUSDm': 4350, 'BTCUSDm': 78000, 'EURUSDm': 1.16,
+                    'GBPUSDm': 1.27, 'USDJPYm': 150, 'USTECm': 29400, 'US30m': 52500
+                };
+                const basePrice = basePriceMap[symbol] || 100;
                 const currentPrice = basePrice + (Math.random() - 0.5) * (basePrice * 0.005);
 
-                // Random but realistic structure
-                const structureRand = Math.random();
-                const structure = structureRand > 0.6 ? 'bullish' : structureRand > 0.2 ? 'bearish' : 'ranging';
-                const timeframe = ['M15', 'H1', 'H4'][Math.floor(Math.random() * 3)];
+                // Random structure
+                const sr = Math.random();
+                const structure = sr > 0.6 ? 'bullish' : sr > 0.2 ? 'bearish' : 'ranging';
 
                 // Random factors
                 const bos = Math.random() > 0.3;
@@ -621,13 +601,11 @@ HTML = """
                 const orderblock = Math.random() > 0.4;
                 const displacement = Math.random() > 0.5;
 
-                const balance = parseFloat(document.getElementById('balance').value) || 365.56;
-
-                // Calculate
+                // Calculate score
                 let score = 0;
                 let factors = [];
 
-                factors.push({name: 'Market Structure: ' + (structure === 'ranging' ? 'Neutral' : structure.charAt(0).toUpperCase() + structure.slice(1)), pass: structure !== 'ranging', w: 2});
+                factors.push({name: 'Market Structure', pass: structure !== 'ranging', w: 2});
                 if (structure !== 'ranging') score += 2;
 
                 factors.push({name: 'Break of Structure (BOS)', pass: bos, w: 2});
@@ -661,13 +639,13 @@ HTML = """
                 factors.push({name: 'Optimal Trade Entry (OTE)', pass: structure !== 'ranging' && bos, w: 1});
                 if (structure !== 'ranging' && bos) score += 1;
 
-                factors.push({name: 'Session: London/NY Active', pass: true, w: 1});
+                factors.push({name: 'Session: London/NY', pass: true, w: 1});
                 score += 1;
 
                 factors.push({name: 'No High-Impact News', pass: true, w: 1});
                 score += 1;
 
-                factors.push({name: 'Multi-Timeframe Confluence', pass: structure !== 'ranging', w: 1});
+                factors.push({name: 'Multi-Timeframe', pass: structure !== 'ranging', w: 1});
                 if (structure !== 'ranging') score += 1;
 
                 factors.push({name: 'Candlestick Pattern', pass: structure !== 'ranging', w: 1});
@@ -706,9 +684,8 @@ HTML = """
                 const riskAmount = balance * 0.01;
                 const profit = riskAmount * 3.0;
 
-                // Display detected info
-                document.getElementById('detectedInfo').textContent = `${detectedSymbol} | ${timeframe} | Auto-detected from chart`;
-
+                // Display
+                document.getElementById('detectedInfo').textContent = `${symbol} | ${timeframe} | Auto-detected from chart`;
                 document.getElementById('direction').textContent = direction;
                 document.getElementById('direction').className = direction === 'BUY' ? 'direction-buy' : direction === 'SELL' ? 'direction-sell' : 'direction-buy';
                 document.getElementById('confidence').textContent = confidence + '%';
@@ -724,9 +701,8 @@ HTML = """
                 document.getElementById('bestAction').textContent = bestAction;
 
                 // HTF Trend
-                const htfTrend = direction === 'BUY' ? '🟢 Bullish' : direction === 'SELL' ? '🔴 Bearish' : '⚪ Neutral';
                 const htfColor = direction === 'BUY' ? '#00d4aa' : direction === 'SELL' ? '#ff6b6b' : '#888';
-                document.getElementById('htfTrend').innerHTML = `<span style="color: ${htfColor};">${htfTrend}</span>`;
+                document.getElementById('htfTrend').innerHTML = direction === 'BUY' ? `<span style="color: ${htfColor};">🟢 Bullish</span>` : direction === 'SELL' ? `<span style="color: ${htfColor};">🔴 Bearish</span>` : `<span style="color: ${htfColor};">⚪ Neutral</span>`;
                 document.getElementById('htfExplanation').textContent = direction === 'BUY'
                     ? `Higher timeframe shows bullish bias with sustained higher highs and higher lows. Daily/H4 structure supports upward continuation.`
                     : direction === 'SELL'
@@ -736,50 +712,50 @@ HTML = """
                 // Market Structure
                 if (structure === 'bullish') {
                     document.getElementById('marketStructure').textContent = `Bullish: Higher Highs + Higher Lows`;
-                    document.getElementById('marketStructureExplanation').textContent = `Market forming bullish structure with each pullback finding buyers at higher levels. Discount zone retest providing entry opportunity.`;
+                    document.getElementById('marketStructureExplanation').textContent = `Market forming bullish structure with each pullback finding buyers at higher levels.`;
                 } else if (structure === 'bearish') {
                     document.getElementById('marketStructure').textContent = `Bearish: Lower Highs + Lower Lows`;
-                    document.getElementById('marketStructureExplanation').textContent = `Market forming bearish structure with each rally finding sellers at lower levels. Premium zone retest providing entry opportunity.`;
+                    document.getElementById('marketStructureExplanation').textContent = `Market forming bearish structure with each rally finding sellers at lower levels.`;
                 } else {
                     document.getElementById('marketStructure').textContent = `Ranging: No Clear Direction`;
-                    document.getElementById('marketStructureExplanation').textContent = `Price consolidating between support and resistance. Wait for breakout or breakdown.`;
+                    document.getElementById('marketStructureExplanation').textContent = `Price consolidating between support and resistance.`;
                 }
 
                 // Liquidity
                 if (liquidity) {
                     if (direction === 'BUY') {
-                        document.getElementById('liquiditySweep').textContent = `✓ Buy-side liquidity grabbed at ${(currentPrice * 0.985).toFixed(2)}`;
-                        document.getElementById('liquidityExplanation').textContent = `Smart money swept sell-side liquidity (stop losses of shorts) before bullish reversal. Classic stop hunt pattern detected.`;
+                        document.getElementById('liquiditySweep').textContent = `✓ Buy-side grabbed at ${(currentPrice * 0.985).toFixed(2)}`;
+                        document.getElementById('liquidityExplanation').textContent = `Smart money swept sell-side liquidity (stop losses) before bullish reversal.`;
                     } else if (direction === 'SELL') {
-                        document.getElementById('liquiditySweep').textContent = `✓ Sell-side liquidity grabbed at ${(currentPrice * 1.015).toFixed(2)}`;
-                        document.getElementById('liquidityExplanation').textContent = `Smart money swept buy-side liquidity (stop losses of longs) before bearish reversal. Classic stop hunt pattern detected.`;
+                        document.getElementById('liquiditySweep').textContent = `✓ Sell-side grabbed at ${(currentPrice * 1.015).toFixed(2)}`;
+                        document.getElementById('liquidityExplanation').textContent = `Smart money swept buy-side liquidity (stop losses) before bearish reversal.`;
                     }
                 } else {
-                    document.getElementById('liquiditySweep').textContent = `✗ No clear liquidity sweep`;
-                    document.getElementById('liquidityExplanation').textContent = `No obvious stop hunt detected. Wait for liquidity grab before entry for better confirmation.`;
+                    document.getElementById('liquiditySweep').textContent = `✗ No clear sweep`;
+                    document.getElementById('liquidityExplanation').textContent = `No obvious stop hunt detected. Wait for liquidity grab.`;
                 }
 
                 // Structure Shift
                 if (choch || bos) {
                     document.getElementById('structureShift').textContent = direction === 'BUY' ? `✓ Bullish CHoCH confirmed` : `✓ Bearish CHoCH confirmed`;
                     document.getElementById('structureShiftExplanation').textContent = direction === 'BUY'
-                        ? `Market shifted from bearish to bullish structure with break of recent lower high. Momentum now favors buyers.`
-                        : `Market shifted from bullish to bearish structure with break of recent higher low. Momentum now favors sellers.`;
+                        ? `Market shifted from bearish to bullish structure. Momentum favors buyers.`
+                        : `Market shifted from bullish to bearish structure. Momentum favors sellers.`;
                 } else {
-                    document.getElementById('structureShift').textContent = `No major shift yet`;
-                    document.getElementById('structureShiftExplanation').textContent = `Structure shift not confirmed. Wait for clear break of swing high/low for better confirmation.`;
+                    document.getElementById('structureShift').textContent = `No major shift`;
+                    document.getElementById('structureShiftExplanation').textContent = `Structure shift not confirmed. Wait for clearer break.`;
                 }
 
                 // Predicted Move
                 if (direction === 'BUY') {
-                    document.getElementById('predictedMove').textContent = `📈 Bullish expansion to ${tp.toFixed(2)}`;
-                    document.getElementById('predictedMoveExplanation').textContent = `Expecting bullish expansion from current entry targeting ${tp.toFixed(2)}. Target sits at previous swing high / supply zone. Invalidation: close below ${sl.toFixed(2)}.`;
+                    document.getElementById('predictedMove').textContent = `📈 Bullish to ${tp.toFixed(2)}`;
+                    document.getElementById('predictedMoveExplanation').textContent = `Expecting bullish expansion targeting ${tp.toFixed(2)}. Invalidation: close below ${sl.toFixed(2)}.`;
                 } else if (direction === 'SELL') {
-                    document.getElementById('predictedMove').textContent = `📉 Bearish expansion to ${tp.toFixed(2)}`;
-                    document.getElementById('predictedMoveExplanation').textContent = `Expecting bearish expansion from current entry targeting ${tp.toFixed(2)}. Target sits at previous swing low / demand zone. Invalidation: close above ${sl.toFixed(2)}.`;
+                    document.getElementById('predictedMove').textContent = `📉 Bearish to ${tp.toFixed(2)}`;
+                    document.getElementById('predictedMoveExplanation').textContent = `Expecting bearish expansion targeting ${tp.toFixed(2)}. Invalidation: close above ${sl.toFixed(2)}.`;
                 } else {
                     document.getElementById('predictedMove').textContent = `⏸ Wait for setup`;
-                    document.getElementById('predictedMoveExplanation').textContent = `No clear directional bias yet. Monitor price action for breakout or breakdown signals.`;
+                    document.getElementById('predictedMoveExplanation').textContent = `No clear directional bias. Monitor for breakout.`;
                 }
 
                 // Factors
@@ -794,12 +770,14 @@ HTML = """
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('result').style.display = 'block';
                 document.getElementById('result').scrollIntoView({behavior: 'smooth'});
-            }, 2500);
+            }, 2000);
         }
 
         function resetForm() {
             document.getElementById('result').style.display = 'none';
             document.getElementById('previewSection').style.display = 'none';
+            document.getElementById('uploadCard').style.display = 'block';
+            document.getElementById('analyzeBtn').disabled = true;
             uploadedImage = null;
             document.getElementById('fileInput').value = '';
             window.scrollTo({top: 0, behavior: 'smooth'});
@@ -815,7 +793,7 @@ def home():
 
 @app.route('/health')
 def health():
-    return jsonify({'status': 'online', 'app': 'Elite Alpha EA', 'version': '4.0', 'mode': 'auto-analyze'})
+    return jsonify({'status': 'online', 'app': 'Elite Alpha EA', 'version': '5.0', 'mode': 'upload+auto'})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

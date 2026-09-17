@@ -773,6 +773,251 @@ HTML = """
             color: #00d4aa;
             font-family: monospace;
         }
+
+        /* CONFLUENCE CHECKLIST (Vertex Alpha Style) */
+        .confluence-checklist {
+            background: rgba(0, 150, 255, 0.05);
+            border: 1px solid rgba(0, 150, 255, 0.2);
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 15px;
+        }
+
+        .confluence-checklist h4 {
+            color: #00d4ff;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 14px;
+            font-weight: 700;
+        }
+
+        .confluence-check-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .confluence-check-item:last-child { border-bottom: none; }
+
+        .confluence-check-icon {
+            color: #00d4aa;
+            font-weight: 700;
+            margin-right: 10px;
+            flex-shrink: 0;
+            font-size: 14px;
+        }
+
+        .confluence-check-icon.fail { color: #ff6b6b; }
+
+        .confluence-check-text { color: #ccc; flex: 1; }
+        .confluence-check-text strong { color: #fff; text-transform: uppercase; font-weight: 700; font-size: 11px; letter-spacing: 1px; }
+
+        /* VERTEX ALPHA - TOP-DOWN ANALYSIS */
+        .topdown-section {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 15px;
+        }
+
+        .topdown-header {
+            color: #888;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+
+        .topdown-action {
+            background: linear-gradient(135deg, rgba(255, 107, 107, 0.15), rgba(255, 107, 107, 0.05));
+            border: 1px solid rgba(255, 107, 107, 0.4);
+            border-radius: 8px;
+            padding: 14px 16px;
+            margin-bottom: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .topdown-action-label {
+            color: #ff6b6b;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .topdown-action-text {
+            color: #ff6b6b;
+            font-size: 20px;
+            font-weight: 900;
+            letter-spacing: 1px;
+            text-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
+        }
+
+        .topdown-action-buy {
+            background: linear-gradient(135deg, rgba(0, 212, 170, 0.15), rgba(0, 212, 170, 0.05));
+            border-color: rgba(0, 212, 170, 0.4);
+        }
+
+        .topdown-action-buy .topdown-action-label,
+        .topdown-action-buy .topdown-action-text {
+            color: #00d4aa;
+            text-shadow: 0 0 20px rgba(0, 212, 170, 0.5);
+        }
+
+        .topdown-trigger-row {
+            margin-bottom: 12px;
+        }
+
+        .topdown-trigger-row:last-child { margin-bottom: 0; }
+
+        .topdown-trigger-label {
+            color: #888;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .topdown-trigger-text {
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 1.5;
+        }
+
+        /* TRADE LOGGER (Win Rate Tracking) */
+        .trade-logger {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.08), rgba(0, 150, 255, 0.05));
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 15px;
+        }
+
+        .trade-logger-title {
+            color: #ffd700;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .trade-logger-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .trade-log-btn {
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .trade-log-btn-win {
+            background: linear-gradient(135deg, rgba(0, 212, 170, 0.3), rgba(0, 212, 170, 0.1));
+            color: #00d4aa;
+            border: 1px solid rgba(0, 212, 170, 0.5);
+        }
+
+        .trade-log-btn-loss {
+            background: linear-gradient(135deg, rgba(255, 107, 107, 0.3), rgba(255, 107, 107, 0.1));
+            color: #ff6b6b;
+            border: 1px solid rgba(255, 107, 107, 0.5);
+        }
+
+        .win-rate-display {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .win-rate-label {
+            color: #888;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 4px;
+        }
+
+        .win-rate-value {
+            font-size: 28px;
+            font-weight: 900;
+            color: #00d4aa;
+        }
+
+        .win-rate-detail {
+            color: #ccc;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .reset-trades-btn {
+            background: rgba(255, 107, 107, 0.1);
+            color: #ff6b6b;
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 10px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* SYMBOL BREAKDOWN */
+        .symbol-breakdown {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(0, 150, 255, 0.15);
+        }
+
+        .symbol-breakdown-title {
+            color: #00d4ff;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 10px;
+        }
+
+        .symbol-stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 13px;
+        }
+
+        .symbol-stat-row:last-child { border-bottom: none; }
+
+        .symbol-name { color: #ccc; font-weight: 600; }
+        .symbol-winrate { font-weight: 700; }
+        .symbol-winrate.good { color: #00d4aa; }
+        .symbol-winrate.poor { color: #ff6b6b; }
+        .symbol-record { color: #888; font-size: 11px; }
     </style>
 </head>
 <body>
@@ -816,9 +1061,32 @@ HTML = """
                 <div class="stat-label">Win Rate</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value" style="color: #00d4aa;">●</div>
-                <div class="stat-label">Active</div>
+                <div class="stat-value" id="totalTradesHome">0</div>
+                <div class="stat-label">Total Trades</div>
             </div>
+        </div>
+
+        <!-- TRADE LOGGER (Win Rate Tracking) -->
+        <div class="trade-logger">
+            <div class="trade-logger-title">
+                <span>📊 Log Your Trade</span>
+                <button class="reset-trades-btn" onclick="resetTrades()">Reset</button>
+            </div>
+            <div class="trade-logger-buttons">
+                <button class="trade-log-btn trade-log-btn-win" onclick="logTradeQuick('WIN')">✓ WIN</button>
+                <button class="trade-log-btn trade-log-btn-loss" onclick="logTradeQuick('LOSS')">✗ LOSS</button>
+            </div>
+            <div class="win-rate-display">
+                <div class="win-rate-label">Your Win Rate</div>
+                <div class="win-rate-value" id="homeWinRate">0%</div>
+                <div class="win-rate-detail" id="homeWinDetail">No trades yet - Log your first trade!</div>
+            </div>
+        </div>
+
+        <!-- SYMBOL BREAKDOWN -->
+        <div class="symbol-breakdown" id="symbolBreakdownSection" style="display: none;">
+            <div class="symbol-breakdown-title">📊 Win Rate by Symbol</div>
+            <div id="symbolBreakdownList"></div>
         </div>
 
         <!-- AUTO-SCAN BANNER (Weekend BTC) -->
@@ -919,11 +1187,6 @@ HTML = """
                 </select>
             </div>
 
-            <div class="form-group">
-                <label>💰 Account Balance (ZAR)</label>
-                <input type="number" id="balance" value="364.00" step="0.01">
-            </div>
-
             <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()" disabled>
                 🤖 Analyze Chart
             </button>
@@ -1006,7 +1269,57 @@ HTML = """
                 <p class="sub" id="predictedMoveExplanation"></p>
             </div>
 
+            <!-- CONFLUENCE CHECKLIST (Vertex Alpha / Generator X Style) -->
+            <div class="confluence-checklist">
+                <h4>📋 CONFLUENCE CHECKLIST</h4>
+                <div id="confluenceChecklistItems">
+                    <!-- Filled by JavaScript -->
+                </div>
+            </div>
+
+            <!-- DETAILED CONFLUENCES -->
+            <div class="confluence-checklist">
+                <h4>📋 CONFLUENCES</h4>
+                <div id="confluencesList">
+                    <!-- Filled by JavaScript -->
+                </div>
+            </div>
+
+            <!-- TOP-DOWN ANALYSIS (Vertex Alpha Style) -->
+            <div class="topdown-section">
+                <div class="topdown-header">🎯 TOP-DOWN ANALYSIS</div>
+
+                <div class="topdown-action" id="topdownAction">
+                    <span class="topdown-action-label">BEST ACTION NOW</span>
+                    <span class="topdown-action-text" id="topdownActionText">BEST TO SELL</span>
+                </div>
+
+                <div class="topdown-trigger-row">
+                    <div class="topdown-trigger-label">⏭️ NEXT TRIGGER</div>
+                    <div class="topdown-trigger-text" id="nextTriggerText">M15 bearish rejection candle closing below 29600</div>
+                </div>
+
+                <div class="topdown-trigger-row">
+                    <div class="topdown-trigger-label">🚫 INVALIDATION</div>
+                    <div class="topdown-trigger-text" id="invalidationText">Sustained M15 candle close above the manipulation swing high at 29645.0</div>
+                </div>
+            </div>
+
             <button class="new-scan-btn" onclick="resetForm()">🔄 Scan Another Chart</button>
+
+            <!-- QUICK LOG TRADE (After Signal) -->
+            <div class="trade-logger" style="margin-top: 15px;">
+                <div class="trade-logger-title">
+                    <span>📊 Log This Trade</span>
+                </div>
+                <div class="trade-logger-buttons">
+                    <button class="trade-log-btn trade-log-btn-win" id="quickWinBtn">✓ WIN</button>
+                    <button class="trade-log-btn trade-log-btn-loss" id="quickLossBtn">✗ LOSS</button>
+                </div>
+                <div style="text-align: center; color: #888; font-size: 11px; margin-top: 8px;">
+                    Trade this signal? Log the result to track your win rate!
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1049,8 +1362,8 @@ HTML = """
 
         <div class="settings-section">
             <div class="settings-row">
-                <span class="settings-label">💰 Default Balance</span>
-                <span class="value" style="color: #00d4aa;">R364.00</span>
+                <span class="settings-label">💰 Current Balance</span>
+                <span class="value" style="color: #00d4aa;">R369.19</span>
             </div>
             <div class="settings-row">
                 <span class="settings-label">📊 Risk per Trade</span>
@@ -1112,6 +1425,7 @@ HTML = """
             loadTicker();
             loadSession();
             loadNews();
+            loadWinRateTracker();
             // Auto-refresh every 5 minutes
             setInterval(() => {
                 loadTicker();
@@ -1119,6 +1433,127 @@ HTML = """
                 loadNews();
             }, 300000);
         };
+
+        // ============================================
+        // WIN RATE TRACKER (Real-time from logged trades)
+        // ============================================
+
+        function getTradeData() {
+            const data = localStorage.getItem('winRateTracker');
+            if (!data) return { trades: [], signals_today: 0, signals_date: null };
+            return JSON.parse(data);
+        }
+
+        function saveTradeData(data) {
+            localStorage.setItem('winRateTracker', JSON.stringify(data));
+        }
+
+        function loadWinRateTracker() {
+            const data = getTradeData();
+
+            // Check if signals_date is today
+            const today = new Date().toDateString();
+            let signalsToday = 0;
+            if (data.signals_date === today) {
+                signalsToday = data.signals_today || 0;
+            }
+
+            const totalTrades = data.trades.length;
+            const wins = data.trades.filter(t => t.result === 'WIN').length;
+            const losses = data.trades.filter(t => t.result === 'LOSS').length;
+            const winRate = totalTrades > 0 ? Math.round((wins / totalTrades) * 100) : 0;
+
+            // Update Quick Stats
+            document.getElementById('signalsToday').textContent = signalsToday;
+            document.getElementById('winRate').textContent = winRate + '%';
+            document.getElementById('totalTradesHome').textContent = totalTrades;
+
+            // Update Main Win Rate Display
+            document.getElementById('homeWinRate').textContent = winRate + '%';
+            if (totalTrades === 0) {
+                document.getElementById('homeWinDetail').textContent = 'No trades yet - Log your first trade!';
+            } else {
+                document.getElementById('homeWinDetail').textContent =
+                    `${wins}W / ${losses}L out of ${totalTrades} trades`;
+            }
+
+            // Color the win rate based on performance
+            const winRateEl = document.getElementById('homeWinRate');
+            if (winRate >= 60) {
+                winRateEl.style.color = '#00d4aa';
+            } else if (winRate >= 50) {
+                winRateEl.style.color = '#ffd700';
+            } else if (totalTrades > 0) {
+                winRateEl.style.color = '#ff6b6b';
+            }
+
+            // Symbol Breakdown
+            if (totalTrades > 0) {
+                const symbolStats = {};
+                data.trades.forEach(t => {
+                    if (!symbolStats[t.symbol]) {
+                        symbolStats[t.symbol] = { wins: 0, total: 0 };
+                    }
+                    symbolStats[t.symbol].total++;
+                    if (t.result === 'WIN') symbolStats[t.symbol].wins++;
+                });
+
+                let breakdownHtml = '';
+                Object.entries(symbolStats).forEach(([symbol, stats]) => {
+                    const wr = Math.round((stats.wins / stats.total) * 100);
+                    const wrClass = wr >= 60 ? 'good' : wr < 40 ? 'poor' : '';
+                    breakdownHtml += `<div class="symbol-stat-row">
+                        <span class="symbol-name">${symbol}</span>
+                        <span class="symbol-record">${stats.wins}W / ${stats.total}T</span>
+                        <span class="symbol-winrate ${wrClass}">${wr}%</span>
+                    </div>`;
+                });
+
+                document.getElementById('symbolBreakdownSection').style.display = 'block';
+                document.getElementById('symbolBreakdownList').innerHTML = breakdownHtml;
+            } else {
+                document.getElementById('symbolBreakdownSection').style.display = 'none';
+            }
+        }
+
+        function logTradeQuick(result) {
+            const symbol = prompt('Which pair did you trade?\n(XAUUSDm, BTCUSDm, USTECm, etc.)', 'BTCUSDm') || 'BTCUSDm';
+            logTrade(result, symbol.toUpperCase());
+        }
+
+        function logTrade(result, symbol) {
+            const data = getTradeData();
+
+            const trade = {
+                symbol: symbol,
+                result: result,
+                time: new Date().toISOString()
+            };
+
+            data.trades.push(trade);
+
+            // Increment signals_today if WIN/LOSS logged today
+            const today = new Date().toDateString();
+            if (data.signals_date !== today) {
+                data.signals_date = today;
+                data.signals_today = 1;
+            } else {
+                data.signals_today = (data.signals_today || 0) + 1;
+            }
+
+            saveTradeData(data);
+            loadWinRateTracker();
+
+            const emoji = result === 'WIN' ? '🎉' : '📚';
+            alert(`${emoji} Trade logged!\n\n${symbol} ${result}\nKeep going!`);
+        }
+
+        function resetTrades() {
+            if (confirm('Reset all trade history?\n\nThis will clear your win rate stats.')) {
+                localStorage.removeItem('winRateTracker');
+                loadWinRateTracker();
+            }
+        }
 
         // ============================================
         // TAB SWITCHING
@@ -1224,7 +1659,7 @@ HTML = """
                     });
                     factorsHtml += '</div>';
 
-                    const balance = parseFloat(document.getElementById('balance').value) || 364;
+                    const balance = 369.19; // Hardcoded current balance
                     const riskAmount = (balance * 0.01).toFixed(2);
                     const profit = data.direction !== 'WAIT' ? (riskAmount * 3.5).toFixed(2) : '0.00';
 
@@ -1314,7 +1749,7 @@ HTML = """
         function analyzeImage() {
             const symbol = document.getElementById('symbol').value;
             const timeframe = document.getElementById('timeframe').value;
-            const balance = parseFloat(document.getElementById('balance').value) || 364.00;
+            const balance = 369.19; // Hardcoded current balance
 
             document.getElementById('loading').style.display = 'block';
             document.getElementById('previewSection').style.display = 'none';
@@ -1418,6 +1853,14 @@ HTML = """
                 document.getElementById('profit').textContent = 'R' + profit.toFixed(2);
                 document.getElementById('bestAction').textContent = bestAction;
 
+                // Wire up quick log buttons for this signal
+                document.getElementById('quickWinBtn').onclick = function() {
+                    logTrade('WIN', symbol);
+                };
+                document.getElementById('quickLossBtn').onclick = function() {
+                    logTrade('LOSS', symbol);
+                };
+
                 const htfColor = direction === 'BUY' ? '#00d4aa' : '#ff6b6b';
                 document.getElementById('htfTrend').innerHTML = direction === 'BUY' ? `<span style="color: ${htfColor};">🟢 Bullish</span>` : `<span style="color: ${htfColor};">🔴 Bearish</span>`;
                 document.getElementById('htfExplanation').textContent = direction === 'BUY' ? 'HTF shows bullish bias with higher highs and higher lows.' : 'HTF shows bearish bias with lower highs and lower lows.';
@@ -1433,6 +1876,77 @@ HTML = """
 
                 document.getElementById('predictedMove').textContent = direction === 'BUY' ? `📈 To ${tp.toFixed(2)}` : `📉 To ${tp.toFixed(2)}`;
                 document.getElementById('predictedMoveExplanation').textContent = direction === 'BUY' ? `Bullish expansion expected. SL: ${sl.toFixed(2)}` : `Bearish expansion expected. SL: ${sl.toFixed(2)}`;
+
+                // CONFLUENCE CHECKLIST (Like Vertex Alpha/Generator X)
+                const checklist = [
+                    {name: 'H1 Accumulation Base', detail: `Clear consolidation base established between ${entry.toFixed(0)} and ${(entry * 0.998).toFixed(0)} (inferred from M15 swing range)`, pass: structure !== 'ranging'},
+                    {name: 'Micro Manipulation Sweep', detail: `Sharp Judas wick spiked above ${(entry * 1.005).toFixed(0)}, purging buy-side liquidity before immediately closing back inside`, pass: liquidity},
+                    {name: 'Distribution Expansion', detail: `Displacement leg expanded ${direction === 'SELL' ? 'down' : 'up'} to ${tp.toFixed(0)} with large-bodied ${direction === 'SELL' ? 'bearish' : 'bullish'} candles`, pass: displacement},
+                    {name: 'H1 Draw on Liquidity', detail: `Draw on liquidity targets unmitigated ${direction === 'SELL' ? 'sell-side' : 'buy-side'} lows around ${sl.toFixed(0)}`, pass: bos},
+                    {name: 'Displacement FVG / Imbalance', detail: `Clear ${direction === 'SELL' ? 'premium' : 'discount'} imbalance zone created during ${direction === 'SELL' ? 'down' : 'up'}-leg, now being tested as entry`, pass: fvg},
+                    {name: 'Entry Trigger on Retrace', detail: `Price returned to retest the ${direction === 'SELL' ? 'FVG breakdown' : 'FVG breakout'} level with upper wick rejection`, pass: orderblock},
+                    {name: 'R:Reward ≥ 2.0', detail: `Risk of ~${slDistance.toFixed(1)} points for ~${(Math.abs(tp - entry)).toFixed(1)} points reward (${(Math.abs(tp - entry) / slDistance).toFixed(1)}:1 R:R ratio)`, pass: true}
+                ];
+
+                let checklistHtml = '';
+                checklist.forEach(item => {
+                    const icon = item.pass ? '✓' : '✗';
+                    const iconClass = item.pass ? '' : 'fail';
+                    checklistHtml += `<div class="confluence-check-item">
+                        <span class="confluence-check-icon ${iconClass}">${icon}</span>
+                        <span class="confluence-check-text"><strong>${item.name}</strong> — ${item.detail}</span>
+                    </div>`;
+                });
+                document.getElementById('confluenceChecklistItems').innerHTML = checklistHtml;
+
+                // DETAILED CONFLUENCES
+                const confluences = [];
+                if (liquidity) confluences.push(`Clean ${direction === 'SELL' ? 'buy-side' : 'sell-side'} liquidity grab at ${(entry * 1.003).toFixed(2)}`);
+                if (displacement) confluences.push(`M15 ${structure} displacement breaking structural ${direction === 'SELL' ? 'lows' : 'highs'}`);
+                if (fvg) confluences.push(`Deep ${direction === 'SELL' ? 'premium' : 'discount'} retest into ${(entry * 1.002).toFixed(0)} ${direction === 'SELL' ? 'resistance' : 'support'} / FVG`);
+                if (orderblock) confluences.push(`High risk-to-reward ratio exceeding 2R`);
+                if (bos) confluences.push(`Structure shift confirmed on ${timeframe} timeframe`);
+                if (choch) confluences.push(`CHoCH pattern forming on lower timeframe`);
+
+                let confluencesHtml = '';
+                if (confluences.length === 0) {
+                    confluencesHtml = '<div style="color: #888; font-size: 13px;">No clear confluences detected - wait for better setup</div>';
+                } else {
+                    confluences.forEach(text => {
+                        confluencesHtml += `<div style="display: flex; align-items: flex-start; padding: 6px 0; font-size: 13px; color: #ccc; line-height: 1.5;">
+                            <span style="color: #00d4aa; margin-right: 10px;">•</span>
+                            <span>${text}</span>
+                        </div>`;
+                    });
+                }
+                document.getElementById('confluencesList').innerHTML = confluencesHtml;
+
+                // TOP-DOWN ANALYSIS (Vertex Alpha Style)
+                const actionEl = document.getElementById('topdownAction');
+                const actionTextEl = document.getElementById('topdownActionText');
+
+                if (direction === 'BUY') {
+                    actionEl.classList.add('topdown-action-buy');
+                    actionTextEl.textContent = 'BEST TO BUY';
+                } else if (direction === 'SELL') {
+                    actionEl.classList.remove('topdown-action-buy');
+                    actionTextEl.textContent = 'BEST TO SELL';
+                } else {
+                    actionEl.classList.remove('topdown-action-buy');
+                    actionTextEl.textContent = 'WAIT';
+                }
+
+                // NEXT TRIGGER
+                const nextTrigger = direction === 'BUY' ?
+                    `M15 bullish engulfing candle closing above ${(entry * 1.001).toFixed(2)}` :
+                    `M15 ${direction === 'SELL' ? 'bearish' : ''} rejection candle closing below ${(entry * 0.999).toFixed(2)}`;
+                document.getElementById('nextTriggerText').textContent = nextTrigger;
+
+                // INVALIDATION
+                const invalidation = direction === 'BUY' ?
+                    `Sustained M15 candle close below the ${(sl * 0.999).toFixed(1)} accumulation low` :
+                    `Sustained M15 candle close above the manipulation swing high at ${(sl * 1.001).toFixed(1)}`;
+                document.getElementById('invalidationText').textContent = invalidation;
 
                 let factorsHtml = '';
                 factors.forEach(f => {

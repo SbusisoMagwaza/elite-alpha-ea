@@ -1439,51 +1439,51 @@ HTML = """
 
 @app.route('/')
 def home():
- return html
+    return render_template_string(HTML)
 
 @app.route('/api/prices')
 def api_prices():
- import random
- prices = {}
- for symbol, data in LIVE_PRICES.items():
- change_pct = random.uniform(-2.5, 2.5)
- new_price = data['price'] * (1 + change_pct/100)
- prices[symbol] = {
- 'price': round(new_price, 4),
- 'change': round(change_pct, 2),
- 'high': data['high'],
- 'low': data['low']
- }
- return jsonify(prices)
+    import random
+    prices = {}
+    for symbol, data in LIVE_PRICES.items():
+        change_pct = random.uniform(-2.5, 2.5)
+        new_price = data['price'] * (1 + change_pct/100)
+        prices[symbol] = {
+            'price': round(new_price, 4),
+            'change': round(change_pct, 2),
+            'high': data['high'],
+            'low': data['low']
+        }
+    return jsonify(prices)
 
 @app.route('/api/session')
 def api_session():
- return jsonify(get_session_quality())
+    return jsonify(get_session_quality())
 
 @app.route('/api/news')
 def api_news():
- current_hour = datetime.now().hour
- upcoming = []
- for event in ECONOMIC_EVENTS:
- event_hour = int(event['time'].split(':')[0])
- if 0 <= (event_hour - current_hour) % 24 <= 24:
- upcoming.append(event)
- return jsonify({'events': upcoming[:5]})
+    current_hour = datetime.now().hour
+    upcoming = []
+    for event in ECONOMIC_EVENTS:
+        event_hour = int(event['time'].split(':')[0])
+        if 0 <= (event_hour - current_hour) % 24 <= 24:
+            upcoming.append(event)
+    return jsonify({'events': upcoming[:5]})
 
 @app.route('/api/auto-scan')
 def api_auto_scan():
- return jsonify(auto_scan_btc())
+    return jsonify(auto_scan_btc())
 
 @app.route('/health')
 def health():
- return jsonify({
- 'status': 'online',
- 'app': 'Elite Alpha EA',
- 'version': '6.0 FINAL',
- 'features': ['robot', 'live_ticker', 'auto_btc_scan', '15_smc_factors',
- 'confluence_checklist', 'top_down_analysis', 'economic_calendar',
- 'session_quality', 'real_prices', 'fast_scan']
- })
+    return jsonify({
+        'status': 'online',
+        'app': 'Elite Alpha EA',
+        'version': '6.0 FINAL',
+        'features': ['robot', 'live_ticker', 'auto_btc_scan', '15_smc_factors',
+                     'confluence_checklist', 'top_down_analysis', 'economic_calendar',
+                     'session_quality', 'real_prices', 'fast_scan']
+    })
 
 if __name__ == '__main__':
- app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000)

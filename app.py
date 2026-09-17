@@ -894,56 +894,14 @@ HTML = """
             line-height: 1.5;
         }
 
-        /* TRADE LOGGER (Win Rate Tracking) */
-        .trade-logger {
-            background: linear-gradient(135deg, rgba(255, 215, 0, 0.08), rgba(0, 150, 255, 0.05));
-            border: 1px solid rgba(255, 215, 0, 0.3);
-            border-radius: 16px;
-            padding: 18px;
-            margin-bottom: 15px;
-        }
-
-        .trade-logger-title {
-            color: #ffd700;
-            font-size: 13px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .trade-logger-buttons {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-
-        .trade-log-btn {
-            padding: 12px;
-            border: none;
-            border-radius: 10px;
+        .topdown-trigger-text {
+            color: #ffffff;
             font-size: 14px;
-            font-weight: 700;
-            cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            font-weight: 600;
+            line-height: 1.5;
         }
 
-        .trade-log-btn-win {
-            background: linear-gradient(135deg, rgba(0, 212, 170, 0.3), rgba(0, 212, 170, 0.1));
-            color: #00d4aa;
-            border: 1px solid rgba(0, 212, 170, 0.5);
-        }
-
-        .trade-log-btn-loss {
-            background: linear-gradient(135deg, rgba(255, 107, 107, 0.3), rgba(255, 107, 107, 0.1));
-            color: #ff6b6b;
-            border: 1px solid rgba(255, 107, 107, 0.5);
-        }
+        /* TRADE LOGGER (Win Rate Tracking) */
 
         .win-rate-display {
             background: rgba(0, 0, 0, 0.3);
@@ -985,23 +943,6 @@ HTML = """
         }
 
         /* SYMBOL BREAKDOWN */
-        .symbol-breakdown {
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 15px;
-            border: 1px solid rgba(0, 150, 255, 0.15);
-        }
-
-        .symbol-breakdown-title {
-            color: #00d4ff;
-            font-size: 13px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            margin-bottom: 10px;
-        }
-
         .symbol-stat-row {
             display: flex;
             justify-content: space-between;
@@ -1064,29 +1005,6 @@ HTML = """
                 <div class="stat-value" id="totalTradesHome">0</div>
                 <div class="stat-label">Total Trades</div>
             </div>
-        </div>
-
-        <!-- TRADE LOGGER (Win Rate Tracking) -->
-        <div class="trade-logger">
-            <div class="trade-logger-title">
-                <span>📊 Log Your Trade</span>
-                <button class="reset-trades-btn" onclick="resetTrades()">Reset</button>
-            </div>
-            <div class="trade-logger-buttons">
-                <button class="trade-log-btn trade-log-btn-win" onclick="logTradeQuick('WIN')">✓ WIN</button>
-                <button class="trade-log-btn trade-log-btn-loss" onclick="logTradeQuick('LOSS')">✗ LOSS</button>
-            </div>
-            <div class="win-rate-display">
-                <div class="win-rate-label">Your Win Rate</div>
-                <div class="win-rate-value" id="homeWinRate">0%</div>
-                <div class="win-rate-detail" id="homeWinDetail">No trades yet - Log your first trade!</div>
-            </div>
-        </div>
-
-        <!-- SYMBOL BREAKDOWN -->
-        <div class="symbol-breakdown" id="symbolBreakdownSection" style="display: none;">
-            <div class="symbol-breakdown-title">📊 Win Rate by Symbol</div>
-            <div id="symbolBreakdownList"></div>
         </div>
 
         <!-- AUTO-SCAN BANNER (Weekend BTC) -->
@@ -1308,18 +1226,7 @@ HTML = """
             <button class="new-scan-btn" onclick="resetForm()">🔄 Scan Another Chart</button>
 
             <!-- QUICK LOG TRADE (After Signal) -->
-            <div class="trade-logger" style="margin-top: 15px;">
-                <div class="trade-logger-title">
-                    <span>📊 Log This Trade</span>
-                </div>
-                <div class="trade-logger-buttons">
-                    <button class="trade-log-btn trade-log-btn-win" id="quickWinBtn">✓ WIN</button>
-                    <button class="trade-log-btn trade-log-btn-loss" id="quickLossBtn">✗ LOSS</button>
-                </div>
-                <div style="text-align: center; color: #888; font-size: 11px; margin-top: 8px;">
-                    Trade this signal? Log the result to track your win rate!
-                </div>
-            </div>
+            
         </div>
     </div>
 
@@ -1425,7 +1332,6 @@ HTML = """
             loadTicker();
             loadSession();
             loadNews();
-            loadWinRateTracker();
             // Auto-refresh every 5 minutes
             setInterval(() => {
                 loadTicker();
@@ -1437,123 +1343,6 @@ HTML = """
         // ============================================
         // WIN RATE TRACKER (Real-time from logged trades)
         // ============================================
-
-        function getTradeData() {
-            const data = localStorage.getItem('winRateTracker');
-            if (!data) return { trades: [], signals_today: 0, signals_date: null };
-            return JSON.parse(data);
-        }
-
-        function saveTradeData(data) {
-            localStorage.setItem('winRateTracker', JSON.stringify(data));
-        }
-
-        function loadWinRateTracker() {
-            const data = getTradeData();
-
-            // Check if signals_date is today
-            const today = new Date().toDateString();
-            let signalsToday = 0;
-            if (data.signals_date === today) {
-                signalsToday = data.signals_today || 0;
-            }
-
-            const totalTrades = data.trades.length;
-            const wins = data.trades.filter(t => t.result === 'WIN').length;
-            const losses = data.trades.filter(t => t.result === 'LOSS').length;
-            const winRate = totalTrades > 0 ? Math.round((wins / totalTrades) * 100) : 0;
-
-            // Update Quick Stats
-            document.getElementById('signalsToday').textContent = signalsToday;
-            document.getElementById('winRate').textContent = winRate + '%';
-            document.getElementById('totalTradesHome').textContent = totalTrades;
-
-            // Update Main Win Rate Display
-            document.getElementById('homeWinRate').textContent = winRate + '%';
-            if (totalTrades === 0) {
-                document.getElementById('homeWinDetail').textContent = 'No trades yet - Log your first trade!';
-            } else {
-                document.getElementById('homeWinDetail').textContent =
-                    `${wins}W / ${losses}L out of ${totalTrades} trades`;
-            }
-
-            // Color the win rate based on performance
-            const winRateEl = document.getElementById('homeWinRate');
-            if (winRate >= 60) {
-                winRateEl.style.color = '#00d4aa';
-            } else if (winRate >= 50) {
-                winRateEl.style.color = '#ffd700';
-            } else if (totalTrades > 0) {
-                winRateEl.style.color = '#ff6b6b';
-            }
-
-            // Symbol Breakdown
-            if (totalTrades > 0) {
-                const symbolStats = {};
-                data.trades.forEach(t => {
-                    if (!symbolStats[t.symbol]) {
-                        symbolStats[t.symbol] = { wins: 0, total: 0 };
-                    }
-                    symbolStats[t.symbol].total++;
-                    if (t.result === 'WIN') symbolStats[t.symbol].wins++;
-                });
-
-                let breakdownHtml = '';
-                Object.entries(symbolStats).forEach(([symbol, stats]) => {
-                    const wr = Math.round((stats.wins / stats.total) * 100);
-                    const wrClass = wr >= 60 ? 'good' : wr < 40 ? 'poor' : '';
-                    breakdownHtml += `<div class="symbol-stat-row">
-                        <span class="symbol-name">${symbol}</span>
-                        <span class="symbol-record">${stats.wins}W / ${stats.total}T</span>
-                        <span class="symbol-winrate ${wrClass}">${wr}%</span>
-                    </div>`;
-                });
-
-                document.getElementById('symbolBreakdownSection').style.display = 'block';
-                document.getElementById('symbolBreakdownList').innerHTML = breakdownHtml;
-            } else {
-                document.getElementById('symbolBreakdownSection').style.display = 'none';
-            }
-        }
-
-        function logTradeQuick(result) {
-            const symbol = prompt('Which pair did you trade?\n(XAUUSDm, BTCUSDm, USTECm, etc.)', 'BTCUSDm') || 'BTCUSDm';
-            logTrade(result, symbol.toUpperCase());
-        }
-
-        function logTrade(result, symbol) {
-            const data = getTradeData();
-
-            const trade = {
-                symbol: symbol,
-                result: result,
-                time: new Date().toISOString()
-            };
-
-            data.trades.push(trade);
-
-            // Increment signals_today if WIN/LOSS logged today
-            const today = new Date().toDateString();
-            if (data.signals_date !== today) {
-                data.signals_date = today;
-                data.signals_today = 1;
-            } else {
-                data.signals_today = (data.signals_today || 0) + 1;
-            }
-
-            saveTradeData(data);
-            loadWinRateTracker();
-
-            const emoji = result === 'WIN' ? '🎉' : '📚';
-            alert(`${emoji} Trade logged!\n\n${symbol} ${result}\nKeep going!`);
-        }
-
-        function resetTrades() {
-            if (confirm('Reset all trade history?\n\nThis will clear your win rate stats.')) {
-                localStorage.removeItem('winRateTracker');
-                loadWinRateTracker();
-            }
-        }
 
         // ============================================
         // TAB SWITCHING

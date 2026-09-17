@@ -1234,39 +1234,88 @@ HTML = """
     <div class="tab-content" id="settings-tab">
         <div class="card-title" style="padding: 10px 0;">⚙️ Settings</div>
 
-        <!-- PUSH NOTIFICATION SETUP -->
+        <!-- BROKER CONNECTION -->
         <div class="setup-instructions">
-            <h4>📱 MT5 Push Notifications Setup</h4>
+            <h4>🏢 Connect Your Broker</h4>
+            <p>Currently connected to: <strong style="color: #00d4aa;">Exness-MT5Real9</strong></p>
+            <p>Account: <strong style="color: #00d4aa;">134644333</strong> (Sbusiso)</p>
+            <p style="margin-top: 8px; font-size: 12px;">💡 For other brokers, contact support to add your broker's API credentials</p>
+        </div>
+
+        <!-- PUSH NOTIFICATION SETUP (Functional) -->
+        <div class="setup-instructions">
+            <h4>📱 Push Notifications (Live Setup)</h4>
             <ol>
                 <li>Open MT5 Mobile app on your phone</li>
                 <li>Go to <code>Settings → MetaQuotes ID</code></li>
-                <li>Copy your MetaQuotes ID</li>
+                <li>Copy your MetaQuotes ID (looks like: A1B2C3D4E5F6)</li>
                 <li>Open MT5 Desktop → <code>Tools → Options → Notifications</code></li>
                 <li>Enable notifications & paste your MetaQuotes ID</li>
-                <li>Click <code>Test</code> to verify it works</li>
+                <li>Click <code>Test</code> - you should receive a push on your phone</li>
             </ol>
-            <p style="margin-top: 10px;"><strong style="color: #00d4aa;">✅ Your EliteSignalScanner will auto-send push notifications when signals trigger!</strong></p>
+            <p style="margin-top: 10px;"><strong style="color: #00d4aa;">✅ Once configured, you'll get push notifications when signals trigger!</strong></p>
+            <p style="margin-top: 8px; font-size: 12px; color: #888;">💡 Tip: The MT5 scanner on your desktop will automatically send notifications. No need to configure in this web app!</p>
         </div>
 
+        <!-- WORKING TOGGLES -->
         <div class="settings-section">
             <div class="settings-row">
                 <span class="settings-label">🔔 Push Notifications</span>
-                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+                <div class="toggle active" id="toggle-push" onclick="toggleSetting('push')"></div>
             </div>
             <div class="settings-row">
                 <span class="settings-label">📰 News Alerts</span>
-                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+                <div class="toggle active" id="toggle-news" onclick="toggleSetting('news')"></div>
             </div>
             <div class="settings-row">
                 <span class="settings-label">🌙 Dark Mode</span>
-                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+                <div class="toggle active" id="toggle-dark" onclick="toggleSetting('dark')"></div>
             </div>
             <div class="settings-row">
                 <span class="settings-label">₿ Auto BTC Scan (Weekend)</span>
-                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+                <div class="toggle active" id="toggle-btc-auto" onclick="toggleSetting('btc-auto')"></div>
+            </div>
+            <div class="settings-row">
+                <span class="settings-label">🎯 Sound on Signals</span>
+                <div class="toggle" id="toggle-sound" onclick="toggleSetting('sound')"></div>
+            </div>
+            <div class="settings-row">
+                <span class="settings-label">📊 Show Win Rate</span>
+                <div class="toggle active" id="toggle-winrate" onclick="toggleSetting('winrate')"></div>
             </div>
         </div>
 
+        <!-- ACCOUNT TRACKER (Functional) -->
+        <div class="card">
+            <div class="card-title">💰 Account Tracker</div>
+            <div class="info-row">
+                <span class="label">Current Balance:</span>
+                <input type="number" id="accountBalance" value="369.19" step="0.01" style="width: 120px; padding: 6px; text-align: right;" onchange="updateBalance()">
+            </div>
+            <div class="info-row">
+                <span class="label">Total Trades:</span>
+                <span class="value" id="totalTradesDisplay">0</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Wins / Losses:</span>
+                <span class="value" id="winLossDisplay">0W / 0L</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Win Rate:</span>
+                <span class="value" id="winRateDisplay" style="color: #00d4aa;">0%</span>
+            </div>
+            <div class="info-row">
+                <span class="label">Total P&L:</span>
+                <span class="value profit" id="totalPnLDisplay">R0.00</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px;">
+                <button class="balance-btn-win" onclick="logQuickTrade('WIN')" style="padding: 12px; border: none; border-radius: 8px; background: rgba(0, 212, 170, 0.2); color: #00d4aa; border: 1px solid #00d4aa; font-weight: 700; cursor: pointer;">✓ LOG WIN</button>
+                <button class="balance-btn-loss" onclick="logQuickTrade('LOSS')" style="padding: 12px; border: none; border-radius: 8px; background: rgba(255, 107, 107, 0.2); color: #ff6b6b; border: 1px solid #ff6b6b; font-weight: 700; cursor: pointer;">✗ LOG LOSS</button>
+            </div>
+            <button onclick="resetAccount()" style="width: 100%; margin-top: 10px; padding: 8px; background: rgba(255, 107, 107, 0.1); color: #ff6b6b; border: 1px solid rgba(255, 107, 107, 0.3); border-radius: 6px; font-size: 11px; cursor: pointer;">🔄 Reset Account Data</button>
+        </div>
+
+        <!-- SCANNER CONFIG -->
         <div class="settings-section">
             <div class="settings-row">
                 <span class="settings-label">💰 Current Balance</span>
@@ -1274,18 +1323,33 @@ HTML = """
             </div>
             <div class="settings-row">
                 <span class="settings-label">📊 Risk per Trade</span>
-                <span class="value">1%</span>
+                <select id="riskPercent" onchange="updateRisk()" style="width: 80px; padding: 6px; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(0,150,255,0.3); border-radius: 6px;">
+                    <option value="0.5">0.5%</option>
+                    <option value="1" selected>1%</option>
+                    <option value="2">2%</option>
+                </select>
             </div>
             <div class="settings-row">
                 <span class="settings-label">🎯 Min Confidence</span>
-                <span class="value">75%</span>
+                <select id="minConfidence" onchange="updateMinConf()" style="width: 80px; padding: 6px; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(0,150,255,0.3); border-radius: 6px;">
+                    <option value="60">60%</option>
+                    <option value="70">70%</option>
+                    <option value="75" selected>75%</option>
+                    <option value="80">80%</option>
+                </select>
             </div>
             <div class="settings-row">
                 <span class="settings-label">⏰ Scan Interval</span>
-                <span class="value">5 min</span>
+                <select id="scanInterval" onchange="updateScanInterval()" style="width: 100px; padding: 6px; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(0,150,255,0.3); border-radius: 6px;">
+                    <option value="1">1 min</option>
+                    <option value="3">3 min</option>
+                    <option value="5" selected>5 min</option>
+                    <option value="15">15 min</option>
+                </select>
             </div>
         </div>
 
+        <!-- APP INFO -->
         <div class="settings-section">
             <div class="settings-row">
                 <span class="settings-label">📱 App Version</span>
@@ -1304,6 +1368,9 @@ HTML = """
                 <span class="value">134644333</span>
             </div>
         </div>
+
+        <!-- RESET ALL -->
+        <button onclick="resetAllSettings()" style="width: 100%; margin-top: 15px; padding: 12px; background: rgba(255, 107, 107, 0.15); color: #ff6b6b; border: 1px solid #ff6b6b; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer;">🔄 Reset All Settings</button>
     </div>
 
     <!-- BOTTOM NAVIGATION -->
@@ -1332,13 +1399,165 @@ HTML = """
             loadTicker();
             loadSession();
             loadNews();
+            loadAllSettings();
+            updateAccountDisplay();
             // Auto-refresh every 5 minutes
             setInterval(() => {
                 loadTicker();
                 loadSession();
                 loadNews();
+                updateAccountDisplay();
             }, 300000);
         };
+
+        // ============================================
+        // SETTINGS MANAGEMENT (Saves to localStorage)
+        // ============================================
+
+        function loadAllSettings() {
+            const settings = JSON.parse(localStorage.getItem('appSettings') || '{}');
+
+            // Load each toggle
+            const toggles = {
+                'push': true,
+                'news': true,
+                'dark': true,
+                'btc-auto': true,
+                'sound': false,
+                'winrate': true
+            };
+
+            Object.entries(toggles).forEach(([key, defaultValue]) => {
+                const toggle = = saved !== undefined ? saved : defaultValue;
+                const el = document.getElementById('toggle-' + key);
+                if (el) {
+                    if (saved) {
+                        el.classList.add('active');
+                    } else {
+                        el.classList.remove('active');
+                    }
+                }
+            });
+
+            // Load account data
+            const account = JSON.parse(localStorage.getItem('accountData') || '{}');
+            if (account.balance) {
+                document.getElementById('accountBalance').value = account.balance;
+            }
+
+            // Load scanner config
+            const config = JSON.parse(localStorage.getItem('scannerConfig') || '{}');
+            if (config.riskPercent) document.getElementById('riskPercent').value = config.riskPercent;
+            if (config.minConfidence) document.getElementById('minConfidence').value = config.minConfidence;
+            if (config.scanInterval) document.getElementById('scanInterval').value = config.scanInterval;
+        }
+
+        function toggleSetting(key) {
+            const el = document.getElementById('toggle-' + key);
+            el.classList.toggle('active');
+
+            const settings = JSON.parse(localStorage.getItem('appSettings') || '{}');
+            settings[key] = el.classList.contains('active');
+            localStorage.setItem('appSettings', JSON.stringify(settings));
+
+            // Show confirmation
+            const status = el.classList.contains('active') ? 'ON' : 'OFF';
+            showToast(`${key.toUpperCase()}: ${status}`);
+        }
+
+        function updateBalance() {
+            const balance = parseFloat(document.getElementById('accountBalance').value);
+            const data = JSON.parse(localStorage.getItem('accountData') || '{}');
+            data.balance = balance;
+            localStorage.setItem('accountData', JSON.stringify(data));
+            showToast(`Balance updated: R${balance.toFixed(2)}`);
+        }
+
+        function updateRisk() {
+            const risk = document.getElementById('riskPercent').value;
+            const config = JSON.parse(localStorage.getItem('scannerConfig') || '{}');
+            config.riskPercent = risk;
+            localStorage.setItem('scannerConfig', JSON.stringify(config));
+            showToast(`Risk per trade: ${risk}%`);
+        }
+
+        function updateMinConf() {
+            const conf = document.getElementById('minConfidence').value;
+            const config = JSON.parse(localStorage.getItem('scannerConfig') || '{}');
+            config.minConfidence = conf;
+            localStorage.setItem('scannerConfig', JSON.stringify(config));
+            showToast(`Min confidence: ${conf}%`);
+        }
+
+        function updateScanInterval() {
+            const interval = document.getElementById('scanInterval').value;
+            const config = JSON.parse(localStorage.getItem('scannerConfig') || '{}');
+            config.scanInterval = interval;
+            localStorage.setItem('scannerConfig', JSON.stringify(config));
+            showToast(`Scan interval: ${interval} min`);
+        }
+
+        function showToast(msg) {
+            // Simple toast notification
+            const toast = document.createElement('div');
+            toast.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(0,212,170,0.9);color:#000;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;z-index:9999;';
+            toast.textContent = '✓ ' + msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        }
+
+        function logQuickTrade(result) {
+            const symbol = prompt('Symbol traded? (BTCUSDm, XAUUSDm, etc.)', 'BTCUSDm') || 'BTCUSDm';
+
+            const data = JSON.parse(localStorage.getItem('tradeLog') || '{"trades":[]}');
+            data.trades.push({
+                symbol: symbol.toUpperCase(),
+                result: result,
+                time: new Date().toISOString()
+            });
+            localStorage.setItem('tradeLog', JSON.stringify(data));
+            updateAccountDisplay();
+
+            const emoji = result === 'WIN' ? '🎉' : '📚';
+            showToast(`${emoji} ${symbol} ${result} logged!`);
+        }
+
+        function updateAccountDisplay() {
+            const data = JSON.parse(localStorage.getItem('tradeLog') || '{"trades":[]}');
+            const total = data.trades.length;
+            const wins = data.trades.filter(t => t.result === 'WIN').length;
+            const losses = total - wins;
+            const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
+
+            // Calculate P&L (assuming 1% risk, 1:3 RR)
+            const riskPercent = parseFloat(document.getElementById('riskPercent').value ||) || 1;
+            const balance = parseFloat(document.getElementById('accountBalance').value ||) || 369.19;
+            const riskAmount = balance * (riskPercent / 100);
+            const pnl = (wins * riskAmount * 3) - (losses * riskAmount);
+
+            document.getElementById('totalTradesDisplay').textContent = total;
+            document.getElementById('winLossDisplay').textContent = wins + 'W / ' + losses + 'L';
+            document.getElementById('winRateDisplay').textContent = winRate + '%';
+
+            const pnlEl = document.getElementById('totalPnLDisplay');
+            pnlEl.textContent = (pnl >= 0 ? '+' : '') + 'R' + pnl.toFixed(2);
+            pnlEl.className = pnl >= 0 ? 'value profit' : 'value loss';
+        }
+
+        function resetAccount() {
+            if (confirm('Reset all trade history?')) {
+                localStorage.removeItem('tradeLog');
+                updateAccountDisplay();
+                showToast('Account data reset');
+            }
+        }
+
+        function resetAllSettings() {
+            if (confirm('Reset ALL settings to defaults? This will reset:\n\n• All toggles\n• Account balance\n• Trade history\n• Scanner config')) {
+                localStorage.clear();
+                location.reload();
+            }
+        }
 
         // ============================================
         // WIN RATE TRACKER (Real-time from logged trades)

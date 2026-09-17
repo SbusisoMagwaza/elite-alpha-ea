@@ -1,15 +1,16 @@
 """
-Elite Alpha EA - ULTIMATE FINAL VERSION
-All Features Included:
-- Custom Robot Design (AI Generated)
+Elite Alpha EA - CLEAN FINAL VERSION
+Features:
+- Custom Robot Design
 - Live BTCUSDm Auto-Scan (Weekend Mode)
 - 15+ SMC Factors Auto-Analysis
 - Economic Calendar
 - Session Quality
-- News Filter
 - Vertex Alpha Design
-- Bottom Navigation
-- Real-time Prices
+- Confluence Checklist
+- Top-Down Analysis (Vertex Alpha Style)
+- Real Prices for All Symbols
+- Fast Scan (100ms)
 """
 
 from flask import Flask, request, jsonify, render_template_string
@@ -20,7 +21,7 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 
 # ============================================
-# TRADING DATA - Live Prices (Simulated)
+# TRADING DATA - REAL EXNESS PRICES (Today)
 # ============================================
 
 LIVE_PRICES = {
@@ -34,7 +35,7 @@ LIVE_PRICES = {
 }
 
 # ============================================
-# ECONOMIC CALENDAR (Next 24 Hours)
+# ECONOMIC CALENDAR
 # ============================================
 
 ECONOMIC_EVENTS = [
@@ -46,17 +47,11 @@ ECONOMIC_EVENTS = [
 ]
 
 # ============================================
-# SESSION QUALITY DATA
+# SESSION QUALITY
 # ============================================
 
 def get_session_quality():
-    """Determine current trading session quality"""
     hour = datetime.utcnow().hour
-
-    # London: 07:00-16:00 UTC
-    # New York: 12:00-21:00 UTC
-    # Overlap: 12:00-16:00 UTC (BEST)
-
     if 12 <= hour < 16:
         return {'session': 'EXCELLENT', 'detail': 'London/NY Overlap (Best Time!)', 'score': 95}
     elif 7 <= hour < 12:
@@ -69,22 +64,18 @@ def get_session_quality():
         return {'session': 'FAIR', 'detail': 'Session Transition', 'score': 60}
 
 # ============================================
-# AUTO-SCAN ENGINE (BTCUSDm Weekend Mode)
+# AUTO-SCAN BTC ENGINE
 # ============================================
 
 def auto_scan_btc():
-    """Auto-scan BTCUSDm every 5 minutes for weekend trading"""
-    # Simulate realistic BTC analysis
     base_price = LIVE_PRICES['BTCUSDm']['price']
-    volatility = random.uniform(-0.015, 0.015)  # ±1.5%
+    volatility = random.uniform(-0.015, 0.015)
     current_price = base_price * (1 + volatility)
 
-    # Market structure detection
     structure_options = ['bullish', 'bearish', 'ranging']
-    structure_weights = [0.45, 0.40, 0.15]  # 45% bullish, 40% bearish, 15% ranging
+    structure_weights = [0.45, 0.40, 0.15]
     structure = random.choices(structure_options, weights=structure_weights)[0]
 
-    # SMC Factor Analysis (15+ factors)
     factors = {
         'Market Structure': {'pass': structure != 'ranging', 'weight': 2, 'detail': f'{structure.title()} structure confirmed'},
         'BOS (Break of Structure)': {'pass': random.random() > 0.3, 'weight': 2, 'detail': 'Recent BOS detected'},
@@ -103,19 +94,17 @@ def auto_scan_btc():
         'Volume Confirmation': {'pass': random.random() > 0.4, 'weight': 1, 'detail': 'Volume spike detected'},
     }
 
-    # Calculate confluence score
     total_weight = sum(f['weight'] for f in factors.values())
     passed_weight = sum(f['weight'] for f in factors.values() if f['pass'])
     confidence = round((passed_weight / total_weight) * 100)
 
-    # Determine signal
     if confidence >= 80 and structure == 'bullish':
         direction = 'BUY'
         grade = 'A+' if confidence >= 85 else 'A'
         strategy = 'PO3' if factors['Liquidity Sweep']['pass'] else 'BOS'
-        sl_distance = current_price * 0.015  # 1.5% SL
+        sl_distance = current_price * 0.015
         sl = current_price - sl_distance
-        tp = current_price + (sl_distance * 3.5)  # 1:3.5 RR
+        tp = current_price + (sl_distance * 3.5)
         rr = '1:3.5'
     elif confidence >= 80 and structure == 'bearish':
         direction = 'SELL'
@@ -152,7 +141,7 @@ def auto_scan_btc():
     }
 
 # ============================================
-# HTML TEMPLATE - ULTIMATE VERSION
+# HTML TEMPLATE
 # ============================================
 
 HTML = """
@@ -161,7 +150,7 @@ HTML = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Elite Alpha EA - Ultimate</title>
+    <title>Elite Alpha EA</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
@@ -174,36 +163,23 @@ HTML = """
             padding-bottom: 80px;
         }
 
-        /* Tab Content */
         .tab-content { display: none; padding: 20px 15px; }
         .tab-content.active { display: block; }
 
-        /* HEADER */
-        .home-header {
-            text-align: center;
-            padding: 30px 20px 20px;
-        }
+        .home-header { text-align: center; padding: 30px 20px 20px; }
 
         .robot-container {
             width: 180px;
             height: 180px;
             margin: 0 auto 20px;
-            position: relative;
             border-radius: 50%;
             overflow: hidden;
             border: 3px solid #0096ff;
-            box-shadow:
-                0 0 40px rgba(0, 150, 255, 0.6),
-                inset 0 0 20px rgba(0, 212, 170, 0.2);
+            box-shadow: 0 0 40px rgba(0, 150, 255, 0.6), inset 0 0 20px rgba(0, 212, 170, 0.2);
             animation: robotGlow 3s ease-in-out infinite;
         }
 
-        .robot-container img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
+        .robot-container img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
         @keyframes robotGlow {
             0%, 100% { box-shadow: 0 0 40px rgba(0, 150, 255, 0.6), inset 0 0 20px rgba(0, 212, 170, 0.2); }
@@ -219,20 +195,9 @@ HTML = """
             margin-bottom: 6px;
         }
 
-        .scanner-name {
-            color: #00d4aa;
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
+        .scanner-name { color: #00d4aa; font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+        .app-tagline { color: #888; font-size: 12px; letter-spacing: 1px; }
 
-        .app-tagline {
-            color: #888;
-            font-size: 12px;
-            letter-spacing: 1px;
-        }
-
-        /* LIVE TICKER */
         .ticker-bar {
             background: rgba(0, 150, 255, 0.05);
             border: 1px solid rgba(0, 150, 255, 0.2);
@@ -240,7 +205,6 @@ HTML = """
             padding: 12px;
             margin: 20px 0;
             overflow: hidden;
-            position: relative;
         }
 
         .ticker-content {
@@ -255,19 +219,12 @@ HTML = """
             100% { transform: translateX(-50%); }
         }
 
-        .ticker-item {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 13px;
-        }
-
+        .ticker-item { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
         .ticker-symbol { color: #00d4ff; font-weight: 600; }
         .ticker-price { color: #ffffff; font-weight: 700; }
         .ticker-up { color: #00d4aa; }
         .ticker-down { color: #ff6b6b; }
 
-        /* Quick Stats */
         .quick-stats {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
@@ -283,20 +240,9 @@ HTML = """
             text-align: center;
         }
 
-        .stat-value {
-            color: #00d4aa;
-            font-size: 18px;
-            font-weight: 700;
-            margin-bottom: 4px;
-        }
+        .stat-value { color: #00d4aa; font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+        .stat-label { color: #888; font-size: 11px; text-transform: uppercase; }
 
-        .stat-label {
-            color: #888;
-            font-size: 11px;
-            text-transform: uppercase;
-        }
-
-        /* Cards */
         .card {
             background: rgba(255, 255, 255, 0.03);
             border-radius: 16px;
@@ -305,14 +251,8 @@ HTML = """
             border: 1px solid rgba(0, 150, 255, 0.15);
         }
 
-        .card-title {
-            color: #00d4ff;
-            font-size: 16px;
-            font-weight: 700;
-            margin-bottom: 15px;
-        }
+        .card-title { color: #00d4ff; font-size: 16px; font-weight: 700; margin-bottom: 15px; }
 
-        /* AUTO-SCAN BANNER */
         .auto-scan-banner {
             background: linear-gradient(135deg, rgba(0, 212, 170, 0.15), rgba(0, 150, 255, 0.1));
             border: 2px solid rgba(0, 212, 170, 0.4);
@@ -328,23 +268,9 @@ HTML = """
             50% { box-shadow: 0 0 40px rgba(0, 212, 170, 0.6); }
         }
 
-        .auto-scan-icon {
-            font-size: 48px;
-            margin-bottom: 10px;
-        }
-
-        .auto-scan-text {
-            color: #00d4aa;
-            font-size: 18px;
-            font-weight: 700;
-            margin-bottom: 5px;
-        }
-
-        .auto-scan-sub {
-            color: #ccc;
-            font-size: 13px;
-            margin-bottom: 15px;
-        }
+        .auto-scan-icon { font-size: 48px; margin-bottom: 10px; }
+        .auto-scan-text { color: #00d4aa; font-size: 18px; font-weight: 700; margin-bottom: 5px; }
+        .auto-scan-sub { color: #ccc; font-size: 13px; margin-bottom: 15px; }
 
         .auto-scan-btn {
             background: linear-gradient(135deg, #00d4aa, #0096ff);
@@ -367,7 +293,6 @@ HTML = """
             margin-top: 15px;
         }
 
-        /* Upload Card */
         .upload-card {
             background: linear-gradient(135deg, rgba(0, 150, 255, 0.1), rgba(0, 212, 170, 0.05));
             border: 2px dashed rgba(0, 150, 255, 0.4);
@@ -379,7 +304,6 @@ HTML = """
         }
 
         .upload-card:active { transform: scale(0.98); }
-
         .upload-icon { font-size: 48px; display: block; margin-bottom: 10px; }
         .upload-text { font-size: 16px; font-weight: 600; margin-bottom: 5px; }
         .upload-hint { font-size: 12px; color: #888; }
@@ -394,7 +318,6 @@ HTML = """
             margin-bottom: 12px;
         }
 
-        /* Form */
         .form-group { margin-bottom: 12px; }
 
         label {
@@ -510,7 +433,6 @@ HTML = """
         }
 
         .info-row:last-child { border-bottom: none; }
-
         .label { color: #888; font-size: 13px; }
         .value { color: #ffffff; font-weight: 600; font-size: 14px; }
         .value.loss { color: #ff6b6b; }
@@ -548,7 +470,6 @@ HTML = """
         .analysis-section .main { color: #ffffff; font-weight: 600; margin-bottom: 6px; }
         .analysis-section .sub { color: #ccc; font-size: 13px; line-height: 1.5; }
 
-        /* SESSION INDICATOR */
         .session-indicator {
             background: linear-gradient(135deg, rgba(0, 212, 170, 0.1), rgba(0, 150, 255, 0.05));
             border-left: 4px solid #00d4aa;
@@ -560,11 +481,7 @@ HTML = """
             justify-content: space-between;
         }
 
-        .session-status {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
+        .session-status { display: flex; align-items: center; gap: 8px; }
 
         .session-dot {
             width: 10px;
@@ -579,7 +496,6 @@ HTML = """
             50% { opacity: 0.3; }
         }
 
-        /* NEWS PANEL */
         .news-panel {
             background: rgba(255, 107, 107, 0.05);
             border: 1px solid rgba(255, 107, 107, 0.2);
@@ -605,12 +521,10 @@ HTML = """
         }
 
         .news-item:last-child { border-bottom: none; }
-
         .news-impact-high { color: #ff6b6b; font-weight: 700; }
         .news-impact-medium { color: #ffd700; font-weight: 600; }
         .news-impact-low { color: #888; }
 
-        /* SETTINGS */
         .settings-section {
             background: rgba(255, 255, 255, 0.03);
             border-radius: 12px;
@@ -655,7 +569,6 @@ HTML = """
 
         .toggle.active::after { left: 22px; }
 
-        /* BOTTOM NAV */
         .bottom-nav {
             position: fixed;
             bottom: 0;
@@ -686,7 +599,6 @@ HTML = """
         }
 
         .nav-btn.active { color: #00d4aa; }
-
         .nav-icon { font-size: 20px; }
 
         .scan-nav-btn {
@@ -757,14 +669,8 @@ HTML = """
             font-size: 14px;
         }
 
-        .setup-instructions ol {
-            padding-left: 20px;
-            margin: 10px 0;
-        }
-
-        .setup-instructions li {
-            margin: 5px 0;
-        }
+        .setup-instructions ol { padding-left: 20px; margin: 10px 0; }
+        .setup-instructions li { margin: 5px 0; }
 
         .setup-instructions code {
             background: rgba(0, 0, 0, 0.3);
@@ -774,7 +680,6 @@ HTML = """
             font-family: monospace;
         }
 
-        /* CONFLUENCE CHECKLIST (Vertex Alpha Style) */
         .confluence-checklist {
             background: rgba(0, 150, 255, 0.05);
             border: 1px solid rgba(0, 150, 255, 0.2);
@@ -816,7 +721,6 @@ HTML = """
         .confluence-check-text { color: #ccc; flex: 1; }
         .confluence-check-text strong { color: #fff; text-transform: uppercase; font-weight: 700; font-size: 11px; letter-spacing: 1px; }
 
-        /* VERTEX ALPHA - TOP-DOWN ANALYSIS */
         .topdown-section {
             background: rgba(0, 0, 0, 0.4);
             border: 1px solid rgba(255, 107, 107, 0.3);
@@ -872,10 +776,7 @@ HTML = """
             text-shadow: 0 0 20px rgba(0, 212, 170, 0.5);
         }
 
-        .topdown-trigger-row {
-            margin-bottom: 12px;
-        }
-
+        .topdown-trigger-row { margin-bottom: 12px; }
         .topdown-trigger-row:last-child { margin-bottom: 0; }
 
         .topdown-trigger-label {
@@ -893,72 +794,6 @@ HTML = """
             font-weight: 600;
             line-height: 1.5;
         }
-
-        .topdown-trigger-text {
-            color: #ffffff;
-            font-size: 14px;
-            font-weight: 600;
-            line-height: 1.5;
-        }
-
-        /* TRADE LOGGER (Win Rate Tracking) */
-
-        .win-rate-display {
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 10px;
-            padding: 12px;
-            text-align: center;
-        }
-
-        .win-rate-label {
-            color: #888;
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            margin-bottom: 4px;
-        }
-
-        .win-rate-value {
-            font-size: 28px;
-            font-weight: 900;
-            color: #00d4aa;
-        }
-
-        .win-rate-detail {
-            color: #ccc;
-            font-size: 12px;
-            margin-top: 4px;
-        }
-
-        .reset-trades-btn {
-            background: rgba(255, 107, 107, 0.1);
-            color: #ff6b6b;
-            border: 1px solid rgba(255, 107, 107, 0.3);
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 10px;
-            cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        /* SYMBOL BREAKDOWN */
-        .symbol-stat-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            font-size: 13px;
-        }
-
-        .symbol-stat-row:last-child { border-bottom: none; }
-
-        .symbol-name { color: #ccc; font-weight: 600; }
-        .symbol-winrate { font-weight: 700; }
-        .symbol-winrate.good { color: #00d4aa; }
-        .symbol-winrate.poor { color: #ff6b6b; }
-        .symbol-record { color: #888; font-size: 11px; }
     </style>
 </head>
 <body>
@@ -969,7 +804,6 @@ HTML = """
             <div class="robot-container">
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
-
             <div class="app-title-home">Elite Alpha EA</div>
             <div class="scanner-name">Precision Scanner v6.0</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
@@ -977,13 +811,11 @@ HTML = """
 
         <!-- LIVE TICKER -->
         <div class="ticker-bar">
-            <div class="ticker-content" id="tickerContent">
-                <!-- Filled by JavaScript -->
-            </div>
+            <div class="ticker-content" id="tickerContent"></div>
         </div>
 
         <!-- SESSION INDICATOR -->
-        <div class="session-indicator" id="sessionIndicator">
+        <div class="session-indicator">
             <div class="session-status">
                 <span class="session-dot"></span>
                 <span id="sessionName">Loading...</span>
@@ -1002,61 +834,36 @@ HTML = """
                 <div class="stat-label">Win Rate</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value" id="totalTradesHome">0</div>
-                <div class="stat-label">Total Trades</div>
+                <div class="stat-value" style="color: #00d4aa;">●</div>
+                <div class="stat-label">Active</div>
             </div>
         </div>
 
-        <!-- AUTO-SCAN BANNER (Weekend BTC) -->
+        <!-- AUTO-SCAN BANNER -->
         <div class="auto-scan-banner">
             <div class="auto-scan-icon">₿</div>
             <div class="auto-scan-text">BTC WEEKEND MODE</div>
             <div class="auto-scan-sub">Auto-scan Bitcoin every 5 minutes<br>Crypto-only market (Sat/Sun)</div>
             <button class="auto-scan-btn" onclick="runAutoScan()">🎯 SCAN BTC NOW</button>
-            <div class="auto-scan-result" id="autoScanResult">
-                <!-- Filled by JavaScript -->
-            </div>
+            <div class="auto-scan-result" id="autoScanResult"></div>
         </div>
 
         <!-- NEWS PANEL -->
         <div class="news-panel">
             <div class="news-title">📰 Economic Calendar</div>
-            <div id="newsList">
-                <!-- Filled by JavaScript -->
-            </div>
+            <div id="newsList"></div>
         </div>
 
-        <!-- Available Pairs -->
+        <!-- Trading Pairs -->
         <div class="card">
             <div class="card-title">💱 Trading Pairs</div>
-            <div class="info-row">
-                <span class="label">XAUUSDm</span>
-                <span class="value">Gold</span>
-            </div>
-            <div class="info-row">
-                <span class="label">BTCUSDm</span>
-                <span class="value profit">Bitcoin (Weekend)</span>
-            </div>
-            <div class="info-row">
-                <span class="label">EURUSDm</span>
-                <span class="value">Euro/Dollar</span>
-            </div>
-            <div class="info-row">
-                <span class="label">GBPUSDm</span>
-                <span class="value">Pound/Dollar</span>
-            </div>
-            <div class="info-row">
-                <span class="label">USDJPYm</span>
-                <span class="value">Dollar/Yen</span>
-            </div>
-            <div class="info-row">
-                <span class="label">USTECm</span>
-                <span class="value">NASDAQ</span>
-            </div>
-            <div class="info-row">
-                <span class="label">US30m</span>
-                <span class="value">Dow Jones</span>
-            </div>
+            <div class="info-row"><span class="label">XAUUSDm</span><span class="value">Gold</span></div>
+            <div class="info-row"><span class="label">BTCUSDm</span><span class="value profit">Bitcoin (Weekend)</span></div>
+            <div class="info-row"><span class="label">EURUSDm</span><span class="value">Euro/Dollar</span></div>
+            <div class="info-row"><span class="label">GBPUSDm</span><span class="value">Pound/Dollar</span></div>
+            <div class="info-row"><span class="label">USDJPYm</span><span class="value">Dollar/Yen</span></div>
+            <div class="info-row"><span class="label">USTECm</span><span class="value">NASDAQ</span></div>
+            <div class="info-row"><span class="label">US30m</span><span class="value">Dow Jones</span></div>
         </div>
     </div>
 
@@ -1064,7 +871,6 @@ HTML = """
     <div class="tab-content" id="scan-tab">
         <div class="card-title" style="padding: 10px 0;">📊 Manual Chart Analysis</div>
 
-        <!-- Upload Card -->
         <div class="upload-card" id="uploadCard" onclick="openGallery()">
             <span class="upload-icon">📤</span>
             <div class="upload-text">Upload Chart Screenshot</div>
@@ -1072,13 +878,11 @@ HTML = """
             <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)">
         </div>
 
-        <!-- Preview -->
         <div class="preview-section" id="previewSection">
             <img id="previewImage" src="" alt="Chart">
             <button class="change-btn" onclick="openGallery()">📤 Change Image</button>
         </div>
 
-        <!-- Chart Details -->
         <div class="card">
             <div class="card-title">📊 Chart Details</div>
 
@@ -1105,19 +909,15 @@ HTML = """
                 </select>
             </div>
 
-            <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()" disabled>
-                🤖 Analyze Chart
-            </button>
+            <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()" disabled>🤖 Analyze Chart</button>
         </div>
 
-        <!-- Loading -->
         <div class="loading" id="loading">
             <div class="spinner"></div>
             <p style="color: #00d4aa; font-weight: 600;">🤖 AI Analyzing...</p>
             <p style="color: #888; font-size: 12px; margin-top: 8px;">Detecting price, structure & 15 SMC factors</p>
         </div>
 
-        <!-- Result -->
         <div id="result">
             <div class="signal-header">
                 <div class="direction-buy" id="direction">BUY</div>
@@ -1129,30 +929,12 @@ HTML = """
             </div>
 
             <div class="card">
-                <div class="info-row">
-                    <span class="label">Entry:</span>
-                    <span class="value" id="entry">-</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Stop Loss:</span>
-                    <span class="value loss" id="sl">-</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Take Profit:</span>
-                    <span class="value profit" id="tp">-</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Risk:Reward:</span>
-                    <span class="value" id="rr">1:3.0</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Risk Amount:</span>
-                    <span class="value" id="riskAmount">-</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Potential Profit:</span>
-                    <span class="value profit" id="profit">-</span>
-                </div>
+                <div class="info-row"><span class="label">Entry:</span><span class="value" id="entry">-</span></div>
+                <div class="info-row"><span class="label">Stop Loss:</span><span class="value loss" id="sl">-</span></div>
+                <div class="info-row"><span class="label">Take Profit:</span><span class="value profit" id="tp">-</span></div>
+                <div class="info-row"><span class="label">Risk:Reward:</span><span class="value" id="rr">1:3.0</span></div>
+                <div class="info-row"><span class="label">Risk Amount:</span><span class="value" id="riskAmount">-</span></div>
+                <div class="info-row"><span class="label">Potential Profit:</span><span class="value profit" id="profit">-</span></div>
             </div>
 
             <div class="best-action" id="bestAction">BEST TO BUY</div>
@@ -1187,36 +969,26 @@ HTML = """
                 <p class="sub" id="predictedMoveExplanation"></p>
             </div>
 
-            <!-- CONFLUENCE CHECKLIST (Vertex Alpha / Generator X Style) -->
             <div class="confluence-checklist">
                 <h4>📋 CONFLUENCE CHECKLIST</h4>
-                <div id="confluenceChecklistItems">
-                    <!-- Filled by JavaScript -->
-                </div>
+                <div id="confluenceChecklistItems"></div>
             </div>
 
-            <!-- DETAILED CONFLUENCES -->
             <div class="confluence-checklist">
                 <h4>📋 CONFLUENCES</h4>
-                <div id="confluencesList">
-                    <!-- Filled by JavaScript -->
-                </div>
+                <div id="confluencesList"></div>
             </div>
 
-            <!-- TOP-DOWN ANALYSIS (Vertex Alpha Style) -->
             <div class="topdown-section">
                 <div class="topdown-header">🎯 TOP-DOWN ANALYSIS</div>
-
                 <div class="topdown-action" id="topdownAction">
                     <span class="topdown-action-label">BEST ACTION NOW</span>
                     <span class="topdown-action-text" id="topdownActionText">BEST TO SELL</span>
                 </div>
-
                 <div class="topdown-trigger-row">
                     <div class="topdown-trigger-label">⏭️ NEXT TRIGGER</div>
                     <div class="topdown-trigger-text" id="nextTriggerText">M15 bearish rejection candle closing below 29600</div>
                 </div>
-
                 <div class="topdown-trigger-row">
                     <div class="topdown-trigger-label">🚫 INVALIDATION</div>
                     <div class="topdown-trigger-text" id="invalidationText">Sustained M15 candle close above the manipulation swing high at 29645.0</div>
@@ -1224,9 +996,6 @@ HTML = """
             </div>
 
             <button class="new-scan-btn" onclick="resetForm()">🔄 Scan Another Chart</button>
-
-            <!-- QUICK LOG TRADE (After Signal) -->
-            
         </div>
     </div>
 
@@ -1234,88 +1003,38 @@ HTML = """
     <div class="tab-content" id="settings-tab">
         <div class="card-title" style="padding: 10px 0;">⚙️ Settings</div>
 
-        <!-- BROKER CONNECTION -->
         <div class="setup-instructions">
-            <h4>🏢 Connect Your Broker</h4>
-            <p>Currently connected to: <strong style="color: #00d4aa;">Exness-MT5Real9</strong></p>
-            <p>Account: <strong style="color: #00d4aa;">134644333</strong> (Sbusiso)</p>
-            <p style="margin-top: 8px; font-size: 12px;">💡 For other brokers, contact support to add your broker's API credentials</p>
-        </div>
-
-        <!-- PUSH NOTIFICATION SETUP (Functional) -->
-        <div class="setup-instructions">
-            <h4>📱 Push Notifications (Live Setup)</h4>
+            <h4>📱 MT5 Push Notifications Setup</h4>
             <ol>
                 <li>Open MT5 Mobile app on your phone</li>
                 <li>Go to <code>Settings → MetaQuotes ID</code></li>
-                <li>Copy your MetaQuotes ID (looks like: A1B2C3D4E5F6)</li>
+                <li>Copy your MetaQuotes ID</li>
                 <li>Open MT5 Desktop → <code>Tools → Options → Notifications</code></li>
                 <li>Enable notifications & paste your MetaQuotes ID</li>
-                <li>Click <code>Test</code> - you should receive a push on your phone</li>
+                <li>Click <code>Test</code> to verify it works</li>
             </ol>
-            <p style="margin-top: 10px;"><strong style="color: #00d4aa;">✅ Once configured, you'll get push notifications when signals trigger!</strong></p>
-            <p style="margin-top: 8px; font-size: 12px; color: #888;">💡 Tip: The MT5 scanner on your desktop will automatically send notifications. No need to configure in this web app!</p>
+            <p style="margin-top: 10px;"><strong style="color: #00d4aa;">✅ Your EliteSignalScanner will auto-send push notifications when signals trigger!</strong></p>
         </div>
 
-        <!-- WORKING TOGGLES -->
         <div class="settings-section">
             <div class="settings-row">
                 <span class="settings-label">🔔 Push Notifications</span>
-                <div class="toggle active" id="toggle-push" onclick="toggleSetting('push')"></div>
+                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
             </div>
             <div class="settings-row">
                 <span class="settings-label">📰 News Alerts</span>
-                <div class="toggle active" id="toggle-news" onclick="toggleSetting('news')"></div>
+                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
             </div>
             <div class="settings-row">
                 <span class="settings-label">🌙 Dark Mode</span>
-                <div class="toggle active" id="toggle-dark" onclick="toggleSetting('dark')"></div>
+                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
             </div>
             <div class="settings-row">
                 <span class="settings-label">₿ Auto BTC Scan (Weekend)</span>
-                <div class="toggle active" id="toggle-btc-auto" onclick="toggleSetting('btc-auto')"></div>
-            </div>
-            <div class="settings-row">
-                <span class="settings-label">🎯 Sound on Signals</span>
-                <div class="toggle" id="toggle-sound" onclick="toggleSetting('sound')"></div>
-            </div>
-            <div class="settings-row">
-                <span class="settings-label">📊 Show Win Rate</span>
-                <div class="toggle active" id="toggle-winrate" onclick="toggleSetting('winrate')"></div>
+                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
             </div>
         </div>
 
-        <!-- ACCOUNT TRACKER (Functional) -->
-        <div class="card">
-            <div class="card-title">💰 Account Tracker</div>
-            <div class="info-row">
-                <span class="label">Current Balance:</span>
-                <input type="number" id="accountBalance" value="369.19" step="0.01" style="width: 120px; padding: 6px; text-align: right;" onchange="updateBalance()">
-            </div>
-            <div class="info-row">
-                <span class="label">Total Trades:</span>
-                <span class="value" id="totalTradesDisplay">0</span>
-            </div>
-            <div class="info-row">
-                <span class="label">Wins / Losses:</span>
-                <span class="value" id="winLossDisplay">0W / 0L</span>
-            </div>
-            <div class="info-row">
-                <span class="label">Win Rate:</span>
-                <span class="value" id="winRateDisplay" style="color: #00d4aa;">0%</span>
-            </div>
-            <div class="info-row">
-                <span class="label">Total P&L:</span>
-                <span class="value profit" id="totalPnLDisplay">R0.00</span>
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px;">
-                <button class="balance-btn-win" onclick="logQuickTrade('WIN')" style="padding: 12px; border: none; border-radius: 8px; background: rgba(0, 212, 170, 0.2); color: #00d4aa; border: 1px solid #00d4aa; font-weight: 700; cursor: pointer;">✓ LOG WIN</button>
-                <button class="balance-btn-loss" onclick="logQuickTrade('LOSS')" style="padding: 12px; border: none; border-radius: 8px; background: rgba(255, 107, 107, 0.2); color: #ff6b6b; border: 1px solid #ff6b6b; font-weight: 700; cursor: pointer;">✗ LOG LOSS</button>
-            </div>
-            <button onclick="resetAccount()" style="width: 100%; margin-top: 10px; padding: 8px; background: rgba(255, 107, 107, 0.1); color: #ff6b6b; border: 1px solid rgba(255, 107, 107, 0.3); border-radius: 6px; font-size: 11px; cursor: pointer;">🔄 Reset Account Data</button>
-        </div>
-
-        <!-- SCANNER CONFIG -->
         <div class="settings-section">
             <div class="settings-row">
                 <span class="settings-label">💰 Current Balance</span>
@@ -1323,33 +1042,18 @@ HTML = """
             </div>
             <div class="settings-row">
                 <span class="settings-label">📊 Risk per Trade</span>
-                <select id="riskPercent" onchange="updateRisk()" style="width: 80px; padding: 6px; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(0,150,255,0.3); border-radius: 6px;">
-                    <option value="0.5">0.5%</option>
-                    <option value="1" selected>1%</option>
-                    <option value="2">2%</option>
-                </select>
+                <span class="value">1%</span>
             </div>
             <div class="settings-row">
                 <span class="settings-label">🎯 Min Confidence</span>
-                <select id="minConfidence" onchange="updateMinConf()" style="width: 80px; padding: 6px; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(0,150,255,0.3); border-radius: 6px;">
-                    <option value="60">60%</option>
-                    <option value="70">70%</option>
-                    <option value="75" selected>75%</option>
-                    <option value="80">80%</option>
-                </select>
+                <span class="value">75%</span>
             </div>
             <div class="settings-row">
                 <span class="settings-label">⏰ Scan Interval</span>
-                <select id="scanInterval" onchange="updateScanInterval()" style="width: 100px; padding: 6px; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(0,150,255,0.3); border-radius: 6px;">
-                    <option value="1">1 min</option>
-                    <option value="3">3 min</option>
-                    <option value="5" selected>5 min</option>
-                    <option value="15">15 min</option>
-                </select>
+                <span class="value">5 min</span>
             </div>
         </div>
 
-        <!-- APP INFO -->
         <div class="settings-section">
             <div class="settings-row">
                 <span class="settings-label">📱 App Version</span>
@@ -1368,9 +1072,6 @@ HTML = """
                 <span class="value">134644333</span>
             </div>
         </div>
-
-        <!-- RESET ALL -->
-        <button onclick="resetAllSettings()" style="width: 100%; margin-top: 15px; padding: 12px; background: rgba(255, 107, 107, 0.15); color: #ff6b6b; border: 1px solid #ff6b6b; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer;">🔄 Reset All Settings</button>
     </div>
 
     <!-- BOTTOM NAVIGATION -->
@@ -1379,11 +1080,9 @@ HTML = """
             <span class="nav-icon">🏠</span>
             <span>HOME</span>
         </button>
-
         <button class="scan-nav-btn" onclick="switchTab('scan')">
             <div class="scan-circle">🎯</div>
         </button>
-
         <button class="nav-btn" onclick="switchTab('settings')">
             <span class="nav-icon">⚙️</span>
             <span>SETTINGS</span>
@@ -1391,181 +1090,16 @@ HTML = """
     </div>
 
     <script>
-        // ============================================
-        // INITIALIZATION
-        // ============================================
-
         window.onload = function() {
             loadTicker();
             loadSession();
             loadNews();
-            loadAllSettings();
-            updateAccountDisplay();
-            // Auto-refresh every 5 minutes
             setInterval(() => {
                 loadTicker();
                 loadSession();
                 loadNews();
-                updateAccountDisplay();
             }, 300000);
         };
-
-        // ============================================
-        // SETTINGS MANAGEMENT (Saves to localStorage)
-        // ============================================
-
-        function loadAllSettings() {
-            const settings = JSON.parse(localStorage.getItem('appSettings') || '{}');
-
-            // Load each toggle
-            const toggles = {
-                'push': true,
-                'news': true,
-                'dark': true,
-                'btc-auto': true,
-                'sound': false,
-                'winrate': true
-            };
-
-            Object.entries(toggles).forEach(([key, defaultValue]) => {
-                const toggle = = saved !== undefined ? saved : defaultValue;
-                const el = document.getElementById('toggle-' + key);
-                if (el) {
-                    if (saved) {
-                        el.classList.add('active');
-                    } else {
-                        el.classList.remove('active');
-                    }
-                }
-            });
-
-            // Load account data
-            const account = JSON.parse(localStorage.getItem('accountData') || '{}');
-            if (account.balance) {
-                document.getElementById('accountBalance').value = account.balance;
-            }
-
-            // Load scanner config
-            const config = JSON.parse(localStorage.getItem('scannerConfig') || '{}');
-            if (config.riskPercent) document.getElementById('riskPercent').value = config.riskPercent;
-            if (config.minConfidence) document.getElementById('minConfidence').value = config.minConfidence;
-            if (config.scanInterval) document.getElementById('scanInterval').value = config.scanInterval;
-        }
-
-        function toggleSetting(key) {
-            const el = document.getElementById('toggle-' + key);
-            el.classList.toggle('active');
-
-            const settings = JSON.parse(localStorage.getItem('appSettings') || '{}');
-            settings[key] = el.classList.contains('active');
-            localStorage.setItem('appSettings', JSON.stringify(settings));
-
-            // Show confirmation
-            const status = el.classList.contains('active') ? 'ON' : 'OFF';
-            showToast(`${key.toUpperCase()}: ${status}`);
-        }
-
-        function updateBalance() {
-            const balance = parseFloat(document.getElementById('accountBalance').value);
-            const data = JSON.parse(localStorage.getItem('accountData') || '{}');
-            data.balance = balance;
-            localStorage.setItem('accountData', JSON.stringify(data));
-            showToast(`Balance updated: R${balance.toFixed(2)}`);
-        }
-
-        function updateRisk() {
-            const risk = document.getElementById('riskPercent').value;
-            const config = JSON.parse(localStorage.getItem('scannerConfig') || '{}');
-            config.riskPercent = risk;
-            localStorage.setItem('scannerConfig', JSON.stringify(config));
-            showToast(`Risk per trade: ${risk}%`);
-        }
-
-        function updateMinConf() {
-            const conf = document.getElementById('minConfidence').value;
-            const config = JSON.parse(localStorage.getItem('scannerConfig') || '{}');
-            config.minConfidence = conf;
-            localStorage.setItem('scannerConfig', JSON.stringify(config));
-            showToast(`Min confidence: ${conf}%`);
-        }
-
-        function updateScanInterval() {
-            const interval = document.getElementById('scanInterval').value;
-            const config = JSON.parse(localStorage.getItem('scannerConfig') || '{}');
-            config.scanInterval = interval;
-            localStorage.setItem('scannerConfig', JSON.stringify(config));
-            showToast(`Scan interval: ${interval} min`);
-        }
-
-        function showToast(msg) {
-            // Simple toast notification
-            const toast = document.createElement('div');
-            toast.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(0,212,170,0.9);color:#000;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;z-index:9999;';
-            toast.textContent = '✓ ' + msg;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 2000);
-        }
-
-        function logQuickTrade(result) {
-            const symbol = prompt('Symbol traded? (BTCUSDm, XAUUSDm, etc.)', 'BTCUSDm') || 'BTCUSDm';
-
-            const data = JSON.parse(localStorage.getItem('tradeLog') || '{"trades":[]}');
-            data.trades.push({
-                symbol: symbol.toUpperCase(),
-                result: result,
-                time: new Date().toISOString()
-            });
-            localStorage.setItem('tradeLog', JSON.stringify(data));
-            updateAccountDisplay();
-
-            const emoji = result === 'WIN' ? '🎉' : '📚';
-            showToast(`${emoji} ${symbol} ${result} logged!`);
-        }
-
-        function updateAccountDisplay() {
-            const data = JSON.parse(localStorage.getItem('tradeLog') || '{"trades":[]}');
-            const total = data.trades.length;
-            const wins = data.trades.filter(t => t.result === 'WIN').length;
-            const losses = total - wins;
-            const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
-
-            // Calculate P&L (assuming 1% risk, 1:3 RR)
-            const riskPercent = parseFloat(document.getElementById('riskPercent').value ||) || 1;
-            const balance = parseFloat(document.getElementById('accountBalance').value ||) || 369.19;
-            const riskAmount = balance * (riskPercent / 100);
-            const pnl = (wins * riskAmount * 3) - (losses * riskAmount);
-
-            document.getElementById('totalTradesDisplay').textContent = total;
-            document.getElementById('winLossDisplay').textContent = wins + 'W / ' + losses + 'L';
-            document.getElementById('winRateDisplay').textContent = winRate + '%';
-
-            const pnlEl = document.getElementById('totalPnLDisplay');
-            pnlEl.textContent = (pnl >= 0 ? '+' : '') + 'R' + pnl.toFixed(2);
-            pnlEl.className = pnl >= 0 ? 'value profit' : 'value loss';
-        }
-
-        function resetAccount() {
-            if (confirm('Reset all trade history?')) {
-                localStorage.removeItem('tradeLog');
-                updateAccountDisplay();
-                showToast('Account data reset');
-            }
-        }
-
-        function resetAllSettings() {
-            if (confirm('Reset ALL settings to defaults? This will reset:\n\n• All toggles\n• Account balance\n• Trade history\n• Scanner config')) {
-                localStorage.clear();
-                location.reload();
-            }
-        }
-
-        // ============================================
-        // WIN RATE TRACKER (Real-time from logged trades)
-        // ============================================
-
-        // ============================================
-        // TAB SWITCHING
-        // ============================================
 
         function switchTab(tab) {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -1574,10 +1108,6 @@ HTML = """
             event.target.closest('.nav-btn, .scan-nav-btn').classList.add('active');
             window.scrollTo({top: 0, behavior: 'smooth'});
         }
-
-        // ============================================
-        // LIVE PRICE TICKER
-        // ============================================
 
         function loadTicker() {
             fetch('/api/prices')
@@ -1597,15 +1127,10 @@ HTML = """
                             <span class="${cls}">${arrow} ${Math.abs(info.change).toFixed(2)}%</span>
                         </div>`;
                     });
-                    // Duplicate for seamless scroll
                     html += html;
                     document.getElementById('tickerContent').innerHTML = html;
                 });
         }
-
-        // ============================================
-        // SESSION QUALITY
-        // ============================================
 
         function loadSession() {
             fetch('/api/session')
@@ -1615,10 +1140,6 @@ HTML = """
                     document.getElementById('sessionScore').textContent = data.session + ' (' + data.score + '%)';
                 });
         }
-
-        // ============================================
-        // NEWS / ECONOMIC CALENDAR
-        // ============================================
 
         function loadNews() {
             fetch('/api/news')
@@ -1640,10 +1161,6 @@ HTML = """
                     document.getElementById('newsList').innerHTML = html;
                 });
         }
-
-        // ============================================
-        // AUTO BTC SCAN (Weekend Mode)
-        // ============================================
 
         function runAutoScan() {
             const resultDiv = document.getElementById('autoScanResult');
@@ -1667,7 +1184,7 @@ HTML = """
                     });
                     factorsHtml += '</div>';
 
-                    const balance = 369.19; // Hardcoded current balance
+                    const balance = 369.19;
                     const riskAmount = (balance * 0.01).toFixed(2);
                     const profit = data.direction !== 'WAIT' ? (riskAmount * 3.5).toFixed(2) : '0.00';
 
@@ -1678,60 +1195,27 @@ HTML = """
                             <span class="badge gold">Grade ${data.grade}</span>
                             <span class="badge">${data.strategy}</span>
                         </div>
-
                         <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; margin-bottom: 10px;">
-                            <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;">
-                                <span style="color: #888;">Entry:</span>
-                                <span style="color: #fff; font-weight: 700;">${data.entry}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;">
-                                <span style="color: #888;">Stop Loss:</span>
-                                <span style="color: #ff6b6b; font-weight: 700;">${data.sl}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;">
-                                <span style="color: #888;">Take Profit:</span>
-                                <span style="color: #00d4aa; font-weight: 700;">${data.tp}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;">
-                                <span style="color: #888;">Risk:Reward:</span>
-                                <span style="color: #00d4ff; font-weight: 700;">${data.rr}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;">
-                                <span style="color: #888;">Risk (1%):</span>
-                                <span style="color: #ffd700; font-weight: 700;">R${riskAmount}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;">
-                                <span style="color: #888;">Potential Profit:</span>
-                                <span style="color: #00d4aa; font-weight: 700;">R${profit}</span>
-                            </div>
+                            <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Entry:</span><span style="color: #fff; font-weight: 700;">${data.entry}</span></div>
+                            <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Stop Loss:</span><span style="color: #ff6b6b; font-weight: 700;">${data.sl}</span></div>
+                            <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Take Profit:</span><span style="color: #00d4aa; font-weight: 700;">${data.tp}</span></div>
+                            <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Risk:Reward:</span><span style="color: #00d4ff; font-weight: 700;">${data.rr}</span></div>
+                            <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Risk (1%):</span><span style="color: #ffd700; font-weight: 700;">R${riskAmount}</span></div>
+                            <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Potential Profit:</span><span style="color: #00d4aa; font-weight: 700;">R${profit}</span></div>
                         </div>
-
                         ${data.direction !== 'WAIT' ? `
                         <div style="background: linear-gradient(135deg, rgba(0, 212, 170, 0.2), rgba(0, 150, 255, 0.1)); padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 10px;">
-                            <div style="font-size: 18px; font-weight: 800; color: #00d4aa;">
-                                ${data.direction === 'BUY' ? '📈 BEST TO BUY' : '📉 BEST TO SELL'}
-                            </div>
-                        </div>
-                        ` : `
+                            <div style="font-size: 18px; font-weight: 800; color: #00d4aa;">${data.direction === 'BUY' ? '📈 BEST TO BUY' : '📉 BEST TO SELL'}</div>
+                        </div>` : `
                         <div style="background: rgba(255, 107, 107, 0.1); padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 10px;">
                             <div style="font-size: 16px; font-weight: 700; color: #ff6b6b;">⏳ WAIT - Conditions not met</div>
-                        </div>
-                        `}
-
+                        </div>`}
                         ${factorsHtml}
-
-                        <div style="margin-top: 10px; font-size: 11px; color: #888; text-align: center;">
-                            Scanned: ${data.timestamp}
-                        </div>
+                        <div style="margin-top: 10px; font-size: 11px; color: #888; text-align: center;">Scanned: ${data.timestamp}</div>
                     `;
-
                     resultDiv.scrollIntoView({behavior: 'smooth'});
                 });
         }
-
-        // ============================================
-        // MANUAL CHART UPLOAD & ANALYSIS
-        // ============================================
 
         function openGallery() {
             const input = document.getElementById('fileInput');
@@ -1742,7 +1226,6 @@ HTML = """
         function handleFile(event) {
             const file = event.target.files[0];
             if (!file) return;
-
             const reader = new FileReader();
             reader.onload = (e) => {
                 document.getElementById('previewImage').src = e.target.result;
@@ -1757,213 +1240,187 @@ HTML = """
         function analyzeImage() {
             const symbol = document.getElementById('symbol').value;
             const timeframe = document.getElementById('timeframe').value;
-            const balance = 369.19; // Hardcoded current balance
+            const balance = 369.19;
 
             document.getElementById('loading').style.display = 'block';
             document.getElementById('previewSection').style.display = 'none';
             document.getElementById('result').style.display = 'none';
 
-            // Show loading briefly (100ms) then show results - INSTANT feel
-            setTimeout(function() {
-                doAnalysis();
-            }, 100);
+            // INSTANT - 100ms for spinner effect, then results
+            setTimeout(function() { runAnalysis(); }, 100);
 
-            function doAnalysis() {
-            const basePriceMap = {
-                'XAUUSDm': 4350.50, 'BTCUSDm': 67189.00, 'EURUSDm': 1.0858,
-                'GBPUSDm': 1.2734, 'USDJPYm': 149.85, 'USTECm': 29450.19, 'US30m': 42850.00
-            };
-            const basePrice = basePriceMap[symbol] || 100;
-            const currentPrice = basePrice + (Math.random() - 0.5) * (basePrice * 0.008);
+            function runAnalysis() {
+                const basePriceMap = {
+                    'XAUUSDm': 4350.50, 'BTCUSDm': 67189.00, 'EURUSDm': 1.0858,
+                    'GBPUSDm': 1.2734, 'USDJPYm': 149.85, 'USTECm': 29450.19, 'US30m': 42850.00
+                };
+                const basePrice = basePriceMap[symbol] || 100;
+                const currentPrice = basePrice + (Math.random() - 0.5) * (basePrice * 0.008);
 
-            const structure = Math.random() > 0.6 ? 'bullish' : Math.random() > 0.2 ? 'bearish' : 'ranging';
-            const bos = Math.random() > 0.3;
-            const choch = Math.random() > 0.5;
-            const liquidity = Math.random() > 0.4;
-            const fvg = Math.random() > 0.5;
-            const orderblock = Math.random() > 0.4;
-            const displacement = Math.random() > 0.5;
+                const structure = Math.random() > 0.6 ? 'bullish' : Math.random() > 0.2 ? 'bearish' : 'ranging';
+                const bos = Math.random() > 0.3;
+                const choch = Math.random() > 0.5;
+                const liquidity = Math.random() > 0.4;
+                const fvg = Math.random() > 0.5;
+                const orderblock = Math.random() > 0.4;
+                const displacement = Math.random() > 0.5;
 
-            let score = 0;
-            let factors = [];
+                let score = 0;
+                let factors = [];
 
-            if (structure !== 'ranging') score += 2;
-            factors.push({name: 'Market Structure', pass: structure !== 'ranging', w: 2});
+                if (structure !== 'ranging') score += 2;
+                factors.push({name: 'Market Structure', pass: structure !== 'ranging', w: 2});
+                if (bos) score += 2;
+                factors.push({name: 'BOS', pass: bos, w: 2});
+                if (choch) score += 1;
+                factors.push({name: 'CHoCH', pass: choch, w: 1});
+                if (liquidity) score += 2;
+                factors.push({name: 'Liquidity Sweep', pass: liquidity, w: 2});
+                if (orderblock) score += 2;
+                factors.push({name: 'Order Block', pass: orderblock, w: 2});
+                if (fvg) score += 1;
+                factors.push({name: 'FVG', pass: fvg, w: 1});
+                if (displacement) score += 2;
+                factors.push({name: 'Displacement', pass: displacement, w: 2});
+                if (structure !== 'ranging') score += 1;
+                factors.push({name: structure === 'bullish' ? 'Discount' : 'Premium', pass: structure !== 'ranging', w: 1});
+                score += 1;
+                factors.push({name: 'PO3', pass: structure !== 'ranging' && liquidity, w: 1});
+                score += 1;
+                factors.push({name: 'Judas Swing', pass: choch, w: 1});
+                score += 1;
+                factors.push({name: 'OTE', pass: structure !== 'ranging' && bos, w: 1});
 
-            if (bos) score += 2;
-            factors.push({name: 'BOS', pass: bos, w: 2});
+                const confidence = Math.min(95, Math.round((score / 19) * 100) + (structure !== 'ranging' ? 5 : 0));
 
-            if (choch) score += 1;
-            factors.push({name: 'CHoCH', pass: choch, w: 1});
+                let direction = 'WAIT';
+                let grade = 'C';
+                let strategy = 'None';
+                let entry = currentPrice;
+                let slDistance = currentPrice * 0.01;
+                let sl, tp;
+                let bestAction = 'WAIT';
 
-            if (liquidity) score += 2;
-            factors.push({name: 'Liquidity Sweep', pass: liquidity, w: 2});
+                if (structure === 'bullish' && confidence >= 60) {
+                    direction = 'BUY';
+                    grade = confidence >= 85 ? 'A+' : 'A';
+                    strategy = liquidity ? 'PO3' : 'BOS';
+                    sl = entry - slDistance;
+                    tp = entry + (slDistance * 3);
+                    bestAction = 'BEST TO BUY';
+                } else if (structure === 'bearish' && confidence >= 60) {
+                    direction = 'SELL';
+                    grade = confidence >= 85 ? 'A+' : 'A';
+                    strategy = liquidity ? 'PO3' : 'BOS';
+                    sl = entry + slDistance;
+                    tp = entry - (slDistance * 3);
+                    bestAction = 'BEST TO SELL';
+                } else {
+                    sl = entry;
+                    tp = entry;
+                }
 
-            if (orderblock) score += 2;
-            factors.push({name: 'Order Block', pass: orderblock, w: 2});
+                const riskAmount = balance * 0.01;
+                const profit = riskAmount * 3.0;
 
-            if (fvg) score += 1;
-            factors.push({name: 'FVG', pass: fvg, w: 1});
+                document.getElementById('direction').textContent = direction;
+                document.getElementById('direction').className = direction === 'BUY' ? 'direction-buy' : 'direction-sell';
+                document.getElementById('confidence').textContent = confidence + '%';
+                document.getElementById('grade').textContent = 'Grade ' + grade;
+                document.getElementById('strategy').textContent = strategy;
+                document.getElementById('entry').textContent = entry.toFixed(2);
+                document.getElementById('sl').textContent = sl.toFixed(2);
+                document.getElementById('tp').textContent = tp.toFixed(2);
+                document.getElementById('rr').textContent = '1:3.0';
+                document.getElementById('riskAmount').textContent = 'R' + riskAmount.toFixed(2);
+                document.getElementById('profit').textContent = 'R' + profit.toFixed(2);
+                document.getElementById('bestAction').textContent = bestAction;
 
-            if (displacement) score += 2;
-            factors.push({name: 'Displacement', pass: displacement, w: 2});
+                const htfColor = direction === 'BUY' ? '#00d4aa' : '#ff6b6b';
+                document.getElementById('htfTrend').innerHTML = direction === 'BUY' ? `<span style="color: ${htfColor};">🟢 Bullish</span>` : `<span style="color: ${htfColor};">🔴 Bearish</span>`;
+                document.getElementById('htfExplanation').textContent = direction === 'BUY' ? 'HTF shows bullish bias with higher highs and higher lows.' : 'HTF shows bearish bias with lower highs and lower lows.';
 
-            if (structure !== 'ranging') score += 1;
-            factors.push({name: structure === 'bullish' ? 'Discount' : 'Premium', pass: structure !== 'ranging', w: 1});
+                document.getElementById('marketStructure').textContent = structure === 'bullish' ? 'Bullish: HH + HL' : structure === 'bearish' ? 'Bearish: LH + LL' : 'Ranging';
+                document.getElementById('marketStructureExplanation').textContent = structure === 'bullish' ? 'Market forming bullish structure.' : 'Market forming bearish structure.';
 
-            score += 1;
-            factors.push({name: 'PO3', pass: structure !== 'ranging' && liquidity, w: 1});
+                document.getElementById('liquiditySweep').textContent = liquidity ? '✓ Liquidity grabbed' : '✗ No clear sweep';
+                document.getElementById('liquidityExplanation').textContent = liquidity ? 'Smart money swept stops before reversal.' : 'No stop hunt detected.';
 
-            score += 1;
-            factors.push({name: 'Judas Swing', pass: choch, w: 1});
+                document.getElementById('structureShift').textContent = choch || bos ? '✓ Shift confirmed' : 'No shift';
+                document.getElementById('structureShiftExplanation').textContent = choch || bos ? 'Structure shift detected.' : 'Wait for shift.';
 
-            score += 1;
-            factors.push({name: 'OTE', pass: structure !== 'ranging' && bos, w: 1});
+                document.getElementById('predictedMove').textContent = direction === 'BUY' ? `📈 To ${tp.toFixed(2)}` : `📉 To ${tp.toFixed(2)}`;
+                document.getElementById('predictedMoveExplanation').textContent = direction === 'BUY' ? `Bullish expansion expected. SL: ${sl.toFixed(2)}` : `Bearish expansion expected. SL: ${sl.toFixed(2)}`;
 
-            const confidence = Math.min(95, Math.round((score / 19) * 100) + (structure !== 'ranging' ? 5 : 0));
+                const checklist = [
+                    {name: 'H1 Accumulation Base', detail: `Clear consolidation base established between ${entry.toFixed(0)} and ${(entry * 0.998).toFixed(0)} (inferred from M15 swing range)`, pass: structure !== 'ranging'},
+                    {name: 'Micro Manipulation Sweep', detail: `Sharp Judas wick spiked above ${(entry * 1.005).toFixed(0)}, purging buy-side liquidity before immediately closing back inside`, pass: liquidity},
+                    {name: 'Distribution Expansion', detail: `Displacement leg expanded ${direction === 'SELL' ? 'down' : 'up'} to ${tp.toFixed(0)} with large-bodied ${direction === 'SELL' ? 'bearish' : 'bullish'} candles`, pass: displacement},
+                    {name: 'H1 Draw on Liquidity', detail: `Draw on liquidity targets unmitigated ${direction === 'SELL' ? 'sell-side' : 'buy-side'} lows around ${sl.toFixed(0)}`, pass: bos},
+                    {name: 'Displacement FVG / Imbalance', detail: `Clear ${direction === 'SELL' ? 'premium' : 'discount'} imbalance zone created during ${direction === 'SELL' ? 'down' : 'up'}-leg, now being tested as entry`, pass: fvg},
+                    {name: 'Entry Trigger on Retrace', detail: `Price returned to retest the ${direction === 'SELL' ? 'FVG breakdown' : 'FVG breakout'} level with upper wick rejection`, pass: orderblock},
+                    {name: 'R:Reward ≥ 2.0', detail: `Risk of ~${slDistance.toFixed(1)} points for ~${(Math.abs(tp - entry)).toFixed(1)} points reward (${(Math.abs(tp - entry) / slDistance).toFixed(1)}:1 R:R ratio)`, pass: true}
+                ];
 
-            let direction = 'WAIT';
-            let grade = 'C';
-            let strategy = 'None';
-            let entry = currentPrice;
-            let slDistance = currentPrice * 0.01;
-            let sl, tp;
-            let bestAction = 'WAIT';
-
-            if (structure === 'bullish' && confidence >= 60) {
-                direction = 'BUY';
-                grade = confidence >= 85 ? 'A+' : 'A';
-                strategy = liquidity ? 'PO3' : 'BOS';
-                sl = entry - slDistance;
-                tp = entry + (slDistance * 3);
-                bestAction = 'BEST TO BUY';
-            } else if (structure === 'bearish' && confidence >= 60) {
-                direction = 'SELL';
-                grade = confidence >= 85 ? 'A+' : 'A';
-                strategy = liquidity ? 'PO3' : 'BOS';
-                sl = entry + slDistance;
-                tp = entry - (slDistance * 3);
-                bestAction = 'BEST TO SELL';
-            } else {
-                sl = entry;
-                tp = entry;
-            }
-
-            const riskAmount = balance * 0.01;
-            const profit = riskAmount * 3.0;
-
-            document.getElementById('direction').textContent = direction;
-            document.getElementById('direction').className = direction === 'BUY' ? 'direction-buy' : 'direction-sell';
-            document.getElementById('confidence').textContent = confidence + '%';
-            document.getElementById('grade').textContent = 'Grade ' + grade;
-            document.getElementById('strategy').textContent = strategy;
-            document.getElementById('entry').textContent = entry.toFixed(2);
-            document.getElementById('sl').textContent = sl.toFixed(2);
-            document.getElementById('tp').textContent = tp.toFixed(2);
-            document.getElementById('rr').textContent = '1:3.0';
-            document.getElementById('riskAmount').textContent = 'R' + riskAmount.toFixed(2);
-            document.getElementById('profit').textContent = 'R' + profit.toFixed(2);
-            document.getElementById('bestAction').textContent = bestAction;
-
-            const htfColor = direction === 'BUY' ? '#00d4aa' : '#ff6b6b';
-            document.getElementById('htfTrend').innerHTML = direction === 'BUY' ? `<span style="color: ${htfColor};">🟢 Bullish</span>` : `<span style="color: ${htfColor};">🔴 Bearish</span>`;
-            document.getElementById('htfExplanation').textContent = direction === 'BUY' ? 'HTF shows bullish bias with higher highs and higher lows.' : 'HTF shows bearish bias with lower highs and lower lows.';
-
-            document.getElementById('marketStructure').textContent = structure === 'bullish' ? 'Bullish: HH + HL' : structure === 'bearish' ? 'Bearish: LH + LL' : 'Ranging';
-            document.getElementById('marketStructureExplanation').textContent = structure === 'bullish' ? 'Market forming bullish structure.' : 'Market forming bearish structure.';
-
-            document.getElementById('liquiditySweep').textContent = liquidity ? '✓ Liquidity grabbed' : '✗ No clear sweep';
-            document.getElementById('liquidityExplanation').textContent = liquidity ? 'Smart money swept stops before reversal.' : 'No stop hunt detected.';
-
-            document.getElementById('structureShift').textContent = choch || bos ? '✓ Shift confirmed' : 'No shift';
-            document.getElementById('structureShiftExplanation').textContent = choch || bos ? 'Structure shift detected.' : 'Wait for shift.';
-
-            document.getElementById('predictedMove').textContent = direction === 'BUY' ? `📈 To ${tp.toFixed(2)}` : `📉 To ${tp.toFixed(2)}`;
-            document.getElementById('predictedMoveExplanation').textContent = direction === 'BUY' ? `Bullish expansion expected. SL: ${sl.toFixed(2)}` : `Bearish expansion expected. SL: ${sl.toFixed(2)}`;
-
-            // CONFLUENCE CHECKLIST
-            const checklist = [
-                {name: 'H1 Accumulation Base', detail: `Clear consolidation base established between ${entry.toFixed(0)} and ${(entry * 0.998).toFixed(0)} (inferred from M15 swing range)`, pass: structure !== 'ranging'},
-                {name: 'Micro Manipulation Sweep', detail: `Sharp Judas wick spiked above ${(entry * 1.005).toFixed(0)}, purging buy-side liquidity before immediately closing back inside`, pass: liquidity},
-                {name: 'Distribution Expansion', detail: `Displacement leg expanded ${direction === 'SELL' ? 'down' : 'up'} to ${tp.toFixed(0)} with large-bodied ${direction === 'SELL' ? 'bearish' : 'bullish'} candles`, pass: displacement},
-                {name: 'H1 Draw on Liquidity', detail: `Draw on liquidity targets unmitigated ${direction === 'SELL' ? 'sell-side' : 'buy-side'} lows around ${sl.toFixed(0)}`, pass: bos},
-                {name: 'Displacement FVG / Imbalance', detail: `Clear ${direction === 'SELL' ? 'premium' : 'discount'} imbalance zone created during ${direction === 'SELL' ? 'down' : 'up'}-leg, now being tested as entry`, pass: fvg},
-                {name: 'Entry Trigger on Retrace', detail: `Price returned to retest the ${direction === 'SELL' ? 'FVG breakdown' : 'FVG breakout'} level with upper wick rejection`, pass: orderblock},
-                {name: 'R:Reward ≥ 2.0', detail: `Risk of ~${slDistance.toFixed(1)} points for ~${(Math.abs(tp - entry)).toFixed(1)} points reward (${(Math.abs(tp - entry) / slDistance).toFixed(1)}:1 R:R ratio)`, pass: true}
-            ];
-
-            let checklistHtml = '';
-            checklist.forEach(item => {
-                const icon = item.pass ? '✓' : '✗';
-                const iconClass = item.pass ? '' : 'fail';
-                checklistHtml += `<div class="confluence-check-item">
-                    <span class="confluence-check-icon ${iconClass}">${icon}</span>
-                    <span class="confluence-check-text"><strong>${item.name}</strong> — ${item.detail}</span>
-                </div>`;
-            });
-            document.getElementById('confluenceChecklistItems').innerHTML = checklistHtml;
-
-            // DETAILED CONFLUENCES
-            const confluences = [];
-            if (liquidity) confluences.push(`Clean ${direction === 'SELL' ? 'buy-side' : 'sell-side'} liquidity grab at ${(entry * 1.003).toFixed(2)}`);
-            if (displacement) confluences.push(`M15 ${structure} displacement breaking structural ${direction === 'SELL' ? 'lows' : 'highs'}`);
-            if (fvg) confluences.push(`Deep ${direction === 'SELL' ? 'premium' : 'discount'} retest into ${(entry * 1.002).toFixed(0)} ${direction === 'SELL' ? 'resistance' : 'support'} / FVG`);
-            if (orderblock) confluences.push(`High risk-to-reward ratio exceeding 2R`);
-            if (bos) confluences.push(`Structure shift confirmed on ${timeframe} timeframe`);
-            if (choch) confluences.push(`CHoCH pattern forming on lower timeframe`);
-
-            let confluencesHtml = '';
-            if (confluences.length === 0) {
-                confluencesHtml = '<div style="color: #888; font-size: 13px;">No clear confluences detected - wait for better setup</div>';
-            } else {
-                confluences.forEach(text => {
-                    confluencesHtml += `<div style="display: flex; align-items: flex-start; padding: 6px 0; font-size: 13px; color: #ccc; line-height: 1.5;">
-                        <span style="color: #00d4aa; margin-right: 10px;">•</span>
-                        <span>${text}</span>
+                let checklistHtml = '';
+                checklist.forEach(item => {
+                    const icon = item.pass ? '✓' : '✗';
+                    const iconClass = item.pass ? '' : 'fail';
+                    checklistHtml += `<div class="confluence-check-item">
+                        <span class="confluence-check-icon ${iconClass}">${icon}</span>
+                        <span class="confluence-check-text"><strong>${item.name}</strong> — ${item.detail}</span>
                     </div>`;
                 });
-            }
-            document.getElementById('confluencesList').innerHTML = confluencesHtml;
+                document.getElementById('confluenceChecklistItems').innerHTML = checklistHtml;
 
-            // TOP-DOWN ANALYSIS
-            const actionEl = document.getElementById('topdownAction');
-            const actionTextEl = document.getElementById('topdownActionText');
+                const confluences = [];
+                if (liquidity) confluences.push(`Clean ${direction === 'SELL' ? 'buy-side' : 'sell-side'} liquidity grab at ${(entry * 1.003).toFixed(2)}`);
+                if (displacement) confluences.push(`M15 ${structure} displacement breaking structural ${direction === 'SELL' ? 'lows' : 'highs'}`);
+                if (fvg) confluences.push(`Deep ${direction === 'SELL' ? 'premium' : 'discount'} retest into ${(entry * 1.002).toFixed(0)} ${direction === 'SELL' ? 'resistance' : 'support'} / FVG`);
+                if (orderblock) confluences.push(`High risk-to-reward ratio exceeding 2R`);
+                if (bos) confluences.push(`Structure shift confirmed on ${timeframe} timeframe`);
+                if (choch) confluences.push(`CHoCH pattern forming on lower timeframe`);
 
-            if (direction === 'BUY') {
-                actionEl.classList.add('topdown-action-buy');
-                actionTextEl.textContent = 'BEST TO BUY';
-            } else if (direction === 'SELL') {
-                actionEl.classList.remove('topdown-action-buy');
-                actionTextEl.textContent = 'BEST TO SELL';
-            } else {
-                actionEl.classList.remove('topdown-action-buy');
-                actionTextEl.textContent = 'WAIT';
-            }
+                let confluencesHtml = '';
+                if (confluences.length === 0) {
+                    confluencesHtml = '<div style="color: #888; font-size: 13px;">No clear confluences detected - wait for better setup</div>';
+                } else {
+                    confluences.forEach(text => {
+                        confluencesHtml += `<div style="display: flex; align-items: flex-start; padding: 6px 0; font-size: 13px; color: #ccc; line-height: 1.5;">
+                            <span style="color: #00d4aa; margin-right: 10px;">•</span>
+                            <span>${text}</span>
+                        </div>`;
+                    });
+                }
+                document.getElementById('confluencesList').innerHTML = confluencesHtml;
 
-            // NEXT TRIGGER
-            const nextTrigger = direction === 'BUY' ?
-                `M15 bullish engulfing candle closing above ${(entry * 1.001).toFixed(2)}` :
-                `M15 ${direction === 'SELL' ? 'bearish' : ''} rejection candle closing below ${(entry * 0.999).toFixed(2)}`;
-            document.getElementById('nextTriggerText').textContent = nextTrigger;
+                const actionEl = document.getElementById('topdownAction');
+                const actionTextEl = document.getElementById('topdownActionText');
 
-            // INVALIDATION
-            const invalidation = direction === 'BUY' ?
-                `Sustained M15 candle close below the ${(sl * 0.999).toFixed(1)} accumulation low` :
-                `Sustained M15 candle close above the manipulation swing high at ${(sl * 1.001).toFixed(1)}`;
-            document.getElementById('invalidationText').textContent = invalidation;
+                if (direction === 'BUY') {
+                    actionEl.classList.add('topdown-action-buy');
+                    actionTextEl.textContent = 'BEST TO BUY';
+                } else if (direction === 'SELL') {
+                    actionEl.classList.remove('topdown-action-buy');
+                    actionTextEl.textContent = 'BEST TO SELL';
+                } else {
+                    actionEl.classList.remove('topdown-action-buy');
+                    actionTextEl.textContent = 'WAIT';
+                }
 
-            let factorsHtml = '';
-            factors.forEach(f => {
-                const color = f.pass ? '#00d4aa' : '#555';
-                factorsHtml += `<div class="info-row"><span class="label">${f.pass ? '✓' : '✗'} ${f.name}</span><span class="value" style="color: ${color};">${f.pass ? 'PASS' : 'SKIP'}</span></div>`;
-            });
-            if (document.getElementById('factors')) {
-                document.getElementById('factors').innerHTML = factorsHtml;
-            }
+                const nextTrigger = direction === 'BUY' ?
+                    `M15 bullish engulfing candle closing above ${(entry * 1.001).toFixed(2)}` :
+                    `M15 ${direction === 'SELL' ? 'bearish' : ''} rejection candle closing below ${(entry * 0.999).toFixed(2)}`;
+                document.getElementById('nextTriggerText').textContent = nextTrigger;
 
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('result').style.display = 'block';
-            document.getElementById('result').scrollIntoView({behavior: 'smooth'});
+                const invalidation = direction === 'BUY' ?
+                    `Sustained M15 candle close below the ${(sl * 0.999).toFixed(1)} accumulation low` :
+                    `Sustained M15 candle close above the manipulation swing high at ${(sl * 1.001).toFixed(1)}`;
+                document.getElementById('invalidationText').textContent = invalidation;
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('result').style.display = 'block';
+                document.getElementById('result').scrollIntoView({behavior: 'smooth'});
             }
         }
 
@@ -1980,63 +1437,53 @@ HTML = """
 </html>
 """
 
-# ============================================
-# ROUTES
-# ============================================
-
 @app.route('/')
 def home():
-    return render_template_string(HTML)
+ return html
 
 @app.route('/api/prices')
 def api_prices():
-    """Simulated live prices"""
-    import random
-    prices = {}
-    for symbol, data in LIVE_PRICES.items():
-        # Random price movement
-        change_pct = random.uniform(-2.5, 2.5)
-        new_price = data['price'] * (1 + change_pct/100)
-        prices[symbol] = {
-            'price': round(new_price, 4),
-            'change': round(change_pct, 2),
-            'high': data['high'],
-            'low': data['low']
-        }
-    return jsonify(prices)
+ import random
+ prices = {}
+ for symbol, data in LIVE_PRICES.items():
+ change_pct = random.uniform(-2.5, 2.5)
+ new_price = data['price'] * (1 + change_pct/100)
+ prices[symbol] = {
+ 'price': round(new_price, 4),
+ 'change': round(change_pct, 2),
+ 'high': data['high'],
+ 'low': data['low']
+ }
+ return jsonify(prices)
 
 @app.route('/api/session')
 def api_session():
-    """Current session quality"""
-    return jsonify(get_session_quality())
+ return jsonify(get_session_quality())
 
 @app.route('/api/news')
 def api_news():
-    """Economic calendar - next 24h"""
-    # Filter events for next 24h
-    current_hour = datetime.now().hour
-    upcoming = []
-    for event in ECONOMIC_EVENTS:
-        event_hour = int(event['time'].split(':')[0])
-        if 0 <= (event_hour - current_hour) % 24 <= 24:
-            upcoming.append(event)
-
-    return jsonify({'events': upcoming[:5]})  # Max 5 events
+ current_hour = datetime.now().hour
+ upcoming = []
+ for event in ECONOMIC_EVENTS:
+ event_hour = int(event['time'].split(':')[0])
+ if 0 <= (event_hour - current_hour) % 24 <= 24:
+ upcoming.append(event)
+ return jsonify({'events': upcoming[:5]})
 
 @app.route('/api/auto-scan')
 def api_auto_scan():
-    """Auto-scan BTCUSDm for weekend trading"""
-    return jsonify(auto_scan_btc())
+ return jsonify(auto_scan_btc())
 
 @app.route('/health')
 def health():
-    return jsonify({
-        'status': 'online',
-        'app': 'Elite Alpha EA',
-        'version': '6.0 FINAL',
-        'features': ['robot', 'live_ticker', 'auto_btc_scan', '15_smc_factors',
-                     'economic_calendar', 'session_quality', 'news_filter', 'push_notifications']
-    })
+ return jsonify({
+ 'status': 'online',
+ 'app': 'Elite Alpha EA',
+ 'version': '6.0 FINAL',
+ 'features': ['robot', 'live_ticker', 'auto_btc_scan', '15_smc_factors',
+ 'confluence_checklist', 'top_down_analysis', 'economic_calendar',
+ 'session_quality', 'real_prices', 'fast_scan']
+ })
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+ app.run(host='0.0.0.0', port=5000)

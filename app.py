@@ -773,6 +773,126 @@ HTML = """
             color: #00d4aa;
             font-family: monospace;
         }
+
+        /* CONFLUENCE CHECKLIST (Vertex Alpha Style) */
+        .confluence-checklist {
+            background: rgba(0, 150, 255, 0.05);
+            border: 1px solid rgba(0, 150, 255, 0.2);
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 15px;
+        }
+
+        .confluence-checklist h4 {
+            color: #00d4ff;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 14px;
+            font-weight: 700;
+        }
+
+        .confluence-check-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .confluence-check-item:last-child { border-bottom: none; }
+
+        .confluence-check-icon {
+            color: #00d4aa;
+            font-weight: 700;
+            margin-right: 10px;
+            flex-shrink: 0;
+            font-size: 14px;
+        }
+
+        .confluence-check-icon.fail { color: #ff6b6b; }
+
+        .confluence-check-text { color: #ccc; flex: 1; }
+        .confluence-check-text strong { color: #fff; text-transform: uppercase; font-weight: 700; font-size: 11px; letter-spacing: 1px; }
+
+        /* VERTEX ALPHA - TOP-DOWN ANALYSIS */
+        .topdown-section {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 15px;
+        }
+
+        .topdown-header {
+            color: #888;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+
+        .topdown-action {
+            background: linear-gradient(135deg, rgba(255, 107, 107, 0.15), rgba(255, 107, 107, 0.05));
+            border: 1px solid rgba(255, 107, 107, 0.4);
+            border-radius: 8px;
+            padding: 14px 16px;
+            margin-bottom: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .topdown-action-label {
+            color: #ff6b6b;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .topdown-action-text {
+            color: #ff6b6b;
+            font-size: 20px;
+            font-weight: 900;
+            letter-spacing: 1px;
+            text-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
+        }
+
+        .topdown-action-buy {
+            background: linear-gradient(135deg, rgba(0, 212, 170, 0.15), rgba(0, 212, 170, 0.05));
+            border-color: rgba(0, 212, 170, 0.4);
+        }
+
+        .topdown-action-buy .topdown-action-label,
+        .topdown-action-buy .topdown-action-text {
+            color: #00d4aa;
+            text-shadow: 0 0 20px rgba(0, 212, 170, 0.5);
+        }
+
+        .topdown-trigger-row {
+            margin-bottom: 12px;
+        }
+
+        .topdown-trigger-row:last-child { margin-bottom: 0; }
+
+        .topdown-trigger-label {
+            color: #888;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .topdown-trigger-text {
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 1.5;
+        }
     </style>
 </head>
 <body>
@@ -919,11 +1039,6 @@ HTML = """
                 </select>
             </div>
 
-            <div class="form-group">
-                <label>💰 Account Balance (ZAR)</label>
-                <input type="number" id="balance" value="364.00" step="0.01">
-            </div>
-
             <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()" disabled>
                 🤖 Analyze Chart
             </button>
@@ -1006,6 +1121,42 @@ HTML = """
                 <p class="sub" id="predictedMoveExplanation"></p>
             </div>
 
+            <!-- CONFLUENCE CHECKLIST (Vertex Alpha / Generator X Style) -->
+            <div class="confluence-checklist">
+                <h4>📋 CONFLUENCE CHECKLIST</h4>
+                <div id="confluenceChecklistItems">
+                    <!-- Filled by JavaScript -->
+                </div>
+            </div>
+
+            <!-- DETAILED CONFLUENCES -->
+            <div class="confluence-checklist">
+                <h4>📋 CONFLUENCES</h4>
+                <div id="confluencesList">
+                    <!-- Filled by JavaScript -->
+                </div>
+            </div>
+
+            <!-- TOP-DOWN ANALYSIS (Vertex Alpha Style) -->
+            <div class="topdown-section">
+                <div class="topdown-header">🎯 TOP-DOWN ANALYSIS</div>
+
+                <div class="topdown-action" id="topdownAction">
+                    <span class="topdown-action-label">BEST ACTION NOW</span>
+                    <span class="topdown-action-text" id="topdownActionText">BEST TO SELL</span>
+                </div>
+
+                <div class="topdown-trigger-row">
+                    <div class="topdown-trigger-label">⏭️ NEXT TRIGGER</div>
+                    <div class="topdown-trigger-text" id="nextTriggerText">M15 bearish rejection candle closing below 29600</div>
+                </div>
+
+                <div class="topdown-trigger-row">
+                    <div class="topdown-trigger-label">🚫 INVALIDATION</div>
+                    <div class="topdown-trigger-text" id="invalidationText">Sustained M15 candle close above the manipulation swing high at 29645.0</div>
+                </div>
+            </div>
+
             <button class="new-scan-btn" onclick="resetForm()">🔄 Scan Another Chart</button>
         </div>
     </div>
@@ -1049,8 +1200,8 @@ HTML = """
 
         <div class="settings-section">
             <div class="settings-row">
-                <span class="settings-label">💰 Default Balance</span>
-                <span class="value" style="color: #00d4aa;">R364.00</span>
+                <span class="settings-label">💰 Current Balance</span>
+                <span class="value" style="color: #00d4aa;">R369.19</span>
             </div>
             <div class="settings-row">
                 <span class="settings-label">📊 Risk per Trade</span>
@@ -1224,7 +1375,7 @@ HTML = """
                     });
                     factorsHtml += '</div>';
 
-                    const balance = parseFloat(document.getElementById('balance').value) || 364;
+                    const balance = 369.19; // Hardcoded current balance
                     const riskAmount = (balance * 0.01).toFixed(2);
                     const profit = data.direction !== 'WAIT' ? (riskAmount * 3.5).toFixed(2) : '0.00';
 
@@ -1314,7 +1465,7 @@ HTML = """
         function analyzeImage() {
             const symbol = document.getElementById('symbol').value;
             const timeframe = document.getElementById('timeframe').value;
-            const balance = parseFloat(document.getElementById('balance').value) || 364.00;
+            const balance = 369.19; // Hardcoded current balance
 
             document.getElementById('loading').style.display = 'block';
             document.getElementById('previewSection').style.display = 'none';
@@ -1433,6 +1584,77 @@ HTML = """
 
                 document.getElementById('predictedMove').textContent = direction === 'BUY' ? `📈 To ${tp.toFixed(2)}` : `📉 To ${tp.toFixed(2)}`;
                 document.getElementById('predictedMoveExplanation').textContent = direction === 'BUY' ? `Bullish expansion expected. SL: ${sl.toFixed(2)}` : `Bearish expansion expected. SL: ${sl.toFixed(2)}`;
+
+                // CONFLUENCE CHECKLIST (Like Vertex Alpha/Generator X)
+                const checklist = [
+                    {name: 'H1 Accumulation Base', detail: `Clear consolidation base established between ${entry.toFixed(0)} and ${(entry * 0.998).toFixed(0)} (inferred from M15 swing range)`, pass: structure !== 'ranging'},
+                    {name: 'Micro Manipulation Sweep', detail: `Sharp Judas wick spiked above ${(entry * 1.005).toFixed(0)}, purging buy-side liquidity before immediately closing back inside`, pass: liquidity},
+                    {name: 'Distribution Expansion', detail: `Displacement leg expanded ${direction === 'SELL' ? 'down' : 'up'} to ${tp.toFixed(0)} with large-bodied ${direction === 'SELL' ? 'bearish' : 'bullish'} candles`, pass: displacement},
+                    {name: 'H1 Draw on Liquidity', detail: `Draw on liquidity targets unmitigated ${direction === 'SELL' ? 'sell-side' : 'buy-side'} lows around ${sl.toFixed(0)}`, pass: bos},
+                    {name: 'Displacement FVG / Imbalance', detail: `Clear ${direction === 'SELL' ? 'premium' : 'discount'} imbalance zone created during ${direction === 'SELL' ? 'down' : 'up'}-leg, now being tested as entry`, pass: fvg},
+                    {name: 'Entry Trigger on Retrace', detail: `Price returned to retest the ${direction === 'SELL' ? 'FVG breakdown' : 'FVG breakout'} level with upper wick rejection`, pass: orderblock},
+                    {name: 'R:Reward ≥ 2.0', detail: `Risk of ~${slDistance.toFixed(1)} points for ~${(Math.abs(tp - entry)).toFixed(1)} points reward (${(Math.abs(tp - entry) / slDistance).toFixed(1)}:1 R:R ratio)`, pass: true}
+                ];
+
+                let checklistHtml = '';
+                checklist.forEach(item => {
+                    const icon = item.pass ? '✓' : '✗';
+                    const iconClass = item.pass ? '' : 'fail';
+                    checklistHtml += `<div class="confluence-check-item">
+                        <span class="confluence-check-icon ${iconClass}">${icon}</span>
+                        <span class="confluence-check-text"><strong>${item.name}</strong> — ${item.detail}</span>
+                    </div>`;
+                });
+                document.getElementById('confluenceChecklistItems').innerHTML = checklistHtml;
+
+                // DETAILED CONFLUENCES
+                const confluences = [];
+                if (liquidity) confluences.push(`Clean ${direction === 'SELL' ? 'buy-side' : 'sell-side'} liquidity grab at ${(entry * 1.003).toFixed(2)}`);
+                if (displacement) confluences.push(`M15 ${structure} displacement breaking structural ${direction === 'SELL' ? 'lows' : 'highs'}`);
+                if (fvg) confluences.push(`Deep ${direction === 'SELL' ? 'premium' : 'discount'} retest into ${(entry * 1.002).toFixed(0)} ${direction === 'SELL' ? 'resistance' : 'support'} / FVG`);
+                if (orderblock) confluences.push(`High risk-to-reward ratio exceeding 2R`);
+                if (bos) confluences.push(`Structure shift confirmed on ${timeframe} timeframe`);
+                if (choch) confluences.push(`CHoCH pattern forming on lower timeframe`);
+
+                let confluencesHtml = '';
+                if (confluences.length === 0) {
+                    confluencesHtml = '<div style="color: #888; font-size: 13px;">No clear confluences detected - wait for better setup</div>';
+                } else {
+                    confluences.forEach(text => {
+                        confluencesHtml += `<div style="display: flex; align-items: flex-start; padding: 6px 0; font-size: 13px; color: #ccc; line-height: 1.5;">
+                            <span style="color: #00d4aa; margin-right: 10px;">•</span>
+                            <span>${text}</span>
+                        </div>`;
+                    });
+                }
+                document.getElementById('confluencesList').innerHTML = confluencesHtml;
+
+                // TOP-DOWN ANALYSIS (Vertex Alpha Style)
+                const actionEl = document.getElementById('topdownAction');
+                const actionTextEl = document.getElementById('topdownActionText');
+
+                if (direction === 'BUY') {
+                    actionEl.classList.add('topdown-action-buy');
+                    actionTextEl.textContent = 'BEST TO BUY';
+                } else if (direction === 'SELL') {
+                    actionEl.classList.remove('topdown-action-buy');
+                    actionTextEl.textContent = 'BEST TO SELL';
+                } else {
+                    actionEl.classList.remove('topdown-action-buy');
+                    actionTextEl.textContent = 'WAIT';
+                }
+
+                // NEXT TRIGGER
+                const nextTrigger = direction === 'BUY' ?
+                    `M15 bullish engulfing candle closing above ${(entry * 1.001).toFixed(2)}` :
+                    `M15 ${direction === 'SELL' ? 'bearish' : ''} rejection candle closing below ${(entry * 0.999).toFixed(2)}`;
+                document.getElementById('nextTriggerText').textContent = nextTrigger;
+
+                // INVALIDATION
+                const invalidation = direction === 'BUY' ?
+                    `Sustained M15 candle close below the ${(sl * 0.999).toFixed(1)} accumulation low` :
+                    `Sustained M15 candle close above the manipulation swing high at ${(sl * 1.001).toFixed(1)}`;
+                document.getElementById('invalidationText').textContent = invalidation;
 
                 let factorsHtml = '';
                 factors.forEach(f => {

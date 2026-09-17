@@ -1545,6 +1545,7 @@ HTML = """
             document.getElementById('result').style.display = 'none';
 
             setTimeout(() => {
+            // INSTANT - No artificial delay (was 2000ms)
                 const basePriceMap = {
                     'XAUUSDm': 4350.50, 'BTCUSDm': 67189.00, 'EURUSDm': 1.0858,
                     'GBPUSDm': 1.2734, 'USDJPYm': 149.85, 'USTECm': 29450.19, 'US30m': 42850.00
@@ -1749,7 +1750,7 @@ HTML = """
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('result').style.display = 'block';
                 document.getElementById('result').scrollIntoView({behavior: 'smooth'});
-            }, 2000);
+            }, 200);
         }
 
         function resetForm() {

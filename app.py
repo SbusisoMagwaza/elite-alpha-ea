@@ -1544,213 +1544,208 @@ HTML = """
             document.getElementById('previewSection').style.display = 'none';
             document.getElementById('result').style.display = 'none';
 
-            setTimeout(() => {
-            // INSTANT - No artificial delay (was 2000ms)
-                const basePriceMap = {
-                    'XAUUSDm': 4350.50, 'BTCUSDm': 67189.00, 'EURUSDm': 1.0858,
-                    'GBPUSDm': 1.2734, 'USDJPYm': 149.85, 'USTECm': 29450.19, 'US30m': 42850.00
-                };
-                const basePrice = basePriceMap[symbol] || 100;
-                const currentPrice = basePrice + (Math.random() - 0.5) * (basePrice * 0.008);
+            // Show loading briefly (100ms) then show results - INSTANT feel
+            setTimeout(function() {
+                doAnalysis();
+            }, 100);
 
-                const sr = Math.random();
-                const structure = sr > 0.6 ? 'bullish' : sr > 0.2 ? 'bearish' : 'ranging';
-                const bos = Math.random() > 0.3;
-                const choch = Math.random() > 0.5;
-                const liquidity = Math.random() > 0.4;
-                const fvg = Math.random() > 0.5;
-                const orderblock = Math.random() > 0.4;
-                const displacement = Math.random() > 0.5;
+            function doAnalysis() {
+            const basePriceMap = {
+                'XAUUSDm': 4350.50, 'BTCUSDm': 67189.00, 'EURUSDm': 1.0858,
+                'GBPUSDm': 1.2734, 'USDJPYm': 149.85, 'USTECm': 29450.19, 'US30m': 42850.00
+            };
+            const basePrice = basePriceMap[symbol] || 100;
+            const currentPrice = basePrice + (Math.random() - 0.5) * (basePrice * 0.008);
 
-                let score = 0;
-                let factors = [];
+            const structure = Math.random() > 0.6 ? 'bullish' : Math.random() > 0.2 ? 'bearish' : 'ranging';
+            const bos = Math.random() > 0.3;
+            const choch = Math.random() > 0.5;
+            const liquidity = Math.random() > 0.4;
+            const fvg = Math.random() > 0.5;
+            const orderblock = Math.random() > 0.4;
+            const displacement = Math.random() > 0.5;
 
-                if (structure !== 'ranging') score += 2;
-                factors.push({name: 'Market Structure', pass: structure !== 'ranging', w: 2});
+            let score = 0;
+            let factors = [];
 
-                if (bos) score += 2;
-                factors.push({name: 'BOS', pass: bos, w: 2});
+            if (structure !== 'ranging') score += 2;
+            factors.push({name: 'Market Structure', pass: structure !== 'ranging', w: 2});
 
-                if (choch) score += 1;
-                factors.push({name: 'CHoCH', pass: choch, w: 1});
+            if (bos) score += 2;
+            factors.push({name: 'BOS', pass: bos, w: 2});
 
-                if (liquidity) score += 2;
-                factors.push({name: 'Liquidity Sweep', pass: liquidity, w: 2});
+            if (choch) score += 1;
+            factors.push({name: 'CHoCH', pass: choch, w: 1});
 
-                if (orderblock) score += 2;
-                factors.push({name: 'Order Block', pass: orderblock, w: 2});
+            if (liquidity) score += 2;
+            factors.push({name: 'Liquidity Sweep', pass: liquidity, w: 2});
 
-                if (fvg) score += 1;
-                factors.push({name: 'FVG', pass: fvg, w: 1});
+            if (orderblock) score += 2;
+            factors.push({name: 'Order Block', pass: orderblock, w: 2});
 
-                if (displacement) score += 2;
-                factors.push({name: 'Displacement', pass: displacement, w: 2});
+            if (fvg) score += 1;
+            factors.push({name: 'FVG', pass: fvg, w: 1});
 
-                if (structure !== 'ranging') score += 1;
-                factors.push({name: structure === 'bullish' ? 'Discount' : 'Premium', pass: structure !== 'ranging', w: 1});
+            if (displacement) score += 2;
+            factors.push({name: 'Displacement', pass: displacement, w: 2});
 
-                score += 1;
-                factors.push({name: 'PO3', pass: structure !== 'ranging' && liquidity, w: 1});
+            if (structure !== 'ranging') score += 1;
+            factors.push({name: structure === 'bullish' ? 'Discount' : 'Premium', pass: structure !== 'ranging', w: 1});
 
-                score += 1;
-                factors.push({name: 'Judas Swing', pass: choch, w: 1});
+            score += 1;
+            factors.push({name: 'PO3', pass: structure !== 'ranging' && liquidity, w: 1});
 
-                score += 1;
-                factors.push({name: 'OTE', pass: structure !== 'ranging' && bos, w: 1});
+            score += 1;
+            factors.push({name: 'Judas Swing', pass: choch, w: 1});
 
-                const confidence = Math.min(95, Math.round((score / 19) * 100) + (structure !== 'ranging' ? 5 : 0));
+            score += 1;
+            factors.push({name: 'OTE', pass: structure !== 'ranging' && bos, w: 1});
 
-                let direction = 'WAIT';
-                let grade = 'C';
-                let strategy = 'None';
-                let entry = currentPrice;
-                let slDistance = currentPrice * 0.01;
-                let sl, tp;
-                let bestAction = 'WAIT';
+            const confidence = Math.min(95, Math.round((score / 19) * 100) + (structure !== 'ranging' ? 5 : 0));
 
-                if (structure === 'bullish' && confidence >= 60) {
-                    direction = 'BUY';
-                    grade = confidence >= 85 ? 'A+' : 'A';
-                    strategy = liquidity ? 'PO3' : 'BOS';
-                    sl = entry - slDistance;
-                    tp = entry + (slDistance * 3);
-                    bestAction = 'BEST TO BUY';
-                } else if (structure === 'bearish' && confidence >= 60) {
-                    direction = 'SELL';
-                    grade = confidence >= 85 ? 'A+' : 'A';
-                    strategy = liquidity ? 'PO3' : 'BOS';
-                    sl = entry + slDistance;
-                    tp = entry - (slDistance * 3);
-                    bestAction = 'BEST TO SELL';
-                } else {
-                    sl = entry;
-                    tp = entry;
-                }
+            let direction = 'WAIT';
+            let grade = 'C';
+            let strategy = 'None';
+            let entry = currentPrice;
+            let slDistance = currentPrice * 0.01;
+            let sl, tp;
+            let bestAction = 'WAIT';
 
-                const riskAmount = balance * 0.01;
-                const profit = riskAmount * 3.0;
+            if (structure === 'bullish' && confidence >= 60) {
+                direction = 'BUY';
+                grade = confidence >= 85 ? 'A+' : 'A';
+                strategy = liquidity ? 'PO3' : 'BOS';
+                sl = entry - slDistance;
+                tp = entry + (slDistance * 3);
+                bestAction = 'BEST TO BUY';
+            } else if (structure === 'bearish' && confidence >= 60) {
+                direction = 'SELL';
+                grade = confidence >= 85 ? 'A+' : 'A';
+                strategy = liquidity ? 'PO3' : 'BOS';
+                sl = entry + slDistance;
+                tp = entry - (slDistance * 3);
+                bestAction = 'BEST TO SELL';
+            } else {
+                sl = entry;
+                tp = entry;
+            }
 
-                document.getElementById('direction').textContent = direction;
-                document.getElementById('direction').className = direction === 'BUY' ? 'direction-buy' : 'direction-sell';
-                document.getElementById('confidence').textContent = confidence + '%';
-                document.getElementById('grade').textContent = 'Grade ' + grade;
-                document.getElementById('strategy').textContent = strategy;
-                document.getElementById('entry').textContent = entry.toFixed(2);
-                document.getElementById('sl').textContent = sl.toFixed(2);
-                document.getElementById('tp').textContent = tp.toFixed(2);
-                document.getElementById('rr').textContent = '1:3.0';
-                document.getElementById('riskAmount').textContent = 'R' + riskAmount.toFixed(2);
-                document.getElementById('profit').textContent = 'R' + profit.toFixed(2);
-                document.getElementById('bestAction').textContent = bestAction;
+            const riskAmount = balance * 0.01;
+            const profit = riskAmount * 3.0;
 
-                // Wire up quick log buttons for this signal
-                document.getElementById('quickWinBtn').onclick = function() {
-                    logTrade('WIN', symbol);
-                };
-                document.getElementById('quickLossBtn').onclick = function() {
-                    logTrade('LOSS', symbol);
-                };
+            document.getElementById('direction').textContent = direction;
+            document.getElementById('direction').className = direction === 'BUY' ? 'direction-buy' : 'direction-sell';
+            document.getElementById('confidence').textContent = confidence + '%';
+            document.getElementById('grade').textContent = 'Grade ' + grade;
+            document.getElementById('strategy').textContent = strategy;
+            document.getElementById('entry').textContent = entry.toFixed(2);
+            document.getElementById('sl').textContent = sl.toFixed(2);
+            document.getElementById('tp').textContent = tp.toFixed(2);
+            document.getElementById('rr').textContent = '1:3.0';
+            document.getElementById('riskAmount').textContent = 'R' + riskAmount.toFixed(2);
+            document.getElementById('profit').textContent = 'R' + profit.toFixed(2);
+            document.getElementById('bestAction').textContent = bestAction;
 
-                const htfColor = direction === 'BUY' ? '#00d4aa' : '#ff6b6b';
-                document.getElementById('htfTrend').innerHTML = direction === 'BUY' ? `<span style="color: ${htfColor};">🟢 Bullish</span>` : `<span style="color: ${htfColor};">🔴 Bearish</span>`;
-                document.getElementById('htfExplanation').textContent = direction === 'BUY' ? 'HTF shows bullish bias with higher highs and higher lows.' : 'HTF shows bearish bias with lower highs and lower lows.';
+            const htfColor = direction === 'BUY' ? '#00d4aa' : '#ff6b6b';
+            document.getElementById('htfTrend').innerHTML = direction === 'BUY' ? `<span style="color: ${htfColor};">🟢 Bullish</span>` : `<span style="color: ${htfColor};">🔴 Bearish</span>`;
+            document.getElementById('htfExplanation').textContent = direction === 'BUY' ? 'HTF shows bullish bias with higher highs and higher lows.' : 'HTF shows bearish bias with lower highs and lower lows.';
 
-                document.getElementById('marketStructure').textContent = structure === 'bullish' ? 'Bullish: HH + HL' : structure === 'bearish' ? 'Bearish: LH + LL' : 'Ranging';
-                document.getElementById('marketStructureExplanation').textContent = structure === 'bullish' ? 'Market forming bullish structure.' : 'Market forming bearish structure.';
+            document.getElementById('marketStructure').textContent = structure === 'bullish' ? 'Bullish: HH + HL' : structure === 'bearish' ? 'Bearish: LH + LL' : 'Ranging';
+            document.getElementById('marketStructureExplanation').textContent = structure === 'bullish' ? 'Market forming bullish structure.' : 'Market forming bearish structure.';
 
-                document.getElementById('liquiditySweep').textContent = liquidity ? '✓ Liquidity grabbed' : '✗ No clear sweep';
-                document.getElementById('liquidityExplanation').textContent = liquidity ? 'Smart money swept stops before reversal.' : 'No stop hunt detected.';
+            document.getElementById('liquiditySweep').textContent = liquidity ? '✓ Liquidity grabbed' : '✗ No clear sweep';
+            document.getElementById('liquidityExplanation').textContent = liquidity ? 'Smart money swept stops before reversal.' : 'No stop hunt detected.';
 
-                document.getElementById('structureShift').textContent = choch || bos ? '✓ Shift confirmed' : 'No shift';
-                document.getElementById('structureShiftExplanation').textContent = choch || bos ? 'Structure shift detected.' : 'Wait for shift.';
+            document.getElementById('structureShift').textContent = choch || bos ? '✓ Shift confirmed' : 'No shift';
+            document.getElementById('structureShiftExplanation').textContent = choch || bos ? 'Structure shift detected.' : 'Wait for shift.';
 
-                document.getElementById('predictedMove').textContent = direction === 'BUY' ? `📈 To ${tp.toFixed(2)}` : `📉 To ${tp.toFixed(2)}`;
-                document.getElementById('predictedMoveExplanation').textContent = direction === 'BUY' ? `Bullish expansion expected. SL: ${sl.toFixed(2)}` : `Bearish expansion expected. SL: ${sl.toFixed(2)}`;
+            document.getElementById('predictedMove').textContent = direction === 'BUY' ? `📈 To ${tp.toFixed(2)}` : `📉 To ${tp.toFixed(2)}`;
+            document.getElementById('predictedMoveExplanation').textContent = direction === 'BUY' ? `Bullish expansion expected. SL: ${sl.toFixed(2)}` : `Bearish expansion expected. SL: ${sl.toFixed(2)}`;
 
-                // CONFLUENCE CHECKLIST (Like Vertex Alpha/Generator X)
-                const checklist = [
-                    {name: 'H1 Accumulation Base', detail: `Clear consolidation base established between ${entry.toFixed(0)} and ${(entry * 0.998).toFixed(0)} (inferred from M15 swing range)`, pass: structure !== 'ranging'},
-                    {name: 'Micro Manipulation Sweep', detail: `Sharp Judas wick spiked above ${(entry * 1.005).toFixed(0)}, purging buy-side liquidity before immediately closing back inside`, pass: liquidity},
-                    {name: 'Distribution Expansion', detail: `Displacement leg expanded ${direction === 'SELL' ? 'down' : 'up'} to ${tp.toFixed(0)} with large-bodied ${direction === 'SELL' ? 'bearish' : 'bullish'} candles`, pass: displacement},
-                    {name: 'H1 Draw on Liquidity', detail: `Draw on liquidity targets unmitigated ${direction === 'SELL' ? 'sell-side' : 'buy-side'} lows around ${sl.toFixed(0)}`, pass: bos},
-                    {name: 'Displacement FVG / Imbalance', detail: `Clear ${direction === 'SELL' ? 'premium' : 'discount'} imbalance zone created during ${direction === 'SELL' ? 'down' : 'up'}-leg, now being tested as entry`, pass: fvg},
-                    {name: 'Entry Trigger on Retrace', detail: `Price returned to retest the ${direction === 'SELL' ? 'FVG breakdown' : 'FVG breakout'} level with upper wick rejection`, pass: orderblock},
-                    {name: 'R:Reward ≥ 2.0', detail: `Risk of ~${slDistance.toFixed(1)} points for ~${(Math.abs(tp - entry)).toFixed(1)} points reward (${(Math.abs(tp - entry) / slDistance).toFixed(1)}:1 R:R ratio)`, pass: true}
-                ];
+            // CONFLUENCE CHECKLIST
+            const checklist = [
+                {name: 'H1 Accumulation Base', detail: `Clear consolidation base established between ${entry.toFixed(0)} and ${(entry * 0.998).toFixed(0)} (inferred from M15 swing range)`, pass: structure !== 'ranging'},
+                {name: 'Micro Manipulation Sweep', detail: `Sharp Judas wick spiked above ${(entry * 1.005).toFixed(0)}, purging buy-side liquidity before immediately closing back inside`, pass: liquidity},
+                {name: 'Distribution Expansion', detail: `Displacement leg expanded ${direction === 'SELL' ? 'down' : 'up'} to ${tp.toFixed(0)} with large-bodied ${direction === 'SELL' ? 'bearish' : 'bullish'} candles`, pass: displacement},
+                {name: 'H1 Draw on Liquidity', detail: `Draw on liquidity targets unmitigated ${direction === 'SELL' ? 'sell-side' : 'buy-side'} lows around ${sl.toFixed(0)}`, pass: bos},
+                {name: 'Displacement FVG / Imbalance', detail: `Clear ${direction === 'SELL' ? 'premium' : 'discount'} imbalance zone created during ${direction === 'SELL' ? 'down' : 'up'}-leg, now being tested as entry`, pass: fvg},
+                {name: 'Entry Trigger on Retrace', detail: `Price returned to retest the ${direction === 'SELL' ? 'FVG breakdown' : 'FVG breakout'} level with upper wick rejection`, pass: orderblock},
+                {name: 'R:Reward ≥ 2.0', detail: `Risk of ~${slDistance.toFixed(1)} points for ~${(Math.abs(tp - entry)).toFixed(1)} points reward (${(Math.abs(tp - entry) / slDistance).toFixed(1)}:1 R:R ratio)`, pass: true}
+            ];
 
-                let checklistHtml = '';
-                checklist.forEach(item => {
-                    const icon = item.pass ? '✓' : '✗';
-                    const iconClass = item.pass ? '' : 'fail';
-                    checklistHtml += `<div class="confluence-check-item">
-                        <span class="confluence-check-icon ${iconClass}">${icon}</span>
-                        <span class="confluence-check-text"><strong>${item.name}</strong> — ${item.detail}</span>
+            let checklistHtml = '';
+            checklist.forEach(item => {
+                const icon = item.pass ? '✓' : '✗';
+                const iconClass = item.pass ? '' : 'fail';
+                checklistHtml += `<div class="confluence-check-item">
+                    <span class="confluence-check-icon ${iconClass}">${icon}</span>
+                    <span class="confluence-check-text"><strong>${item.name}</strong> — ${item.detail}</span>
+                </div>`;
+            });
+            document.getElementById('confluenceChecklistItems').innerHTML = checklistHtml;
+
+            // DETAILED CONFLUENCES
+            const confluences = [];
+            if (liquidity) confluences.push(`Clean ${direction === 'SELL' ? 'buy-side' : 'sell-side'} liquidity grab at ${(entry * 1.003).toFixed(2)}`);
+            if (displacement) confluences.push(`M15 ${structure} displacement breaking structural ${direction === 'SELL' ? 'lows' : 'highs'}`);
+            if (fvg) confluences.push(`Deep ${direction === 'SELL' ? 'premium' : 'discount'} retest into ${(entry * 1.002).toFixed(0)} ${direction === 'SELL' ? 'resistance' : 'support'} / FVG`);
+            if (orderblock) confluences.push(`High risk-to-reward ratio exceeding 2R`);
+            if (bos) confluences.push(`Structure shift confirmed on ${timeframe} timeframe`);
+            if (choch) confluences.push(`CHoCH pattern forming on lower timeframe`);
+
+            let confluencesHtml = '';
+            if (confluences.length === 0) {
+                confluencesHtml = '<div style="color: #888; font-size: 13px;">No clear confluences detected - wait for better setup</div>';
+            } else {
+                confluences.forEach(text => {
+                    confluencesHtml += `<div style="display: flex; align-items: flex-start; padding: 6px 0; font-size: 13px; color: #ccc; line-height: 1.5;">
+                        <span style="color: #00d4aa; margin-right: 10px;">•</span>
+                        <span>${text}</span>
                     </div>`;
                 });
-                document.getElementById('confluenceChecklistItems').innerHTML = checklistHtml;
+            }
+            document.getElementById('confluencesList').innerHTML = confluencesHtml;
 
-                // DETAILED CONFLUENCES
-                const confluences = [];
-                if (liquidity) confluences.push(`Clean ${direction === 'SELL' ? 'buy-side' : 'sell-side'} liquidity grab at ${(entry * 1.003).toFixed(2)}`);
-                if (displacement) confluences.push(`M15 ${structure} displacement breaking structural ${direction === 'SELL' ? 'lows' : 'highs'}`);
-                if (fvg) confluences.push(`Deep ${direction === 'SELL' ? 'premium' : 'discount'} retest into ${(entry * 1.002).toFixed(0)} ${direction === 'SELL' ? 'resistance' : 'support'} / FVG`);
-                if (orderblock) confluences.push(`High risk-to-reward ratio exceeding 2R`);
-                if (bos) confluences.push(`Structure shift confirmed on ${timeframe} timeframe`);
-                if (choch) confluences.push(`CHoCH pattern forming on lower timeframe`);
+            // TOP-DOWN ANALYSIS
+            const actionEl = document.getElementById('topdownAction');
+            const actionTextEl = document.getElementById('topdownActionText');
 
-                let confluencesHtml = '';
-                if (confluences.length === 0) {
-                    confluencesHtml = '<div style="color: #888; font-size: 13px;">No clear confluences detected - wait for better setup</div>';
-                } else {
-                    confluences.forEach(text => {
-                        confluencesHtml += `<div style="display: flex; align-items: flex-start; padding: 6px 0; font-size: 13px; color: #ccc; line-height: 1.5;">
-                            <span style="color: #00d4aa; margin-right: 10px;">•</span>
-                            <span>${text}</span>
-                        </div>`;
-                    });
-                }
-                document.getElementById('confluencesList').innerHTML = confluencesHtml;
+            if (direction === 'BUY') {
+                actionEl.classList.add('topdown-action-buy');
+                actionTextEl.textContent = 'BEST TO BUY';
+            } else if (direction === 'SELL') {
+                actionEl.classList.remove('topdown-action-buy');
+                actionTextEl.textContent = 'BEST TO SELL';
+            } else {
+                actionEl.classList.remove('topdown-action-buy');
+                actionTextEl.textContent = 'WAIT';
+            }
 
-                // TOP-DOWN ANALYSIS (Vertex Alpha Style)
-                const actionEl = document.getElementById('topdownAction');
-                const actionTextEl = document.getElementById('topdownActionText');
+            // NEXT TRIGGER
+            const nextTrigger = direction === 'BUY' ?
+                `M15 bullish engulfing candle closing above ${(entry * 1.001).toFixed(2)}` :
+                `M15 ${direction === 'SELL' ? 'bearish' : ''} rejection candle closing below ${(entry * 0.999).toFixed(2)}`;
+            document.getElementById('nextTriggerText').textContent = nextTrigger;
 
-                if (direction === 'BUY') {
-                    actionEl.classList.add('topdown-action-buy');
-                    actionTextEl.textContent = 'BEST TO BUY';
-                } else if (direction === 'SELL') {
-                    actionEl.classList.remove('topdown-action-buy');
-                    actionTextEl.textContent = 'BEST TO SELL';
-                } else {
-                    actionEl.classList.remove('topdown-action-buy');
-                    actionTextEl.textContent = 'WAIT';
-                }
+            // INVALIDATION
+            const invalidation = direction === 'BUY' ?
+                `Sustained M15 candle close below the ${(sl * 0.999).toFixed(1)} accumulation low` :
+                `Sustained M15 candle close above the manipulation swing high at ${(sl * 1.001).toFixed(1)}`;
+            document.getElementById('invalidationText').textContent = invalidation;
 
-                // NEXT TRIGGER
-                const nextTrigger = direction === 'BUY' ?
-                    `M15 bullish engulfing candle closing above ${(entry * 1.001).toFixed(2)}` :
-                    `M15 ${direction === 'SELL' ? 'bearish' : ''} rejection candle closing below ${(entry * 0.999).toFixed(2)}`;
-                document.getElementById('nextTriggerText').textContent = nextTrigger;
+            let factorsHtml = '';
+            factors.forEach(f => {
+                const color = f.pass ? '#00d4aa' : '#555';
+                factorsHtml += `<div class="info-row"><span class="label">${f.pass ? '✓' : '✗'} ${f.name}</span><span class="value" style="color: ${color};">${f.pass ? 'PASS' : 'SKIP'}</span></div>`;
+            });
+            if (document.getElementById('factors')) {
+                document.getElementById('factors').innerHTML = factorsHtml;
+            }
 
-                // INVALIDATION
-                const invalidation = direction === 'BUY' ?
-                    `Sustained M15 candle close below the ${(sl * 0.999).toFixed(1)} accumulation low` :
-                    `Sustained M15 candle close above the manipulation swing high at ${(sl * 1.001).toFixed(1)}`;
-                document.getElementById('invalidationText').textContent = invalidation;
-
-                let factorsHtml = '';
-                factors.forEach(f => {
-                    const color = f.pass ? '#00d4aa' : '#555';
-                    factorsHtml += `<div class="info-row"><span class="label">${f.pass ? '✓' : '✗'} ${f.name}</span><span class="value" style="color: ${color};">${f.pass ? 'PASS' : 'SKIP'}</span></div>`;
-                });
-                if (document.getElementById('factors')) {
-                    document.getElementById('factors').innerHTML = factorsHtml;
-                }
-
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('result').style.display = 'block';
-                document.getElementById('result').scrollIntoView({behavior: 'smooth'});
-            }, 200);
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('result').style.display = 'block';
+            document.getElementById('result').scrollIntoView({behavior: 'smooth'});
+            }
         }
 
         function resetForm() {

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="tab-content active" id="home-tab">
+    <div class="home-header">
+        <div class="robot-container">
+            <img src="{{ url_for('static', filename='images/robot_small.jpg') }}" alt="Elite Alpha EA Robot">
+        </div>
+        <div class="app-title-home">Elite Alpha EA</div>
+        <div class="scanner-name">Precision Scanner v7.0</div>
+        <div class="app-tagline">Precision Trading, Zero Emotion</div>
+    </div>
+
+    <div class="ticker-bar">
+        <div class="ticker-content" id="tickerContent"></div>
+    </div>
+
+    <div class="session-indicator">
+        <div class="session-status">
+            <span class="session-dot"></span>
+            <span id="sessionName">Loading...</span>
+        </div>
+        <span id="sessionScore" style="color: #00d4aa; font-weight: 700;">-</span>
+    </div>
+
+    <div class="quick-stats">
+        <div class="stat-card">
+            <div class="stat-value" id="accountBalance">R369.19</div>
+            <div class="stat-label">Balance</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="todayPnl">R0.00</div>
+            <div class="stat-label">Today P&L</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="winStreak">0🔥</div>
+            <div class="stat-label">Win Streak</div>
+        </div>
+    </div>
+
+    <div class="auto-scan-banner">
+        <div class="auto-scan-icon">₿</div>
+        <div class="auto-scan-text">BTC WEEKEND MODE</div>
+        <div class="auto-scan-sub">Auto-scan Bitcoin every 5 minutes<br>Crypto-only market (Sat/Sun)</div>
+        <button class="auto-scan-btn" onclick="runAutoScan()">🎯 SCAN BTC NOW</button>
+        <div class="auto-scan-result" id="autoScanResult"></div>
+    </div>
+
+    <div class="news-panel">
+        <div class="news-title">📰 Economic Calendar</div>
+        <div id="newsList"></div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">💱 Trading Pairs</div>
+        <div class="info-row"><span class="label">XAUUSDm</span><span class="value">Gold</span></div>
+        <div class="info-row"><span class="label">BTCUSDm</span><span class="value profit">Bitcoin (Weekend)</span></div>
+        <div class="info-row"><span class="label">EURUSDm</span><span class="value">Euro/Dollar</span></div>
+        <div class="info-row"><span class="label">GBPUSDm</span><span class="value">Pound/Dollar</span></div>
+        <div class="info-row"><span class="label">USDJPYm</span><span class="value">Dollar/Yen</span></div>
+        <div class="info-row"><span class="label">USTECm</span><span class="value">NASDAQ</span></div>
+        <div class="info-row"><span class="label">US30m</span><span class="value">Dow Jones</span></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/home.js') }}"></script>
+{% endblock %}

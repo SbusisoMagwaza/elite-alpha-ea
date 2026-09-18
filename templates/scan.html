@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="tab-content active" id="scan-tab">
+    <div class="card-title" style="padding: 10px 0;">📊 Manual Chart Analysis</div>
+
+    <div class="upload-card" id="uploadCard" onclick="openGallery()">
+        <span class="upload-icon">📤</span>
+        <div class="upload-text">Upload Chart Screenshot</div>
+        <div class="upload-hint">Choose from your phone gallery</div>
+        <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)">
+    </div>
+
+    <div class="preview-section" id="previewSection">
+        <img id="previewImage" src="" alt="Chart">
+        <button class="change-btn" onclick="openGallery()">📤 Change Image</button>
+    </div>
+
+    <div class="card">
+        <div class="card-title">📊 Chart Details</div>
+        <div class="form-group">
+            <label>💱 Symbol</label>
+            <select id="symbol">
+                <option value="XAUUSDm">XAUUSDm (Gold)</option>
+                <option value="BTCUSDm" selected>BTCUSDm (Bitcoin)</option>
+                <option value="EURUSDm">EURUSDm</option>
+                <option value="GBPUSDm">GBPUSDm</option>
+                <option value="USDJPYm">USDJPYm</option>
+                <option value="USTECm">USTECm (NASDAQ)</option>
+                <option value="US30m">US30m</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>⏰ Timeframe</label>
+            <select id="timeframe">
+                <option value="M15">M15 (15 min)</option>
+                <option value="H1" selected>H1 (1 hour)</option>
+                <option value="H4">H4 (4 hours)</option>
+                <option value="D1">D1 (Daily)</option>
+            </select>
+        </div>
+        <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()" disabled>🤖 Analyze Chart</button>
+    </div>
+
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p style="color: #00d4aa; font-weight: 600;">🤖 AI Analyzing...</p>
+        <p style="color: #888; font-size: 12px; margin-top: 8px;">Detecting price, structure & 15 SMC factors</p>
+    </div>
+
+    <div id="result">
+        <div class="signal-header">
+            <div class="direction-buy" id="direction">BUY</div>
+            <div class="confidence-value" id="confidence">85%</div>
+            <div>
+                <span class="badge gold" id="grade">Grade A+</span>
+                <span class="badge" id="strategy">PO3</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="info-row"><span class="label">Entry:</span><span class="value" id="entry">-</span></div>
+            <div class="info-row"><span class="label">Stop Loss:</span><span class="value loss" id="sl">-</span></div>
+            <div class="info-row"><span class="label">Take Profit:</span><span class="value profit" id="tp">-</span></div>
+            <div class="info-row"><span class="label">Risk:Reward:</span><span class="value" id="rr">1:3.0</span></div>
+            <div class="info-row"><span class="label">Risk Amount:</span><span class="value" id="riskAmount">-</span></div>
+            <div class="info-row"><span class="label">Potential Profit:</span><span class="value profit" id="profit">-</span></div>
+            <div class="info-row"><span class="label">Position Size:</span><span class="value" id="positionSize">-</span></div>
+        </div>
+
+        <div class="best-action" id="bestAction">BEST TO BUY</div>
+
+        <div class="analysis-section">
+            <h4>📊 HTF Trend</h4>
+            <p class="main" id="htfTrend"></p>
+            <p class="sub" id="htfExplanation"></p>
+        </div>
+
+        <div class="analysis-section">
+            <h4>🏗️ Market Structure</h4>
+            <p class="main" id="marketStructure"></p>
+            <p class="sub" id="marketStructureExplanation"></p>
+        </div>
+
+        <div class="confluence-checklist">
+            <h4>📋 CONFLUENCE CHECKLIST</h4>
+            <div id="confluenceChecklistItems"></div>
+        </div>
+
+        <div class="confluence-checklist">
+            <h4>📋 CONFLUENCES</h4>
+            <div id="confluencesList"></div>
+        </div>
+
+        <div class="topdown-section">
+            <div class="topdown-header">🎯 TOP-DOWN ANALYSIS</div>
+            <div class="topdown-action" id="topdownAction">
+                <span class="topdown-action-label">BEST ACTION NOW</span>
+                <span class="topdown-action-text" id="topdownActionText">BEST TO SELL</span>
+            </div>
+            <div class="topdown-trigger-row">
+                <div class="topdown-trigger-label">⏭️ NEXT TRIGGER</div>
+                <div class="topdown-trigger-text" id="nextTriggerText">M15 signal</div>
+            </div>
+            <div class="topdown-trigger-row">
+                <div class="topdown-trigger-label">🚫 INVALIDATION</div>
+                <div class="topdown-trigger-text" id="invalidationText">M15 close</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">💰 Risk Calculator</div>
+            <div class="form-group">
+                <label>Account Balance (ZAR)</label>
+                <input type="number" id="riskBalance" value="369.19" step="0.01">
+            </div>
+            <div class="form-group">
+                <label>Risk Percentage</label>
+                <select id="riskPercent">
+                    <option value="0.5">0.5%</option>
+                    <option value="1" selected>1%</option>
+                    <option value="2">2%</option>
+                </select>
+            </div>
+            <button class="analyze-btn" onclick="calculateRisk()">Calculate Risk</button>
+            <div id="riskResult" style="margin-top: 15px; display: none;">
+                <div class="info-row"><span class="label">Risk Amount:</span><span class="value profit" id="riskAmountCalc">-</span></div>
+                <div 

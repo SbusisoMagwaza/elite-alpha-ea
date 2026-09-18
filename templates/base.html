@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Elite Alpha EA</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/home.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/scan.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/settings.css') }}">
+</head>
+<body>
+    {% block content %}{% endblock %}
+
+    <div class="bottom-nav">
+        <a href="/" class="nav-btn" data-tab="home">
+            <span class="nav-icon">🏠</span>
+            <span>HOME</span>
+        </a>
+        <a href="/scan" class="scan-nav-btn" data-tab="scan">
+            <div class="scan-circle">🎯</div>
+        </a>
+        <a href="/settings" class="nav-btn" data-tab="settings">
+            <span class="nav-icon">⚙️</span>
+            <span>SETTINGS</span>
+        </a>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

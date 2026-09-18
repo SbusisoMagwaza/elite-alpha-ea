@@ -471,6 +471,8 @@ HTML_PAGE = """
         .section { display: none; }
         .section.active { display: block; }
 
+        @keyframes spin { to { transform: rotate(360deg); } }
+
         .settings-row {
             display: flex;
             justify-content: space-between;
@@ -868,8 +870,6 @@ HTML_PAGE = """
                 loadNews();
             }, 300000);
         };
-
-        @keyframes spin { to { transform: rotate(360deg); } }
     </script>
 </body>
 </html>

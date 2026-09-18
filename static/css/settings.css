@@ -1,0 +1,95 @@
+.setup-instructions {
+    background: rgba(0, 150, 255, 0.05);
+    border: 1px solid rgba(0, 150, 255, 0.2);
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 15px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #ccc;
+}
+
+.setup-instructions h4 {
+    color: #00d4ff;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.setup-instructions ol { padding-left: 20px; margin: 10px 0; }
+.setup-instructions li { margin: 5px 0; }
+
+.setup-instructions code {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #00d4aa;
+    font-family: monospace;
+}
+
+.settings-section {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 15px;
+    border: 1px solid rgba(0, 150, 255, 0.15);
+}
+
+.settings-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.settings-row:last-child { border-bottom: none; }
+
+.settings-label {
+    color: #ccc;
+    font-size: 14px;
+}
+
+.toggle {
+    width: 44px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.toggle.active { background: #00d4aa; }
+
+.toggle::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: left 0.2s;
+}
+
+.toggle.active::after { left: 22px; }
+
+.settings-section .form-group { margin-bottom: 12px; }
+
+.settings-section input,
+.settings-section select {
+    width: 100%;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(0, 150, 255, 0.3);
+    color: #ffffff;
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+.settings-section input:focus,
+.settings-section select:focus {
+    outline: none;
+    border-color: #00d4aa;
+}

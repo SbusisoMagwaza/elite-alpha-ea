@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="tab-content active" id="settings-tab">
+    <div class="card-title" style="padding: 10px 0;">⚙️ Settings</div>
+
+    <div class="setup-instructions">
+        <h4>📱 MT5 Push Notifications Setup</h4>
+        <ol>
+            <li>Open MT5 Mobile app on your phone</li>
+            <li>Go to <code>Settings → MetaQuotes ID</code></li>
+            <li>Copy your MetaQuotes ID</li>
+            <li>Open MT5 Desktop → <code>Tools → Options → Notifications</code></li>
+            <li>Enable notifications & paste your MetaQuotes ID</li>
+            <li>Click <code>Test</code> to verify it works</li>
+        </ol>
+    </div>
+
+    <div class="card">
+        <div class="card-title">💰 Account Settings</div>
+        <div class="form-group">
+            <label>Account Balance (ZAR)</label>
+            <input type="number" id="accountBalanceInput" value="369.19" step="0.01" onchange="saveSettings()">
+        </div>
+        <div class="form-group">
+            <label>Default Risk per Trade</label>
+            <select id="riskPercentInput" onchange="saveSettings()">
+                <option value="0.5">0.5%</option>
+                <option value="1" selected>1%</option>
+                <option value="2">2%</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">📊 Scanner Settings</div>
+        <div class="form-group">
+            <label>Minimum Confidence</label>
+            <select id="minConfidenceInput" onchange="saveSettings()">
+                <option value="60">60%</option>
+                <option value="70">70%</option>
+                <option value="75" selected>75%</option>
+                <option value="80">80%</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Scan Interval (minutes)</label>
+            <select id="scanIntervalInput" onchange="saveSettings()">
+                <option value="1">1 min</option>
+                <option value="3">3 min</option>
+                <option value="5" selected>5 min</option>
+                <option value="15">15 min</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <div class="settings-row">
+            <span class="settings-label">🔔 Push Notifications</span>
+            <div class="toggle active" onclick="toggleSetting(this, 'push')"></div>
+        </div>
+        <div class="settings-row">
+            <span class="settings-label">📰 News Alerts</span>
+            <div class="toggle active" onclick="toggleSetting(this, 'news')"></div>
+        </div>
+        <div class="settings-row">
+            <span class="settings-label">🌙 Dark Mode</span>
+            <div class="toggle active" onclick="toggleSetting(this, 'dark')"></div>
+        </div>
+        <div class="settings-row">
+            <span class="settings-label">₿ Auto BTC Scan</span>
+            <div class="toggle active" onclick="toggleSetting(this, 'btc-auto')"></div>
+        </div>
+        <div class="settings-row">
+            <span class="settings-label">🔊 Sound Alerts</span>
+            <div class="toggle" onclick="toggleSetting(this, 'sound')"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">💾 Data Management</div>
+        <button class="analyze-btn" onclick="exportData()" style="margin-bottom: 10px;">📥 Export Backup</button>
+        <button class="analyze-btn" onclick="document.getElementById('importFile').click()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(0,150,255,0.3);">📤 Import Backup</button>
+        <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importData(event)">
+        <button class="analyze-btn" onclick="resetAllData()" style="margin-top: 10px; background: rgba(255, 107, 107, 0.2); color: #ff6b6b; border: 1px solid #ff6b6b;">🔄 Reset All Data</button>
+    </div>
+
+    <div class="settings-section">
+        <div class="settings-row"><span class="settings-label">🏢 Broker</span><span class="value">Exness</span></div>
+        <div class="settings-row"><span class="settings-label">🆔 Account #</span><span class="value">134644333</span></div>
+        <div class="settings-row"><span class="settings-label">📱 Version</span><span class="value" style="color: #00d4aa;">v7.0 PROFESSIONAL</span></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}

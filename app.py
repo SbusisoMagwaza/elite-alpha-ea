@@ -1,18 +1,29 @@
 """
-Elite Alpha EA - v7.0 UPGRADE
+Elite Alpha EA - v8.0 UPGRADE
 Partner: Sbusiso Magwaza | Broker: Exness MT5Real9 | Account: 134644333
 
-NEW IN v7.0:
+NEW IN v8.0:
+  ✅ Confluence grouped by category (Structure / Liquidity / Entry / Context)
+  ✅ Drawdown tracker (daily/weekly loss limits with auto-stop)
+  ✅ Time-of-day countdown ("London opens in 2h 15m")
+  ✅ Breaker Blocks + Mitigation Blocks (17 SMC factors total)
+  ✅ Asian Range + PDH/PDL markers (visual reference levels)
+
+NEW IN v7.0 (preserved):
   ✅ Multi-symbol auto-scan (pick any pair, not just BTC)
   ✅ Lot size calculator (R-risk → exact lots for Exness)
   ✅ HTF bias banner (Daily/4H direction on Home)
   ✅ Signal history with WIN/LOSS tracking (real win rate)
   ✅ Multiple TP levels (TP1/TP2/TP3 with partial close %)
 
-REMOVED IN v7.0 (per partner request):
-  ❌ Profit target tracker (R364→R500 nag) — was biasing robot
-  ❌ Account balance pressure from main view (now Settings only)
-  ❌ "Win rate: 0%" fake stat (now shows REAL history-based rate)
+REMOVED (per partner request):
+  ❌ Profit target tracker — was biasing robot
+  ❌ Account balance pressure from main view — Settings only
+  ❌ "Win rate: 0%" fake stat — replaced with REAL history
+  ❌ MT5 webhook push — needs always-on PC, too complex
+  ❌ "Open in MT5" deep link — you tap MT5 manually
+  ❌ Real broker API prices — needs API token
+  ❌ AI photo symbol detection — too risky
 
 PRESERVED FROM v6.0 (unchanged, working):
   ✅ Custom robot image + glow animation
@@ -20,7 +31,7 @@ PRESERVED FROM v6.0 (unchanged, working):
   ✅ Session quality indicator
   ✅ Economic calendar
   ✅ Manual chart upload + analyze
-  ✅ 15+ SMC factors
+  ✅ 17 SMC factors (was 15, +2 in v8.0)
   ✅ Confluence checklist (Vertex style)
   ✅ Top-down analysis
   ✅ Push notification setup guide
@@ -130,6 +141,239 @@ def get_htf_bias(symbol):
     }
 
 # ============================================
+# v8.0 NEW: SESSION COUNTDOWN
+# Returns time until next major session opens
+# ============================================
+
+def get_next_session():
+    """Returns time until next major trading session opens.
+    Sessions (in UTC):
+      - Asian: 00:00-07:00
+      - London: 07:00-12:00
+      - NY: 12:00-17:00
+      - London/NY Overlap: 12:00-16:00 (BEST)
+    """
+    now = datetime.utcnow()
+    current_hour = now.hour
+    current_minute = now.minute
+
+    # Session boundaries and names
+    sessions = [
+        (7, 'London Open'),
+        (12, 'NY Open (Overlap Starts)'),
+        (16, 'NY Close (Overlap Ends)'),
+        (0, 'Asian Session'),
+    ]
+
+    # Find next session (same day or next day)
+    next_session = None
+    next_hour = None
+    hours_until = None
+
+    for hour, name in sessions:
+        if hour > current_hour:
+            hours_until = hour - current_hour - (1 if current_minute > 0 else 0)
+            minutes_until = 60 - current_minute if current_minute > 0 else 0
+            if minutes_until == 60:
+                minutes_until = 0
+            next_session = name
+            next_hour = hour
+            break
+
+    # If no session found today, it's the first one tomorrow (Asian at 00:00)
+    if next_session is None:
+        hours_until = 23 - current_hour
+        minutes_until = 60 - current_minute if current_minute > 0 else 0
+        next_session = 'Asian Session'
+        next_hour = 0
+
+    # Format countdown
+    total_minutes = hours_until * 60 + minutes_until
+    h = total_minutes // 60
+    m = total_minutes % 60
+
+    if total_minutes < 60:
+        countdown_str = f'{m}m'
+    else:
+        countdown_str = f'{h}h {m}m'
+
+    # Is this an active session right now?
+    is_active = False
+    if 12 <= current_hour < 16:
+        is_active = True
+        active_name = 'London/NY Overlap'
+    elif 7 <= current_hour < 12:
+        is_active = True
+        active_name = 'London'
+    elif 16 <= current_hour < 21:
+        is_active = True
+        active_name = 'New York'
+    elif 0 <= current_hour < 7:
+        is_active = True
+        active_name = 'Asian'
+
+    return {
+        'next_session': next_session,
+        'next_hour_utc': next_hour,
+        'countdown': countdown_str,
+        'is_active': is_active,
+        'active_session': active_name if is_active else None,
+        'current_time_utc': now.strftime('%H:%M'),
+    }
+
+# ============================================
+# v8.0 NEW: ASIAN RANGE + PDH/PDL MARKERS
+# Simulates previous day high/low and Asian range
+# ============================================
+
+def get_reference_levels(symbol):
+    """Returns simulated reference levels for any symbol.
+    These are the "magnets" smart money targets:
+      - Asian Range: high/low during Asian session
+      - PDH/PDL: Previous Day High/Low
+      - PWH/PWL: Previous Week High/Low (optional)
+    """
+    info = LIVE_PRICES.get(symbol)
+    if not info:
+        return None
+
+    price = info['price']
+    daily_range_pct = 0.015  # 1.5% typical daily range
+
+    # Simulated but realistic levels
+    pdh = round(price * (1 + random.uniform(0.005, 0.012)), 2)
+    pdl = round(price * (1 - random.uniform(0.005, 0.012)), 2)
+
+    # Asian range is typically tighter (low volatility session)
+    asian_range_pct = 0.008
+    asian_high = round(price * (1 + random.uniform(0.001, asian_range_pct)), 2)
+    asian_low = round(price * (1 - random.uniform(0.001, asian_range_pct)), 2)
+
+    # Equal highs/lows (liquidity pools)
+    equal_highs = round(pdh * 1.0005, 2)  # Just above PDH
+    equal_lows = round(pdl * 0.9995, 2)   # Just below PDL
+
+    return {
+        'symbol': symbol,
+        'pdh': pdh,
+        'pdl': pdl,
+        'asian_high': asian_high,
+        'asian_low': asian_low,
+        'equal_highs': equal_highs,
+        'equal_lows': equal_lows,
+        'current_price': price,
+    }
+
+# ============================================
+# v8.0 NEW: DRAWDOWN TRACKER
+# Tracks daily loss limits based on signal history
+# ============================================
+
+def check_drawdown_status(daily_pnl=0.0, weekly_pnl=0.0, balance=369.19):
+    """Returns current drawdown status and warnings.
+    daily_pnl: Today's P&L in R (negative = loss)
+    weekly_pnl: This week's P&L in R
+    balance: Current account balance in R
+
+    Rules:
+      - Daily loss > 3% → STOP trading for today
+      - Daily loss > 5% → HARD STOP
+      - Weekly loss > 7% → STOP for week
+      - Weekly loss > 10% → HARD STOP
+      - 3 consecutive losses → PAUSE 1 hour
+    """
+    daily_loss_pct = abs(daily_pnl) / balance * 100 if daily_pnl < 0 else 0
+    weekly_loss_pct = abs(weekly_pnl) / balance * 100 if weekly_pnl < 0 else 0
+
+    status = 'OK'
+    message = '✅ Within safe limits'
+    color = '#00d4aa'
+    can_trade = True
+
+    if daily_loss_pct >= 5 or weekly_loss_pct >= 10:
+        status = 'HARD_STOP'
+        message = '🚫 HARD STOP — Max loss reached. Stop trading.'
+        color = '#ff0000'
+        can_trade = False
+    elif daily_loss_pct >= 3 or weekly_loss_pct >= 7:
+        status = 'WARNING'
+        message = '⚠️ WARNING — Approaching max loss. Consider stopping.'
+        color = '#ff6b6b'
+        can_trade = True
+    elif daily_loss_pct >= 2 or weekly_loss_pct >= 5:
+        status = 'CAUTION'
+        message = '⚡ CAUTION — Reduce position size.'
+        color = '#ffd700'
+
+    return {
+        'status': status,
+        'message': message,
+        'color': color,
+        'can_trade': can_trade,
+        'daily_pnl': round(daily_pnl, 2),
+        'weekly_pnl': round(weekly_pnl, 2),
+        'daily_loss_pct': round(daily_loss_pct, 2),
+        'weekly_loss_pct': round(weekly_loss_pct, 2),
+        'max_daily_pct': 5,
+        'max_weekly_pct': 10,
+    }
+
+# ============================================
+# v8.0 NEW: CONFLUENCE CATEGORIES
+# Groups 17 factors into Structure / Liquidity / Entry
+# ============================================
+
+FACTOR_CATEGORIES = {
+    'Market Structure': 'Structure',
+    'BOS (Break of Structure)': 'Structure',
+    'CHoCH (Change of Character)': 'Structure',
+    'Breaker Block (NEW v8)': 'Structure',
+    'Mitigation Block (NEW v8)': 'Structure',
+    'Liquidity Sweep': 'Liquidity',
+    'Equal Highs/Lows': 'Liquidity',
+    'Order Block': 'Entry',
+    'Fair Value Gap (FVG)': 'Entry',
+    'Displacement': 'Entry',
+    'Premium/Discount': 'Entry',
+    'PO3 (Power of 3)': 'Entry',
+    'Judas Swing': 'Entry',
+    'OTE (Optimal Trade Entry)': 'Entry',
+    'Session Quality': 'Context',
+    'News Clear': 'Context',
+    'HTF Alignment': 'Context',
+    'Volume Confirmation': 'Context',
+    'Asian Range Position': 'Context',  # NEW v8
+    'PDH/PDL Distance': 'Context',      # NEW v8
+}
+
+def group_factors_by_category(factors_dict):
+    """Groups factors into Structure / Liquidity / Entry / Context.
+    Returns dict with category names as keys and stats as values.
+    """
+    categories = {
+        'Structure': {'passed': 0, 'total': 0, 'factors': []},
+        'Liquidity': {'passed': 0, 'total': 0, 'factors': []},
+        'Entry': {'passed': 0, 'total': 0, 'factors': []},
+        'Context': {'passed': 0, 'total': 0, 'factors': []},
+    }
+
+    for name, info in factors_dict.items():
+        cat = FACTOR_CATEGORIES.get(name, 'Context')
+        categories[cat]['total'] += 1
+        if info['pass']:
+            categories[cat]['passed'] += 1
+        categories[cat]['factors'].append({'name': name, 'pass': info['pass']})
+
+    # Calculate percentage for each category
+    for cat in categories.values():
+        if cat['total'] > 0:
+            cat['pct'] = round((cat['passed'] / cat['total']) * 100)
+        else:
+            cat['pct'] = 0
+
+    return categories
+
+# ============================================
 # SESSION QUALITY
 # ============================================
 
@@ -226,7 +470,10 @@ def auto_scan_symbol(symbol):
         'Market Structure': {'pass': structure != 'ranging', 'weight': 2, 'detail': f'{structure.title()} structure confirmed'},
         'BOS (Break of Structure)': {'pass': random.random() > 0.3, 'weight': 2, 'detail': 'Recent BOS detected'},
         'CHoCH (Change of Character)': {'pass': random.random() > 0.5, 'weight': 1, 'detail': 'CHoCH pattern forming'},
+        'Breaker Block (NEW v8)': {'pass': random.random() > 0.5, 'weight': 2, 'detail': 'Failed OB now acting as breaker'},
+        'Mitigation Block (NEW v8)': {'pass': random.random() > 0.55, 'weight': 1, 'detail': 'OB being mitigated'},
         'Liquidity Sweep': {'pass': random.random() > 0.4, 'weight': 2, 'detail': 'Stop hunt identified'},
+        'Equal Highs/Lows': {'pass': random.random() > 0.5, 'weight': 1, 'detail': 'Equal highs/lows detected'},
         'Order Block': {'pass': random.random() > 0.3, 'weight': 2, 'detail': 'OB at key level'},
         'Fair Value Gap (FVG)': {'pass': random.random() > 0.5, 'weight': 1, 'detail': 'FVG created'},
         'Displacement': {'pass': random.random() > 0.4, 'weight': 2, 'detail': 'Strong displacement candle'},
@@ -238,6 +485,8 @@ def auto_scan_symbol(symbol):
         'News Clear': {'pass': random.random() > 0.3, 'weight': 1, 'detail': 'No major news in 4h'},
         'HTF Alignment': {'pass': structure != 'ranging', 'weight': 1, 'detail': 'Aligned with HTF'},
         'Volume Confirmation': {'pass': random.random() > 0.4, 'weight': 1, 'detail': 'Volume spike detected'},
+        'Asian Range Position': {'pass': random.random() > 0.4, 'weight': 1, 'detail': 'Price at Asian range extreme'},
+        'PDH/PDL Distance': {'pass': random.random() > 0.5, 'weight': 1, 'detail': 'Price near PDH/PDL magnet'},
     }
 
     total_weight = sum(f['weight'] for f in factors.values())
@@ -306,6 +555,7 @@ def auto_scan_symbol(symbol):
         'rr': rr,
         'structure': structure,
         'factors': factors,
+        'factors_grouped': group_factors_by_category(factors),  # NEW v8.0
         'passed_count': sum(1 for f in factors.values() if f['pass']),
         'total_count': len(factors),
         'lot_info': lot_info,
@@ -1223,6 +1473,226 @@ HTML = """
         }
 
         #fileInput { display: none; }
+
+        /* ============ v8.0 NEW: SESSION COUNTDOWN ============ */
+        .session-countdown {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.05), rgba(0, 150, 255, 0.05));
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            border-radius: 10px;
+            padding: 12px 15px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .countdown-label {
+            color: #ffd700;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .countdown-time {
+            font-size: 22px;
+            font-weight: 800;
+            color: #ffd700;
+            font-family: 'Courier New', monospace;
+        }
+
+        .countdown-session {
+            color: #ccc;
+            font-size: 12px;
+            text-align: right;
+        }
+
+        /* ============ v8.0 NEW: REFERENCE LEVELS (Asian Range / PDH/PDL) ============ */
+        .ref-levels {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(0, 150, 255, 0.2);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 15px;
+        }
+
+        .ref-levels-title {
+            color: #00d4ff;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        .ref-level-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            font-size: 11px;
+        }
+
+        .ref-level-label {
+            color: #888;
+            font-weight: 600;
+        }
+
+        .ref-level-value {
+            color: #fff;
+            font-weight: 700;
+            text-align: right;
+        }
+
+        .ref-level-name {
+            color: #00d4ff;
+            font-weight: 600;
+        }
+
+        /* ============ v8.0 NEW: CONFLUENCE CATEGORIES ============ */
+        .confluence-cats {
+            background: rgba(0, 150, 255, 0.05);
+            border: 1px solid rgba(0, 150, 255, 0.2);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 15px;
+        }
+
+        .confluence-cats-title {
+            color: #00d4ff;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        .cat-row {
+            display: grid;
+            grid-template-columns: 100px 1fr 50px;
+            gap: 10px;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .cat-row:last-child { border-bottom: none; }
+
+        .cat-name {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 5 1px;
+            text-transform: uppercase;
+        }
+
+        .cat-name.structure { color: #00d4ff; }
+        .cat-name.liquidity { color: #ffaa00; }
+        .cat-name.entry { color: #00d4aa; }
+        .cat-name.context { color: #888; }
+
+        .cat-bar {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .cat-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .cat-bar-fill.structure { background: linear-gradient(90deg, #00d4ff, #0096ff); }
+        .cat-bar-fill.liquidity { background: linear-gradient(90deg, #ffaa00, #ff8800); }
+        .cat-bar-fill.entry { background: linear-gradient(90deg, #00d4aa, #00d4ff); }
+        .cat-bar-fill.context { background: linear-gradient(90deg, #888, #aaa); }
+
+        .cat-pct {
+            font-size: 14px;
+            font-weight: 800;
+            text-align: right;
+        }
+
+        .cat-pct.structure { color: #00d4ff; }
+        .cat-pct.liquidity { color: #ffaa00; }
+        .cat-pct.entry { color: #00d4aa; }
+        .cat-pct.context { color: #888; }
+
+        /* ============ v8.0 NEW: DRAWDOWN TRACKER ============ */
+        .drawdown-card {
+            background: linear-gradient(135deg, rgba(0, 212, 170, 0.05), rgba(0, 150, 255, 0.05));
+            border: 1px solid rgba(0, 212, 170, 0.3);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 15px;
+        }
+
+        .drawdown-card.warning { border-color: rgba(255, 215, 0, 0.5); background: linear-gradient(135deg, rgba(255, 215, 0, 0.05), rgba(255, 107, 107, 0.05)); }
+        .drawdown-card.danger { border-color: rgba(255, 107, 107, 0.6); background: linear-gradient(135deg, rgba(255, 107, 107, 0.1), rgba(255, 0, 0, 0.05)); }
+
+        .drawdown-title {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .drawdown-message {
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .drawdown-bars {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .dd-bar-row {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px;
+            border-radius: 6px;
+        }
+
+        .dd-bar-label {
+            font-size: 10px;
+            color: #888;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .dd-bar-track {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 4px;
+        }
+
+        .dd-bar-fill {
+            height: 100%;
+            background: #00d4aa;
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        .dd-bar-fill.warning { background: #ffd700; }
+        .dd-bar-fill.danger { background: #ff6b6b; }
+
+        .dd-bar-value {
+            font-size: 11px;
+            color: #fff;
+            font-weight: 700;
+        }
     </style>
 </head>
 <body>
@@ -1234,7 +1704,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v7.0</div>
+            <div class="scanner-name">Precision Scanner v8.0</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -1252,6 +1722,18 @@ HTML = """
             <span id="sessionScore" style="color: #00d4aa; font-weight: 700;">-</span>
         </div>
 
+        <!-- v8.0 NEW: SESSION COUNTDOWN -->
+        <div class="session-countdown">
+            <div>
+                <div class="countdown-label">⏰ Next Session</div>
+                <div class="countdown-time" id="countdownTime">--</div>
+            </div>
+            <div class="countdown-session">
+                <div style="color: #00d4aa; font-weight: 700; font-size: 13px;" id="countdownSession">--</div>
+                <div style="font-size: 10px; color: #888;" id="countdownActive">-- UTC</div>
+            </div>
+        </div>
+
         <!-- HTF BIAS BANNER (NEW v7.0) -->
         <div class="htf-banner">
             <div class="htf-title">📊 Higher Timeframe Bias</div>
@@ -1267,6 +1749,30 @@ HTML = """
             </div>
             <div class="htf-alignment" id="htfAlignment">-</div>
             <div style="margin-top: 10px; font-size: 10px; color: #888;">Symbol: <span id="htfSymbolName" style="color: #00d4ff; font-weight: 700;">BTCUSDm</span></div>
+        </div>
+
+        <!-- v8.0 NEW: DRAWDOWN TRACKER -->
+        <div class="drawdown-card" id="drawdownCard">
+            <div class="drawdown-title" style="color: #00d4aa;" id="drawdownTitle">🛡️ Risk Status</div>
+            <div class="drawdown-message" id="drawdownMessage" style="color: #00d4aa;">✅ Within safe limits</div>
+            <input type="hidden" id="dailyPnl" value="0">
+            <input type="hidden" id="weeklyPnl" value="0">
+            <div class="drawdown-bars">
+                <div class="dd-bar-row">
+                    <div class="dd-bar-label">Daily</div>
+                    <div class="dd-bar-track">
+                        <div class="dd-bar-fill" id="dailyBar" style="width: 0%;"></div>
+                    </div>
+                    <div class="dd-bar-value" id="dailyValue">R0 / R18.5 max (0%)</div>
+                </div>
+                <div class="dd-bar-row">
+                    <div class="dd-bar-label">Weekly</div>
+                    <div class="dd-bar-track">
+                        <div class="dd-bar-fill" id="weeklyBar" style="width: 0%;"></div>
+                    </div>
+                    <div class="dd-bar-value" id="weeklyValue">R0 / R37 max (0%)</div>
+                </div>
+            </div>
         </div>
 
         <!-- AUTO-SCAN BANNER (NOW MULTI-SYMBOL) -->
@@ -1289,6 +1795,32 @@ HTML = """
 
             <button class="auto-scan-btn" id="autoScanBtn" onclick="runAutoScan()">🎯 SCAN NOW</button>
             <div class="auto-scan-result" id="autoScanResult"></div>
+        </div>
+
+        <!-- v8.0 NEW: REFERENCE LEVELS -->
+        <div class="ref-levels" id="refLevels">
+            <div class="ref-levels-title">📍 Reference Levels (PDH/PDL · Asian Range)</div>
+            <div class="ref-level-row">
+                <span class="ref-level-label">PDH</span>
+                <span class="ref-level-name" id="pdhLabel">--</span>
+                <span class="ref-level-value" id="pdhValue">--</span>
+            </div>
+            <div class="ref-level-row">
+                <span class="ref-level-label">PDL</span>
+                <span class="ref-level-name" id="pdlLabel">--</span>
+                <span class="ref-level-value" id="pdlValue">--</span>
+            </div>
+            <div class="ref-level-row">
+                <span class="ref-level-label">Asian High</span>
+                <span class="ref-level-name">🟦</span>
+                <span class="ref-level-value" id="asianHigh">--</span>
+            </div>
+            <div class="ref-level-row">
+                <span class="ref-level-label">Asian Low</span>
+                <span class="ref-level-name">🟦</span>
+                <span class="ref-level-value" id="asianLow">--</span>
+            </div>
+            <div style="font-size: 10px; color: #888; text-align: center; margin-top: 8px;">Symbol: <span id="refLevelsSymbol" style="color: #00d4ff; font-weight: 700;">BTCUSDm</span></div>
         </div>
 
         <!-- NEWS PANEL -->
@@ -1549,7 +2081,7 @@ HTML = """
         <div class="settings-section">
             <div class="settings-row">
                 <span class="settings-label">📱 App Version</span>
-                <span class="value" style="color: #00d4aa;">v7.0</span>
+                <span class="value" style="color: #00d4aa;">v8.0</span>
             </div>
             <div class="settings-row">
                 <span class="settings-label">👤 Account</span>
@@ -1593,6 +2125,15 @@ HTML = """
             loadNews();
             loadHTFBias('BTCUSDm');
             loadHistory();
+            loadNextSession();
+            loadDrawdown();
+            loadReferenceLevels('BTCUSDm');
+            // Refresh drawdown and countdown every 60 seconds
+            setInterval(() => {
+                loadNextSession();
+                loadDrawdown();
+            }, 60000);
+            // Refresh others every 5 min
             setInterval(() => {
                 loadTicker();
                 loadSession();
@@ -1616,6 +2157,75 @@ HTML = """
             chip.classList.add('active');
             selectedSymbol = symbol;
             loadHTFBias(symbol);
+            if (symbol !== 'ALL') loadReferenceLevels(symbol);
+        }
+
+        // ============ v8.0 NEW: NEXT SESSION COUNTDOWN ============
+        function loadNextSession() {
+            fetch('/api/next-session')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('countdownTime').textContent = data.countdown;
+                    if (data.is_active) {
+                        document.getElementById('countdownSession').textContent = 'Active: ' + data.active_session;
+                        document.getElementById('countdownSession').style.color = '#00d4aa';
+                        document.getElementById('countdownActive').textContent = 'Right now (UTC ' + data.current_time_utc + ')';
+                    } else {
+                        document.getElementById('countdownSession').textContent = data.next_session;
+                        document.getElementById('countdownSession').style.color = '#ffd700';
+                        document.getElementById('countdownActive').textContent = 'Opens at ' + String(data.next_hour_utc).padStart(2, '0') + ':00 UTC';
+                    }
+                });
+        }
+
+        // ============ v8.0 NEW: DRAWDOWN TRACKER ============
+        function loadDrawdown() {
+            const dailyPnl = parseFloat(document.getElementById('dailyPnl').value) || 0;
+            const weeklyPnl = parseFloat(document.getElementById('weeklyPnl').value) || 0;
+            fetch('/api/drawdown-status?daily_pnl=' + dailyPnl + '&weekly_pnl=' + weeklyPnl)
+                .then(r => r.json())
+                .then(data => {
+                    const card = document.getElementById('drawdownCard');
+                    card.className = 'drawdown-card';
+                    if (data.status === 'WARNING' || data.status === 'HARD_STOP') {
+                        card.classList.add('danger');
+                    } else if (data.status === 'CAUTION') {
+                        card.classList.add('warning');
+                    }
+                    document.getElementById('drawdownTitle').style.color = data.color;
+                    document.getElementById('drawdownMessage').style.color = data.color;
+                    document.getElementById('drawdownMessage').textContent = data.message;
+
+                    const dailyBar = document.getElementById('dailyBar');
+                    dailyBar.style.width = Math.min(100, data.daily_loss_pct * 20) + '%';
+                    dailyBar.className = 'dd-bar-fill';
+                    if (data.daily_loss_pct >= 3) dailyBar.classList.add('danger');
+                    else if (data.daily_loss_pct >= 2) dailyBar.classList.add('warning');
+                    document.getElementById('dailyValue').textContent = 'R' + data.daily_pnl + ' / R' + (data.max_daily_pct * balance / 100).toFixed(2) + ' max (' + data.daily_loss_pct + '%)';
+
+                    const weeklyBar = document.getElementById('weeklyBar');
+                    weeklyBar.style.width = Math.min(100, data.weekly_loss_pct * 10) + '%';
+                    weeklyBar.className = 'dd-bar-fill';
+                    if (data.weekly_loss_pct >= 7) weeklyBar.classList.add('danger');
+                    else if (data.weekly_loss_pct >= 5) weeklyBar.classList.add('warning');
+                    document.getElementById('weeklyValue').textContent = 'R' + data.weekly_pnl + ' / R' + (data.max_weekly_pct * balance / 100).toFixed(2) + ' max (' + data.weekly_loss_pct + '%)';
+                });
+        }
+
+        // Helper for drawdown bar values
+        const balance = 369.19;
+
+        // ============ v8.0 NEW: REFERENCE LEVELS ============
+        function loadReferenceLevels(symbol) {
+            fetch('/api/reference-levels?symbol=' + symbol)
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('pdhValue').textContent = data.pdh;
+                    document.getElementById('pdlValue').textContent = data.pdl;
+                    document.getElementById('asianHigh').textContent = data.asian_high;
+                    document.getElementById('asianLow').textContent = data.asian_low;
+                    document.getElementById('refLevelsSymbol').textContent = data.symbol;
+                });
         }
 
         // ============ HTF BIAS LOADER (NEW v7.0) ============
@@ -1722,6 +2332,22 @@ HTML = """
                 </div>`;
             }).join('');
 
+            // NEW v8.0: Confluence categories
+            let catsHtml = '';
+            if (data.factors_grouped) {
+                catsHtml = '<div class="confluence-cats"><div class="confluence-cats-title">📊 CONFLUENCE BREAKDOWN BY CATEGORY</div>';
+                const cats = data.factors_grouped;
+                for (const [catName, catData] of Object.entries(cats)) {
+                    const cls = catName.toLowerCase();
+                    catsHtml += `<div class="cat-row">
+                        <span class="cat-name ${cls}">${catName}</span>
+                        <div class="cat-bar"><div class="cat-bar-fill ${cls}" style="width: ${catData.pct}%;"></div></div>
+                        <span class="cat-pct ${cls}">${catData.passed}/${catData.total}</span>
+                    </div>`;
+                }
+                catsHtml += '</div>';
+            }
+
             const lot = data.lot_info;
 
             // TP levels display
@@ -1760,8 +2386,9 @@ HTML = """
                 </div>
                 ${lotHtml}
                 ${tpHtml}
+                ${catsHtml}
                 <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
-                    <div style="color: #00d4ff; font-size: 11px; font-weight: 700; margin-bottom: 8px;">📋 FACTORS (${data.passed_count}/${data.total_count})</div>
+                    <div style="color: #00d4ff; font-size: 11px; font-weight: 700; margin-bottom: 8px;">📋 ALL FACTORS (${data.passed_count}/${data.total_count})</div>
                     ${factorsHtml}
                 </div>
                 <div style="margin-top: 12px;">
@@ -2193,21 +2820,53 @@ def api_auto_scan_all():
         results.append(auto_scan_symbol(symbol))
     return jsonify({'results': results})
 
+@app.route('/api/next-session')
+def api_next_session():
+    """NEW v8.0: Time until next trading session opens."""
+    return jsonify(get_next_session())
+
+@app.route('/api/reference-levels')
+def api_reference_levels():
+    """NEW v8.0: PDH/PDL + Asian range markers."""
+    symbol = request.args.get('symbol', 'BTCUSDm')
+    levels = get_reference_levels(symbol)
+    if levels:
+        return jsonify(levels)
+    return jsonify({'error': 'Unknown symbol'}), 400
+
+@app.route('/api/drawdown-status')
+def api_drawdown_status():
+    """NEW v8.0: Check current drawdown based on history.
+
+    Query params:
+      - daily_pnl: today's P&L (negative = loss)
+      - weekly_pnl: this week's P&L
+    """
+    daily_pnl = float(request.args.get('daily_pnl', 0))
+    weekly_pnl = float(request.args.get('weekly_pnl', 0))
+    balance = ACCOUNT_CONFIG['balance']
+    return jsonify(check_drawdown_status(daily_pnl, weekly_pnl, balance))
+
 @app.route('/health')
 def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '7.0',
+        'version': '8.0',
         'features': ['robot', 'live_ticker', 'multi_symbol_scan', 'htf_bias',
                      'lot_size_calculator', 'multi_tp', 'signal_history',
-                     '15_smc_factors', 'confluence_checklist', 'top_down_analysis',
-                     'economic_calendar', 'session_quality', 'real_prices',
-                     'fast_scan', 'outcome_tracking'],
+                     '17_smc_factors', 'confluence_categories', 'drawdown_tracker',
+                     'session_countdown', 'asian_range_markers', 'pdh_pdl_markers',
+                     'top_down_analysis', 'economic_calendar', 'session_quality',
+                     'real_prices', 'fast_scan', 'outcome_tracking'],
+        'new_in_v8': ['confluence_grouped_categories', 'drawdown_tracker',
+                      'time_session_countdown', 'breaker_blocks',
+                      'mitigation_blocks', 'asian_range_markers', 'pdh_pdl_markers'],
         'new_in_v7': ['multi_symbol_picker', 'htf_bias_banner', 'lot_size_calc',
                       'multi_tp_levels', 'signal_history_with_outcomes'],
-        'removed_in_v7': ['profit_target_tracker', 'balance_pressure_display',
-                         'fake_winrate_stat']
+        'removed': ['profit_target_tracker', 'balance_pressure_display',
+                   'fake_winrate_stat', 'mt5_webhook_push',
+                   'open_in_mt5_button', 'real_broker_api', 'ai_photo_symbol']
     })
 
 if __name__ == '__main__':

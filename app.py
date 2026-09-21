@@ -1,28 +1,33 @@
 """
-Elite Alpha EA - v8.1 — Settings Cleanup
+Elite Alpha EA - v8.2 — Manual Chart Analysis Safety Fix
 Partner: Sbusiso Magwaza | Broker: Exness MT5Real9 | Account: 134644333
 
-NEW IN v8.1:
+NEW IN v8.2:
+  ✅ FIX CRITICAL BUG: Manual Chart Analysis was generating RANDOM entry prices
+      - Previous version: Entry was random ±0.4% from base, not based on chart
+      - Could give SELL signal at price 3 days old, missing current trend
+      - Now: User enters current price + trend manually = accurate signals
+  ✅ Added: DEMO warning banner (clear that this is not real AI image analysis)
+  ✅ Added: Manual price input field (you type current MT5 price)
+  ✅ Added: "Use Live Price" button (auto-fills from server price feed)
+  ✅ Added: Trend selector dropdown (Bullish/Bearish/Ranging/Auto)
+  ✅ Removed: Disabled state on Analyze button (no longer needs image upload)
+
+NEW IN v8.1 (preserved):
   ✅ Settings tab completely rebuilt:
-      - REMOVED: Dark Mode toggle (does nothing, app is dark)
-      - REMOVED: Push Notifications toggle (controlled by MT5, not app)
-      - REMOVED: Fake "Scan Interval 5 min" (no auto-scan)
-      - REMOVED: Confusing "Used for lot calc" label
-  ✅ ADDED: Editable Account Balance (input field, saves to device)
-  ✅ ADDED: Editable Risk % buttons (0.5% / 1% / 1.5% / 2%)
-  ✅ ADDED: Editable Min Confidence buttons (65%/75%/85%)
-  ✅ ADDED: Live risk preview (shows R-amount based on balance×risk%)
-  ✅ ADDED: Signal History stats panel in Settings
-  ✅ ADDED: Clear History button
-  ✅ ADDED: Save Settings button + confirmation
-  ✅ ADDED: Honest copy in MT5 setup guide (no more false claims)
+      - Editable Account Balance
+      - Editable Risk % buttons
+      - Editable Min Confidence buttons
+      - Live risk preview
+      - Clear History button
+      - Save Settings button
 
 NEW IN v8.0 (preserved):
-  ✅ Confluence grouped by category (Structure / Liquidity / Entry / Context)
-  ✅ Drawdown tracker (daily/weekly loss limits with auto-stop)
-  ✅ Time-of-day countdown ("London opens in 2h 15m")
-  ✅ Breaker Blocks + Mitigation Blocks (20 SMC factors total)
-  ✅ Asian Range + PDH/PDL markers (visual reference levels)
+  ✅ Confluence grouped by category
+  ✅ Drawdown tracker
+  ✅ Time-of-day countdown
+  ✅ Breaker Blocks + Mitigation Blocks
+  ✅ Asian Range + PDH/PDL markers
 
 NEW IN v8.0:
   ✅ Confluence grouped by category (Structure / Liquidity / Entry / Context)
@@ -1880,16 +1885,12 @@ HTML = """
     <div class="tab-content" id="scan-tab">
         <div class="card-title" style="padding: 10px 0;">📊 Manual Chart Analysis</div>
 
-        <div class="upload-card" id="uploadCard" onclick="openGallery()">
-            <span class="upload-icon">📤</span>
-            <div class="upload-text">Upload Chart Screenshot</div>
-            <div class="upload-hint">Choose from your phone gallery</div>
-            <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)">
-        </div>
-
-        <div class="preview-section" id="previewSection">
-            <img id="previewImage" src="" alt="Chart">
-            <button class="change-btn" onclick="openGallery()">📤 Change Image</button>
+        <!-- v8.2 NEW: DEMO WARNING BANNER -->
+        <div style="background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 107, 107, 0.1)); border: 2px solid #ffd700; border-radius: 12px; padding: 14px; margin-bottom: 15px; text-align: center;">
+            <div style="font-size: 14px; font-weight: 800; color: #ffd700; margin-bottom: 6px;">⚠️ DEMO MODE</div>
+            <div style="font-size: 12px; color: #ccc; line-height: 1.5;">
+                This analyzer uses <strong style="color: #ffd700;">simulated SMC logic</strong> with the price YOU enter below. It does <strong style="color: #ff6b6b;">NOT</strong> read your screenshot with AI. Use the price field for accurate results.
+            </div>
         </div>
 
         <div class="card">
@@ -1918,8 +1919,28 @@ HTML = """
                 </select>
             </div>
 
-            <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()" disabled>🤖 Analyze Chart</button>
-        </div>
+            <!-- v8.2 NEW: Manual price input field -->
+            <div class="form-group">
+                <label>💲 Current Price (from your MT5 chart)</label>
+                <input type="number" id="currentPrice" placeholder="e.g. 30532.69" step="0.0001">
+                <button onclick="useLivePrice()" style="margin-top: 6px; padding: 6px 12px; background: rgba(0, 150, 255, 0.1); border: 1px solid rgba(0, 150, 255, 0.3); color: #00d4ff; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: 600;">
+                    📊 Use Live Price from Server
+                </button>
+            </div>
+
+            <!-- v8.2 NEW: Trend hint -->
+            <div class="form-group">
+                <label>📈 Visible Trend (from your chart)</label>
+                <select id="visibleTrend">
+                    <option value="auto">🤖 Auto-detect from HTF bias</option>
+                    <option value="bullish">🟢 Bullish (Higher highs/lows)</option>
+                    <option value="bearish">🔴 Bearish (Lower highs/lows)</option>
+                    <option value="ranging">🟡 Ranging / Choppy</option>
+                </select>
+            </div>
+
+            <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()">🤖 Analyze Setup</button>
+        </div></old_text>
 
         <div class="loading" id="loading">
             <div class="spinner"></div>
@@ -2715,6 +2736,8 @@ HTML = """
         function analyzeImage() {
             const symbol = document.getElementById('symbol').value;
             const timeframe = document.getElementById('timeframe').value;
+            const priceInput = document.getElementById('currentPrice').value;
+            const trendInput = document.getElementById('visibleTrend').value;
 
             document.getElementById('loading').style.display = 'block';
             document.getElementById('previewSection').style.display = 'none';
@@ -2728,9 +2751,23 @@ HTML = """
                     'GBPUSDm': 1.2734, 'USDJPYm': 149.85, 'USTECm': 29450.19, 'US30m': 42850.00
                 };
                 const basePrice = basePriceMap[symbol] || 100;
-                const currentPrice = basePrice + (Math.random() - 0.5) * (basePrice * 0.008);
 
-                const structure = Math.random() > 0.6 ? 'bullish' : Math.random() > 0.2 ? 'bearish' : 'ranging';
+                // v8.2: Use user-entered price OR fall back to base + small variance
+                let currentPrice;
+                if (priceInput && parseFloat(priceInput) > 0) {
+                    currentPrice = parseFloat(priceInput);
+                } else {
+                    currentPrice = basePrice + (Math.random() - 0.5) * (basePrice * 0.008);
+                }
+
+                // v8.2: Use user-selected trend OR random if "auto"
+                let structure;
+                if (trendInput === 'bullish' || trendInput === 'bearish' || trendInput === 'ranging') {
+                    structure = trendInput;
+                } else {
+                    structure = Math.random() > 0.6 ? 'bullish' : Math.random() > 0.2 ? 'bearish' : 'ranging';
+                }
+
                 const bos = Math.random() > 0.3;
                 const choch = Math.random() > 0.5;
                 const liquidity = Math.random() > 0.4;
@@ -2928,6 +2965,19 @@ HTML = """
             }
         }
 
+        // v8.2 NEW: Use live price from server
+        function useLivePrice() {
+            const symbol = document.getElementById('symbol').value;
+            fetch('/api/prices')
+                .then(r => r.json())
+                .then(data => {
+                    if (data[symbol]) {
+                        document.getElementById('currentPrice').value = data[symbol].price;
+                        alert('✅ Loaded current price: ' + data[symbol].price + ' for ' + symbol);
+                    }
+                });
+        }
+
         function resetForm() {
             document.getElementById('result').style.display = 'none';
             document.getElementById('previewSection').style.display = 'none';
@@ -3033,14 +3083,18 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '8.1',
+        'version': '8.2',
         'features': ['robot', 'live_ticker', 'multi_symbol_scan', 'htf_bias',
                      'lot_size_calculator', 'multi_tp', 'signal_history',
                      '20_smc_factors', 'confluence_categories', 'drawdown_tracker',
                      'session_countdown', 'asian_range_markers', 'pdh_pdl_markers',
                      'top_down_analysis', 'economic_calendar', 'session_quality',
                      'real_prices', 'fast_scan', 'outcome_tracking',
-                     'editable_balance', 'editable_risk_pct', 'editable_min_confidence'],
+                     'editable_balance', 'editable_risk_pct', 'editable_min_confidence',
+                     'manual_chart_v8_2_safe'],
+        'new_in_v8_2': ['demo_warning_banner', 'manual_price_input',
+                        'use_live_price_button', 'trend_selector_dropdown',
+                        'fixed_random_entry_bug'],
         'new_in_v8_1': ['editable_account_balance', 'editable_risk_pct_buttons',
                         'editable_min_confidence_buttons', 'live_risk_preview',
                         'history_stats_in_settings', 'clear_history_button',

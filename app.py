@@ -1,6 +1,28 @@
 """
-Elite Alpha EA - v8.0 UPGRADE
+Elite Alpha EA - v8.1 — Settings Cleanup
 Partner: Sbusiso Magwaza | Broker: Exness MT5Real9 | Account: 134644333
+
+NEW IN v8.1:
+  ✅ Settings tab completely rebuilt:
+      - REMOVED: Dark Mode toggle (does nothing, app is dark)
+      - REMOVED: Push Notifications toggle (controlled by MT5, not app)
+      - REMOVED: Fake "Scan Interval 5 min" (no auto-scan)
+      - REMOVED: Confusing "Used for lot calc" label
+  ✅ ADDED: Editable Account Balance (input field, saves to device)
+  ✅ ADDED: Editable Risk % buttons (0.5% / 1% / 1.5% / 2%)
+  ✅ ADDED: Editable Min Confidence buttons (65%/75%/85%)
+  ✅ ADDED: Live risk preview (shows R-amount based on balance×risk%)
+  ✅ ADDED: Signal History stats panel in Settings
+  ✅ ADDED: Clear History button
+  ✅ ADDED: Save Settings button + confirmation
+  ✅ ADDED: Honest copy in MT5 setup guide (no more false claims)
+
+NEW IN v8.0 (preserved):
+  ✅ Confluence grouped by category (Structure / Liquidity / Entry / Context)
+  ✅ Drawdown tracker (daily/weekly loss limits with auto-stop)
+  ✅ Time-of-day countdown ("London opens in 2h 15m")
+  ✅ Breaker Blocks + Mitigation Blocks (20 SMC factors total)
+  ✅ Asian Range + PDH/PDL markers (visual reference levels)
 
 NEW IN v8.0:
   ✅ Confluence grouped by category (Structure / Liquidity / Entry / Context)
@@ -2018,10 +2040,11 @@ HTML = """
         </div>
     </div>
 
-    <!-- SETTINGS TAB -->
+    <!-- SETTINGS TAB v8.1 — CLEANED UP -->
     <div class="tab-content" id="settings-tab">
         <div class="card-title" style="padding: 10px 0;">⚙️ Settings</div>
 
+        <!-- MT5 Push Notifications Setup -->
         <div class="setup-instructions">
             <h4>📱 MT5 Push Notifications Setup</h4>
             <ol>
@@ -2032,69 +2055,105 @@ HTML = """
                 <li>Enable notifications & paste your MetaQuotes ID</li>
                 <li>Click <code>Test</code> to verify it works</li>
             </ol>
-            <p style="margin-top: 10px;"><strong style="color: #00d4aa;">✅ Elite Alpha EA sends push notifications when signals trigger!</strong></p>
+            <p style="margin-top: 10px;">Pair MT5 with this app to get push alerts. Setup takes 2 min.</p>
         </div>
 
-        <div class="settings-section">
-            <div class="settings-row">
-                <span class="settings-label">🔔 Push Notifications</span>
-                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+        <!-- v8.1 NEW: Editable Account Settings -->
+        <div class="setup-instructions">
+            <h4>💼 Account & Risk Settings</h4>
+            <p style="font-size: 11px; color: #888; margin-bottom: 12px;">Used for lot size calculation. Saved on this device.</p>
+
+            <div style="margin-bottom: 14px;">
+                <label style="display: block; color: #888; font-size: 11px; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px;">💰 Account Balance (R)</label>
+                <input type="number" id="settingsBalanceInput" value="369.19" min="100" step="0.01"
+                    style="width: 100%; padding: 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0,150,255,0.3); color: #00d4aa; border-radius: 8px; font-size: 16px; font-weight: 700;">
             </div>
-            <div class="settings-row">
-                <span class="settings-label">📰 News Alerts</span>
-                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+
+            <div style="margin-bottom: 14px;">
+                <label style="display: block; color: #888; font-size: 11px; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">📊 Risk per Trade</label>
+                <div id="riskButtons" style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px;">
+                    <button class="risk-btn" data-risk="0.5" onclick="setRisk(0.5, this)" style="padding: 10px 4px; background: rgba(0,150,255,0.1); border: 1px solid rgba(0,150,255,0.3); color: #ccc; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">0.5%</button>
+                    <button class="risk-btn active" data-risk="1.0" onclick="setRisk(1.0, this)" style="padding: 10px 4px; background: rgba(0,212,170,0.2); border: 1px solid #00d4aa; color: #00d4aa; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; box-shadow: 0 0 10px rgba(0,212,170,0.3);">1%</button>
+                    <button class="risk-btn" data-risk="1.5" onclick="setRisk(1.5, this)" style="padding: 10px 4px; background: rgba(0,150,255,0.1); border: 1px solid rgba(0,150,255,0.3); color: #ccc; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">1.5%</button>
+                    <button class="risk-btn" data-risk="2.0" onclick="setRisk(2.0, this)" style="padding: 10px 4px; background: rgba(0,150,255,0.1); border: 1px solid rgba(0,150,255,0.3); color: #ccc; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">2%</button>
+                </div>
             </div>
-            <div class="settings-row">
-                <span class="settings-label">🌙 Dark Mode</span>
-                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+
+            <div style="margin-bottom: 14px;">
+                <label style="display: block; color: #888; font-size: 11px; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">🎯 Min Confidence</label>
+                <div id="confButtons" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+                    <button class="conf-btn" data-conf="65" onclick="setConfidence(65, this)" style="padding: 10px 4px; background: rgba(0,150,255,0.1); border: 1px solid rgba(0,150,255,0.3); color: #ccc; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;">Aggressive<br><span style="font-size: 9px; font-weight: 400; opacity: 0.7;">65%</span></button>
+                    <button class="conf-btn active" data-conf="75" onclick="setConfidence(75, this)" style="padding: 10px 4px; background: rgba(0,212,170,0.2); border: 1px solid #00d4aa; color: #00d4aa; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 0 10px rgba(0,212,170,0.3);">Balanced<br><span style="font-size: 9px; font-weight: 400; opacity: 0.7;">75%</span></button>
+                    <button class="conf-btn" data-conf="85" onclick="setConfidence(85, this)" style="padding: 10px 4px; background: rgba(0,150,255,0.1); border: 1px solid rgba(0,150,255,0.3); color: #ccc; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;">Conservative<br><span style="font-size: 9px; font-weight: 400; opacity: 0.7;">85%</span></button>
+                </div>
             </div>
-            <div class="settings-row">
-                <span class="settings-label">📈 Multi-Symbol Scanner</span>
-                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+
+            <!-- Live risk preview -->
+            <div style="background: rgba(0,0,0,0.3); border-radius: 8px; padding: 12px; margin-top: 14px;">
+                <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px;">
+                    <span style="color: #888;">Risk Amount:</span>
+                    <span id="liveRiskAmount" style="color: #ffd700; font-weight: 700;">R3.69</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px;">
+                    <span style="color: #888;">Max Daily Loss (5%):</span>
+                    <span id="liveMaxDaily" style="color: #ff6b6b; font-weight: 700;">R18.46</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px;">
+                    <span style="color: #888;">Max Weekly Loss (10%):</span>
+                    <span id="liveMaxWeekly" style="color: #ff6b6b; font-weight: 700;">R36.92</span>
+                </div>
+            </div>
+
+            <button onclick="saveSettings()" style="width: 100%; margin-top: 14px; padding: 12px; background: linear-gradient(135deg, #00d4aa, #0096ff); color: #000; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer;">
+                💾 Save Settings
+            </button>
+            <div id="saveConfirm" style="display: none; text-align: center; margin-top: 10px; color: #00d4aa; font-size: 12px; font-weight: 700;">
+                ✅ Saved!
             </div>
         </div>
 
-        <!-- Account info (Settings only — not on Home) -->
-        <div class="settings-section">
-            <div class="settings-row">
-                <span class="settings-label">💼 Account Setup (Risk)</span>
-                <span class="value" style="color: #888; font-size: 12px;">Used for lot calc</span>
+        <!-- v8.1 NEW: Signal History Stats + Clear -->
+        <div class="setup-instructions">
+            <h4>📜 Signal History</h4>
+            <div style="background: rgba(0,0,0,0.3); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px;">
+                    <span style="color: #888;">Total Signals:</span>
+                    <span id="historyTotal" style="color: #00d4ff; font-weight: 700;">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px;">
+                    <span style="color: #888;">Wins:</span>
+                    <span id="historyWins" style="color: #00d4aa; font-weight: 700;">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px;">
+                    <span style="color: #888;">Losses:</span>
+                    <span id="historyLosses" style="color: #ff6b6b; font-weight: 700;">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px;">
+                    <span style="color: #888;">Breakeven:</span>
+                    <span id="historyBE" style="color: #ffd700; font-weight: 700;">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 8px 0 4px; margin-top: 6px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 13px;">
+                    <span style="color: #fff; font-weight: 700;">Win Rate:</span>
+                    <span id="historyWinRate" style="color: #ffd700; font-weight: 800; font-size: 16px;">0%</span>
+                </div>
             </div>
-            <div class="settings-row">
-                <span class="settings-label">💰 Account Balance</span>
-                <span class="value" style="color: #00d4aa;" id="settingsBalance">R369.19</span>
-            </div>
-            <div class="settings-row">
-                <span class="settings-label">📊 Risk per Trade</span>
-                <span class="value">1%</span>
-            </div>
-            <div class="settings-row">
-                <span class="settings-label">🎯 Min Confidence</span>
-                <span class="value">75%</span>
-            </div>
-            <div class="settings-row">
-                <span class="settings-label">⏰ Scan Interval</span>
-                <span class="value">5 min</span>
-            </div>
+            <button onclick="clearHistory()" style="width: 100%; padding: 10px; background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.4); color: #ff6b6b; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">
+                🗑️ Clear All History
+            </button>
         </div>
 
-        <div class="settings-section">
-            <div class="settings-row">
-                <span class="settings-label">📱 App Version</span>
-                <span class="value" style="color: #00d4aa;">v8.0</span>
-            </div>
-            <div class="settings-row">
-                <span class="settings-label">👤 Account</span>
-                <span class="value">Sbusiso</span>
-            </div>
-            <div class="settings-row">
-                <span class="settings-label">🏢 Broker</span>
-                <span class="value">Exness</span>
-            </div>
-            <div class="settings-row">
-                <span class="settings-label">🆔 Account #</span>
-                <span class="value">134644333</span>
-            </div>
+        <!-- App Info (simplified) -->
+        <div class="setup-instructions">
+            <h4>📱 About Elite Alpha EA</h4>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v8.1</span></div>
+            <div class="info-row"><span class="label">Account:</span><span class="value">Sbusiso</span></div>
+            <div class="info-row"><span class="label">Broker:</span><span class="value">Exness</span></div>
+            <div class="info-row"><span class="label">Account #:</span><span class="value">134644333</span></div>
+            <div class="info-row"><span class="label">SMC Factors:</span><span class="value">20</span></div>
+            <div class="info-row"><span class="label">Symbols:</span><span class="value">7 pairs</span></div>
+            <p style="margin-top: 12px; font-size: 11px; color: #888; text-align: center;">
+                Precision Trading, Zero Emotion
+            </p>
         </div>
     </div>
 
@@ -2128,6 +2187,7 @@ HTML = """
             loadNextSession();
             loadDrawdown();
             loadReferenceLevels('BTCUSDm');
+            loadSettings(); // v8.1 NEW: Load saved settings
             // Refresh drawdown and countdown every 60 seconds
             setInterval(() => {
                 loadNextSession();
@@ -2140,6 +2200,13 @@ HTML = """
                 loadNews();
                 loadHTFBias(selectedSymbol);
             }, 300000);
+            // v8.1 NEW: Update risk calc when balance changes
+            setInterval(() => {
+                const balanceInput = document.getElementById('settingsBalanceInput');
+                if (balanceInput && document.activeElement !== balanceInput) {
+                    updateLiveRiskCalc();
+                }
+            }, 2000);
         };
 
         // ============ TAB SWITCH (FIXED from v6) ============
@@ -2473,10 +2540,27 @@ HTML = """
             const decided = wins + losses;
             const winRate = decided > 0 ? Math.round((wins / decided) * 100) : 0;
 
-            document.getElementById('totalSignals').textContent = total;
-            document.getElementById('winsCount').textContent = wins;
-            document.getElementById('lossesCount').textContent = losses;
-            document.getElementById('realWinRate').textContent = winRate + '%';
+            // Update Home tab stats
+            const totalEl = document.getElementById('totalSignals');
+            if (totalEl) totalEl.textContent = total;
+            const winsEl = document.getElementById('winsCount');
+            if (winsEl) winsEl.textContent = wins;
+            const lossesEl = document.getElementById('lossesCount');
+            if (lossesEl) lossesEl.textContent = losses;
+            const wrEl = document.getElementById('realWinRate');
+            if (wrEl) wrEl.textContent = winRate + '%';
+
+            // v8.1 NEW: Update Settings tab stats (if elements exist)
+            const histTotal = document.getElementById('historyTotal');
+            if (histTotal) histTotal.textContent = total;
+            const histWins = document.getElementById('historyWins');
+            if (histWins) histWins.textContent = wins;
+            const histLosses = document.getElementById('historyLosses');
+            if (histLosses) histLosses.textContent = losses;
+            const histBE = document.getElementById('historyBE');
+            if (histBE) histBE.textContent = be;
+            const histWR = document.getElementById('historyWinRate');
+            if (histWR) histWR.textContent = winRate + '%';
 
             const listDiv = document.getElementById('historyList');
             if (total === 0) {
@@ -2508,6 +2592,103 @@ HTML = """
                     </div>
                 `;
             }).join('');
+        }
+
+        // v8.1 NEW: Clear signal history
+        function clearHistory() {
+            if (!confirm('Clear ALL signal history? This cannot be undone.')) return;
+            signalHistory = [];
+            localStorage.removeItem('eliteHistory');
+            loadHistory();
+            alert('✅ History cleared.');
+        }
+
+        // v8.1 NEW: Settings save/load
+        function saveSettings() {
+            const balance = parseFloat(document.getElementById('settingsBalanceInput').value) || 369.19;
+            const risk = parseFloat(document.querySelector('.risk-btn.active').dataset.risk);
+            const conf = parseFloat(document.querySelector('.conf-btn.active').dataset.conf);
+            const settings = { balance, risk, conf };
+            localStorage.setItem('eliteSettings', JSON.stringify(settings));
+            updateLiveRiskCalc();
+            const cf = document.getElementById('saveConfirm');
+            cf.style.display = 'block';
+            setTimeout(() => { cf.style.display = 'none'; }, 2000);
+        }
+
+        function loadSettings() {
+            const saved = localStorage.getItem('eliteSettings');
+            if (saved) {
+                try {
+                    const s = JSON.parse(saved);
+                    if (s.balance) document.getElementById('settingsBalanceInput').value = s.balance;
+                    if (s.risk) {
+                        document.querySelectorAll('.risk-btn').forEach(b => {
+                            if (parseFloat(b.dataset.risk) === s.risk) {
+                                setRisk(s.risk, b);
+                            }
+                        });
+                    }
+                    if (s.conf) {
+                        document.querySelectorAll('.conf-btn').forEach(b => {
+                            if (parseFloat(b.dataset.conf) === s.conf) {
+                                setConfidence(s.conf, b);
+                            }
+                        });
+                    }
+                } catch (e) { /* ignore */ }
+            }
+            updateLiveRiskCalc();
+        }
+
+        function setRisk(value, btn) {
+            document.querySelectorAll('.risk-btn').forEach(b => {
+                b.classList.remove('active');
+                b.style.background = 'rgba(0,150,255,0.1)';
+                b.style.border = '1px solid rgba(0,150,255,0.3)';
+                b.style.color = '#ccc';
+                b.style.boxShadow = 'none';
+            });
+            if (btn) {
+                btn.classList.add('active');
+                btn.style.background = 'rgba(0,212,170,0.2)';
+                btn.style.border = '1px solid #00d4aa';
+                btn.style.color = '#00d4aa';
+                btn.style.boxShadow = '0 0 10px rgba(0,212,170,0.3)';
+            }
+            updateLiveRiskCalc();
+        }
+
+        function setConfidence(value, btn) {
+            document.querySelectorAll('.conf-btn').forEach(b => {
+                b.classList.remove('active');
+                b.style.background = 'rgba(0,150,255,0.1)';
+                b.style.border = '1px solid rgba(0,150,255,0.3)';
+                b.style.color = '#ccc';
+                b.style.boxShadow = 'none';
+            });
+            if (btn) {
+                btn.classList.add('active');
+                btn.style.background = 'rgba(0,212,170,0.2)';
+                btn.style.border = '1px solid #00d4aa';
+                btn.style.color = '#00d4aa';
+                btn.style.boxShadow = '0 0 10px rgba(0,212,170,0.3)';
+            }
+        }
+
+        function updateLiveRiskCalc() {
+            const balance = parseFloat(document.getElementById('settingsBalanceInput').value) || 369.19;
+            const riskBtn = document.querySelector('.risk-btn.active');
+            const riskPct = riskBtn ? parseFloat(riskBtn.dataset.risk) : 1.0;
+            const riskAmount = (balance * riskPct / 100).toFixed(2);
+            const maxDaily = (balance * 0.05).toFixed(2);
+            const maxWeekly = (balance * 0.10).toFixed(2);
+            const ra = document.getElementById('liveRiskAmount');
+            if (ra) ra.textContent = 'R' + riskAmount;
+            const md = document.getElementById('liveMaxDaily');
+            if (md) md.textContent = 'R' + maxDaily;
+            const mw = document.getElementById('liveMaxWeekly');
+            if (mw) mw.textContent = 'R' + maxWeekly;
         }
 
         // ============ MANUAL UPLOAD + ANALYZE (kept from v6) ============
@@ -2852,13 +3033,20 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '8.0',
+        'version': '8.1',
         'features': ['robot', 'live_ticker', 'multi_symbol_scan', 'htf_bias',
                      'lot_size_calculator', 'multi_tp', 'signal_history',
-                     '17_smc_factors', 'confluence_categories', 'drawdown_tracker',
+                     '20_smc_factors', 'confluence_categories', 'drawdown_tracker',
                      'session_countdown', 'asian_range_markers', 'pdh_pdl_markers',
                      'top_down_analysis', 'economic_calendar', 'session_quality',
-                     'real_prices', 'fast_scan', 'outcome_tracking'],
+                     'real_prices', 'fast_scan', 'outcome_tracking',
+                     'editable_balance', 'editable_risk_pct', 'editable_min_confidence'],
+        'new_in_v8_1': ['editable_account_balance', 'editable_risk_pct_buttons',
+                        'editable_min_confidence_buttons', 'live_risk_preview',
+                        'history_stats_in_settings', 'clear_history_button',
+                        'save_settings_button'],
+        'removed_in_v8_1': ['dark_mode_toggle', 'push_notifications_toggle',
+                            'fake_scan_interval', 'confusing_lot_calc_label'],
         'new_in_v8': ['confluence_grouped_categories', 'drawdown_tracker',
                       'time_session_countdown', 'breaker_blocks',
                       'mitigation_blocks', 'asian_range_markers', 'pdh_pdl_markers'],

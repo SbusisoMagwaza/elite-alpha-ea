@@ -1,20 +1,20 @@
 """
-Elite Alpha EA - v8.8 — LIVE PRICES from Yahoo Finance (NO API KEY NEEDED!)
+Elite Alpha EA - v8.9 — SIMPLE. JUST WORKS. NO TYPING NEEDED!
 Partner: Sbusiso Magwaza | Broker: Exness MT5Real9 | Account: 134644333
 
-🎉 NEW IN v8.8 (THE FIX PARTNER ASKED FOR):
-  ✅ REAL-TIME LIVE prices from Yahoo Finance (FREE, no API key!)
-  ✅ Symbol → Yahoo ticker mapping:
-      - BTCUSDm → BTC-USD
-      - XAUUSDm → XAUUSD=X
-      - EURUSDm → EURUSD=X
-      - GBPUSDm → GBPUSD=X
-      - USDJPYm → JPY=X
-      - USTECm → NQ=F (NASDAQ 100 futures)
-      - US30m → YM=F (Dow Jones futures)
+🎉 NEW IN v8.9 (THE REAL FINAL FIX):
+  ✅ LIVE prices from Yahoo Finance (FREE, no API key!) - already working in v8.8
+  ✅ REMOVED "TYPE YOUR MT5 PRICE" box — partner was confused by it
+  ✅ REMOVED OCR price picker buttons — partner too slow to pick
+  ✅ REMOVED leftover </old_text> tags from previous edits
+  ✅ OCR now auto-selects MIDDLE price (most likely current price)
+  ✅ Just pick symbol → tap SCAN → done. App does everything.
+
+🎉 PRESERVED FROM v8.8:
+  ✅ REAL-TIME LIVE prices from Yahoo Finance
+  ✅ Symbol → Yahoo ticker mapping for all 7 pairs
   ✅ Auto-scan NOW uses LIVE price automatically
   ✅ Cache 60 seconds to avoid API spam
-  ✅ Manual price override still works (for when you want your exact price)
   ✅ Graceful fallback to placeholder if Yahoo API fails
 
 PRESERVED FROM v8.7:
@@ -1923,7 +1923,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v8.8</div></old_text></old_text>
+            <div class="scanner-name">Precision Scanner v8.9</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -1998,13 +1998,13 @@ HTML = """
         <div class="auto-scan-banner">
             <div class="auto-scan-icon">🎯</div>
             <div class="auto-scan-text">PRECISION SCAN</div>
-            <div class="auto-scan-sub">Pick a symbol & scan 15 SMC factors</div>
+            <div class="auto-scan-sub">Pick a symbol & tap SCAN — live price is automatic</div>
 
-            <!-- v8.7 NEW: Manual price entry (uses YOUR real broker price) -->
-            <div style="background: rgba(255, 215, 0, 0.1); border: 1px solid rgba(255, 215, 0, 0.4); border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: left;">
-                <div style="font-size: 11px; color: #ffd700; font-weight: 700; margin-bottom: 6px;">💲 TYPE YOUR MT5 PRICE (most accurate!)</div>
-                <input type="number" id="autoScanPrice" placeholder="e.g. 52196.50" step="0.0001" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,215,0,0.4); color: #ffd700; border-radius: 6px; font-size: 14px; font-weight: 700;">
-                <div style="font-size: 10px; color: #888; margin-top: 4px;">If empty, uses placeholder price (~accurate but not live)</div>
+            <!-- v8.9 NEW: Live price banner showing current price BEFORE scan -->
+            <div id="livePricePreview" style="background: rgba(0, 212, 170, 0.1); border: 1px solid rgba(0, 212, 170, 0.4); border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: center;">
+                <div style="font-size: 10px; color: #00d4aa; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px;">📡 LIVE PRICE (auto from Yahoo)</div>
+                <div style="font-size: 22px; color: #00d4aa; font-weight: 800;" id="livePriceValue">—</div>
+                <div style="font-size: 10px; color: #888; margin-top: 2px;" id="livePriceSource">Loading...</div>
             </div>
 
             <!-- NEW: Symbol picker chips -->
@@ -2160,7 +2160,7 @@ HTML = """
             </div>
 
             <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()">🤖 Analyze Setup</button>
-        </div></old_text>
+        </div>
 
         <div class="loading" id="loading">
             <div class="spinner"></div>
@@ -2386,7 +2386,7 @@ HTML = """
         <!-- App Info (simplified) -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v8.8</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v8.9</span></div>
             <div class="info-row"><span class="label">Account:</span><span class="value">Sbusiso</span></div>
             <div class="info-row"><span class="label">Broker:</span><span class="value">Exness</span></div>
             <div class="info-row"><span class="label">Account #:</span><span class="value">134644333</span></div>
@@ -2417,6 +2417,7 @@ HTML = """
         // ============ STATE (NEW v7.0) ============
         let selectedSymbol = 'BTCUSDm';
         let signalHistory = []; // Local cache of signals with outcomes
+        let livePricesCache = {}; // v8.9 NEW: cache live prices for the preview banner
 
         // ============ INIT ============
         window.onload = function() {
@@ -2429,10 +2430,12 @@ HTML = """
             loadDrawdown();
             loadReferenceLevels('BTCUSDm');
             loadSettings(); // v8.1 NEW: Load saved settings
+            updateLivePricePreview(); // v8.9 NEW: Show live price banner
             // Refresh drawdown and countdown every 60 seconds
             setInterval(() => {
                 loadNextSession();
                 loadDrawdown();
+                updateLivePricePreview(); // v8.9 NEW
             }, 60000);
             // Refresh others every 5 min
             setInterval(() => {
@@ -2450,6 +2453,35 @@ HTML = """
             }, 2000);
         };
 
+        // ============ v8.9 NEW: Live price preview banner ============
+        function updateLivePricePreview() {
+            fetch('/api/prices')
+                .then(r => r.json())
+                .then(data => {
+                    livePricesCache = data;
+                    const info = data[selectedSymbol];
+                    const priceEl = document.getElementById('livePriceValue');
+                    const sourceEl = document.getElementById('livePriceSource');
+                    if (info) {
+                        let priceStr;
+                        if (selectedSymbol === 'BTCUSDm') priceStr = '$' + info.price.toLocaleString('en-US', {maximumFractionDigits: 0});
+                        else if (selectedSymbol === 'XAUUSDm') priceStr = '$' + info.price.toFixed(2);
+                        else if (selectedSymbol === 'USDJPYm') priceStr = info.price.toFixed(2);
+                        else if (selectedSymbol === 'USTECm' || selectedSymbol === 'US30m') priceStr = info.price.toFixed(0);
+                        else priceStr = info.price.toFixed(4);
+                        priceEl.textContent = priceStr;
+                        sourceEl.textContent = (info.source === 'live' ? '🟢 LIVE from Yahoo Finance' : '🟡 Estimated (price feed unavailable)') + ' · ' + selectedSymbol;
+                    } else {
+                        priceEl.textContent = '—';
+                        sourceEl.textContent = '';
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('livePriceValue').textContent = '—';
+                    document.getElementById('livePriceSource').textContent = '⚠️ Could not fetch';
+                });
+        }
+
         // ============ TAB SWITCH (FIXED from v6) ============
         function switchTab(tab, btn) {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -2466,6 +2498,7 @@ HTML = """
             selectedSymbol = symbol;
             loadHTFBias(symbol);
             if (symbol !== 'ALL') loadReferenceLevels(symbol);
+            updateLivePricePreview(); // v8.9 NEW: refresh live price banner when symbol changes
             // v8.6: Update scan button to show which symbol will be scanned
             const scanBtnLabel = document.getElementById('scanBtnSymbol');
             if (scanBtnLabel) {
@@ -2613,20 +2646,16 @@ HTML = """
                 });
         }
 
-        // ============ MULTI-SYMBOL AUTO-SCAN (NEW v7.0) ============
+        // ============ MULTI-SYMBOL AUTO-SCAN (NEW v7.0) — v8.9 SIMPLIFIED ============
         function runAutoScan() {
             const resultDiv = document.getElementById('autoScanResult');
             resultDiv.style.display = 'block';
             resultDiv.innerHTML = '<div style="text-align: center;"><div class="spinner" style="margin: 10px auto;"></div><p style="color: #00d4aa;">Scanning ' + selectedSymbol + '...</p></div>';
 
-            // v8.7: Pass user's real price if typed (uses THEIR MT5 price)
+            // v8.9: Just use the live price automatically — no typing needed
             let url;
-            const userPriceEl = document.getElementById('autoScanPrice');
-            const userPrice = userPriceEl ? userPriceEl.value.trim() : '';
             if (selectedSymbol === 'ALL') {
                 url = '/api/auto-scan-all';
-            } else if (userPrice && parseFloat(userPrice) > 0) {
-                url = '/api/auto-scan?symbol=' + selectedSymbol + '&price=' + userPrice;
             } else {
                 url = '/api/auto-scan?symbol=' + selectedSymbol;
             }
@@ -2639,6 +2668,9 @@ HTML = """
                     } else {
                         renderSingleResult(data);
                     }
+                })
+                .catch(err => {
+                    resultDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #ff6b6b;">❌ Scan failed. Pull down to refresh and try again.</div>';
                 });
         }
 
@@ -2983,58 +3015,39 @@ HTML = """
             reader.readAsDataURL(file);
         }
 
-        // v8.3 NEW: OCR engine - reads price from chart image
+        // v8.9 NEW: OCR engine - auto-picks MIDDLE price (most likely current price)
         async function runOCR(imageDataUrl) {
-            const statusEl = document.getElementById('ocrStatus');
-            const resultEl = document.getElementById('ocrResult');
-            statusEl.innerHTML = '🔍 Reading chart prices... (this takes ~10 seconds first time)';
-            statusEl.style.color = '#ffd700';
+            const statusEl = document.getElementById("ocrStatus");
+            const resultEl = document.getElementById("ocrResult");
+            statusEl.innerHTML = "🔍 Reading chart prices... (first scan takes ~10 sec)";
+            statusEl.style.color = "#ffd700";
 
             try {
-                // Use Tesseract.js to read text from image
-                const result = await Tesseract.recognize(imageDataUrl, 'eng', {
+                const result = await Tesseract.recognize(imageDataUrl, "eng", {
                     logger: m => {
-                        if (m.status === 'recognizing text') {
+                        if (m.status === "recognizing text") {
                             statusEl.innerHTML = `🔍 Reading... ${Math.round(m.progress * 100)}%`;
                         }
                     }
                 });
 
                 const text = result.data.text;
-                console.log('OCR text:', text);
+                console.log("OCR text:", text);
 
-                // Extract price numbers - look for 4-6 digit numbers (typical prices)
-                const priceRegex = new RegExp('\\\\b(\\\\d{2,6}\\\\.\\\\d{1,5})\\\\b', 'g');
+                const priceRegex = new RegExp("\\\\b(\\\\d{2,6}\\\\.\\\\d{1,5})\\\\b", "g");
                 const matches = text.match(priceRegex) || [];
 
-                // Filter out unlikely prices (too small like 0.5, too round like 100.00)
                 const validPrices = matches
                     .map(m => parseFloat(m))
                     .filter(p => p > 1 && p < 100000);
 
                 if (validPrices.length > 0) {
-                    // v8.5 FIX: Show TOP 5 prices as buttons instead of auto-picking wrong one
-                    // OCR often picks top-of-chart or other non-current price
-                    // User picks the right one (the current price = highlighted box)
+                    const sortedPrices = [...new Set(validPrices)].sort((a, b) => a - b);
+                    const middleIndex = Math.floor(sortedPrices.length / 2);
+                    const smartPrice = sortedPrices[middleIndex];
 
-                    // Count frequency of each price (axis labels appear multiple times)
-                    const priceFreq = {};
-                    validPrices.forEach(p => {
-                        priceFreq[p] = (priceFreq[p] || 0) + 1;
-                    });
-
-                    // Take unique prices, sort by frequency (most common = most reliable)
-                    const uniquePrices = [...new Set(validPrices)].sort((a, b) => {
-                        const freqDiff = (priceFreq[b] || 0) - (priceFreq[a] || 0);
-                        return freqDiff !== 0 ? freqDiff : b - a;
-                    });
-
-                    // Take top 5 most common (axis labels) — these are reliable
-                    const topPrices = uniquePrices.slice(0, 5);
-
-                    // Symbol detection
                     let detectedSymbol = null;
-                    const symbolPatterns = ['USTECm', 'BTCUSDm', 'XAUUSDm', 'EURUSDm', 'GBPUSDm', 'USDJPYm', 'US30m'];
+                    const symbolPatterns = ["USTECm", "BTCUSDm", "XAUUSDm", "EURUSDm", "GBPUSDm", "USDJPYm", "US30m"];
                     for (const sym of symbolPatterns) {
                         if (text.toUpperCase().includes(sym.toUpperCase())) {
                             detectedSymbol = sym;
@@ -3043,29 +3056,22 @@ HTML = """
                     }
 
                     if (detectedSymbol) {
-                        document.getElementById('symbol').value = detectedSymbol;
+                        document.getElementById("symbol").value = detectedSymbol;
                     }
 
-                    statusEl.innerHTML = '✅ Detected ' + (detectedSymbol || 'symbol') + '. Tap the price below:';
-                    statusEl.style.color = '#00d4aa';
+                    document.getElementById("currentPrice").value = smartPrice;
+                    statusEl.innerHTML = "✅ Auto-detected " + (detectedSymbol || "symbol") + " @ " + smartPrice + " (middle of chart range)";
+                    statusEl.style.color = "#00d4aa";
 
-                    // Show price picker buttons
-                    let priceButtonsHtml = '<div style="background: rgba(0,150,255,0.1); border: 1px solid rgba(0,150,255,0.3); border-radius: 8px; padding: 10px; margin-top: 10px;">';
-                    priceButtonsHtml += '<div style="font-size: 11px; color: #00d4ff; font-weight: 700; margin-bottom: 8px;">TAP the price from your chart:</div>';
-                    priceButtonsHtml += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">';
-                    topPrices.forEach(p => {
-                        priceButtonsHtml += '<button onclick="document.getElementById(\\'currentPrice\\').value=' + p + '; this.parentNode.parentNode.style.display=\\'none\\';" style="padding: 10px 4px; background: rgba(0,212,170,0.15); border: 1px solid rgba(0,212,170,0.4); color: #00d4aa; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer;">' + p + '</button>';
-                    });
-                    priceButtonsHtml += '</div></div>';
-                    resultEl.innerHTML = priceButtonsHtml;
+                    resultEl.innerHTML = `<button onclick=\"document.getElementById('currentPrice').focus(); document.getElementById('currentPrice').select();\" style=\"margin-top: 8px; padding: 8px 16px; background: rgba(255,215,0,0.1); border: 1px solid rgba(255,215,0,0.3); color: #ffd700; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 600;\">⚠️ Price wrong? Tap to type yours</button>`;
                 } else {
-                    statusEl.innerHTML = 'Could not read price. Please type it below.';
-                    statusEl.style.color = '#ff6b6b';
+                    statusEl.innerHTML = "⚠️ Could not read price. Please type it below.";
+                    statusEl.style.color = "#ff6b6b";
                 }
             } catch (err) {
-                console.error('OCR error:', err);
-                statusEl.innerHTML = '❌ OCR failed. Please type the price below.';
-                statusEl.style.color = '#ff6b6b';
+                console.error("OCR error:", err);
+                statusEl.innerHTML = "❌ OCR failed. Please type the price below.";
+                statusEl.style.color = "#ff6b6b";
             }
         }
 
@@ -3456,7 +3462,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '8.8',
+        'version': '8.9',
         'features': ['robot', 'live_ticker', 'multi_symbol_scan', 'htf_bias',
                      'lot_size_calculator', 'multi_tp', 'signal_history',
                      '20_smc_factors', 'confluence_categories', 'drawdown_tracker',
@@ -3465,6 +3471,8 @@ def health():
                      'real_prices', 'fast_scan', 'outcome_tracking',
                      'editable_balance', 'editable_risk_pct', 'editable_min_confidence',
                      'manual_chart_v8_2_safe'],
+        'new_in_v8_9': ['removed_manual_price_input', 'smart_ocr_middle_price', 'auto_live_price_preview'],
+        'new_in_v8_8': ['yahoo_finance_live_prices', 'no_api_key_needed'],
         'new_in_v8_4': ['iphone_upload_two_buttons', 'camera_gallery_split',
                         'best_action_hidden_when_wait', 'best_action_color_dynamic'],
         'new_in_v8_3': ['tesseract_ocr_engine', 'auto_price_from_photo',

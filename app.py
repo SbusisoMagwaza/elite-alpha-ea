@@ -1,5 +1,5 @@
 """
-Elite Alpha EA - v8.9 — SIMPLE. JUST WORKS. NO TYPING NEEDED!
+Elite Alpha EA - v8.9 — LIVE SCANNER FIX. NO TYPING NEEDED!
 Partner: Sbusiso Magwaza | Broker: Exness MT5Real9 | Account: 134644333
 
 🎉 NEW IN v8.9 (THE REAL FINAL FIX):
@@ -7,32 +7,27 @@ Partner: Sbusiso Magwaza | Broker: Exness MT5Real9 | Account: 134644333
   ✅ REMOVED "TYPE YOUR MT5 PRICE" box — partner was confused by it
   ✅ REMOVED OCR price picker buttons — partner too slow to pick
   ✅ REMOVED leftover </old_text> tags from previous edits
-  ✅ OCR now auto-selects MIDDLE price (most likely current price)
+  ✅ OCR identifies the symbol; scanner uses the live price automatically
+  ✅ No wrong chart-axis price picker and no manual price typing
   ✅ Just pick symbol → tap SCAN → done. App does everything.
 
 🎉 PRESERVED FROM v8.8:
   ✅ REAL-TIME LIVE prices from Yahoo Finance
   ✅ Symbol → Yahoo ticker mapping for all 7 pairs
   ✅ Auto-scan NOW uses LIVE price automatically
+  ✅ Scan tab also shows the selected symbol live price
   ✅ Cache 60 seconds to avoid API spam
   ✅ Graceful fallback to placeholder if Yahoo API fails
 
 PRESERVED FROM v8.7:
-  ✅ "TYPE YOUR MT5 PRICE" input field on Home
   ✅ Both scanners hardened
-  ✅ OCR price picker
+  ✅ Smart screenshot upload: detects symbol, then loads live price
 
 PARTNER THIS MEANS: You don't need to type anything! The app knows the price.
 
-NEW IN v8.7 (CRITICAL FIX — partner was confused by wrong prices):
-  ✅ Added "TYPE YOUR MT5 PRICE" input field on Home scanner
-  ✅ If you type your actual MT5 price, signal uses YOUR real price
-  ✅ No more confusion with hardcoded placeholder prices
-  ✅ Both scanners now use same input system (paste/type price from MT5)
-
 PRESERVED FROM v8.6:
   ✅ Both scanners hardened, symbol shown on button
-  ✅ OCR price picker (user picks correct price)
+  ✅ Smart screenshot upload: detects symbol, then loads live price (user picks correct price)
   ✅ iPhone upload fix
   ✅ WAIT signal hides fake prices
   ✅ All 7 symbols return correct prices
@@ -56,7 +51,7 @@ NEW IN v8.6:
       - US30m: $41k-$45k
 
 PRESERVED FROM v8.5:
-  ✅ OCR price picker buttons (user picks correct price from chart)
+  ✅ Smart screenshot upload: detects symbol, then loads live price buttons (user picks correct price from chart)
   ✅ iPhone upload fix (Camera + Gallery buttons)
   ✅ WAIT signal hides fake prices
   ✅ "Best to Buy" hidden when WAIT
@@ -66,12 +61,8 @@ PRESERVED FROM v8.3:
   ✅ All Home tab features intact
 
 NEW IN v8.5:
-  ✅ FIX: OCR no longer auto-fills wrong price
-      - OCR reads multiple prices from chart (top, current, axis labels)
-      - Shows top 5 most common as clickable BUTTONS
-      - User taps the CORRECT one (the highlighted current price box)
-      - Auto-filled price is now a "guess" not the truth
-  ✅ Smart sorting: Most frequent prices shown first (axis labels are most reliable)
+  ✅ Chart uploads no longer use unreliable price-axis OCR
+  ✅ Live price feed is used for the scan price
 
 PRESERVED FROM v8.4:
   ✅ iPhone upload fix (Camera + Gallery buttons)
@@ -109,7 +100,7 @@ NEW IN v8.3:
   ✅ Falls back to manual input if OCR fails
 
 PRESERVED FROM v8.2:
-  ✅ Fixed random price bug (uses user-entered or OCR-detected price)
+  ✅ Fixed random price bug (uses the live feed price)
   ✅ Trend selector dropdown (Bullish/Bearish/Ranging/Auto)
   ✅ Honest "DEMO MODE" copy if you don't upload photo
 
@@ -282,8 +273,13 @@ ECONOMIC_EVENTS = [
 ACCOUNT_CONFIG = {
     'balance': 369.19,        # R-amount, used for risk calc
     'risk_pct': 1.0,          # 1% per trade
-    'min_confidence': 75,     # Minimum signal confidence
+    'min_confidence': 75,     # Minimum signal confidence for a directional result
 }
+
+# v8.9 FIX: This used to be hard-coded to 80 inside auto_scan_symbol(), while
+# Settings showed 75%. A scan showing 77% therefore always became WAIT. Keep
+# one clear gate so the displayed setting and the actual scanner agree.
+SIGNAL_MIN_CONFIDENCE = ACCOUNT_CONFIG['min_confidence']
 
 # ============================================
 # IN-MEMORY SIGNAL HISTORY (resets on server restart)
@@ -656,13 +652,22 @@ def calculate_lot_size(symbol, sl_distance, balance, risk_pct):
 # MULTI-SYMBOL AUTO-SCAN ENGINE
 # ============================================
 
-def auto_scan_symbol(symbol, custom_price=None):
+def auto_scan_symbol(symbol, custom_price=None, min_confidence=None):
     """Scans any symbol with same 15-factor SMC engine.
     custom_price: optional real price from user's MT5 (overrides placeholder).
+    min_confidence: optional client-selected gate (65/75/85 from Settings).
     """
     info = LIVE_PRICES.get(symbol)
     if not info:
         return None
+
+    # The Settings tab can choose Aggressive (65), Balanced (75), or
+    # Conservative (85). Keep the server default safe when no value is sent.
+    try:
+        signal_gate = int(min_confidence) if min_confidence is not None else SIGNAL_MIN_CONFIDENCE
+    except (TypeError, ValueError):
+        signal_gate = SIGNAL_MIN_CONFIDENCE
+    signal_gate = max(50, min(95, signal_gate))
 
     if custom_price and custom_price > 0:
         # v8.7: Use the REAL price the user typed from their MT5 chart
@@ -722,17 +727,17 @@ def auto_scan_symbol(symbol, custom_price=None):
     grade = 'C'
     strategy = 'No Setup'
 
-    if confidence >= 80 and structure == 'bullish':
+    if confidence >= signal_gate and structure == 'bullish':
         direction = 'BUY'
-        grade = 'A+' if confidence >= 85 else 'A'
+        grade = 'A+' if confidence >= 85 else ('A' if confidence >= 80 else 'B')
         strategy = 'PO3' if factors['Liquidity Sweep']['pass'] else 'BOS'
         sl_distance = current_price * 0.015
         sl = current_price - sl_distance
         tp = current_price + (sl_distance * 3.5)
         rr = '1:3.5'
-    elif confidence >= 80 and structure == 'bearish':
+    elif confidence >= signal_gate and structure == 'bearish':
         direction = 'SELL'
-        grade = 'A+' if confidence >= 85 else 'A'
+        grade = 'A+' if confidence >= 85 else ('A' if confidence >= 80 else 'B')
         strategy = 'PO3' if factors['Liquidity Sweep']['pass'] else 'BOS'
         sl_distance = current_price * 0.015
         sl = current_price + sl_distance
@@ -776,6 +781,10 @@ def auto_scan_symbol(symbol, custom_price=None):
         'passed_count': sum(1 for f in factors.values() if f['pass']),
         'total_count': len(factors),
         'lot_info': lot_info,
+        'signal_min_confidence': signal_gate,
+        'signal_reason': ('Directional setup passed the configured confidence gate.'
+                          if direction != 'WAIT' else
+                          f'WAIT: confidence {confidence}% is below the {signal_gate}% gate or market structure is ranging.'),
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
     }
 
@@ -2084,11 +2093,18 @@ HTML = """
     <div class="tab-content" id="scan-tab">
         <div class="card-title" style="padding: 10px 0;">📊 Manual Chart Analysis</div>
 
-        <!-- v8.3 NEW: How it works -->
+        <!-- v8.9 FIX: Same live-price theme as Home, now also on the scanner -->
+        <div id="scanLivePricePreview" style="background: rgba(0, 212, 170, 0.1); border: 1px solid rgba(0, 212, 170, 0.4); border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: center;">
+            <div style="font-size: 10px; color: #00d4aa; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px;">📡 LIVE PRICE USED FOR SCAN</div>
+            <div style="font-size: 22px; color: #00d4aa; font-weight: 800;" id="scanLivePriceValue">—</div>
+            <div style="font-size: 10px; color: #888; margin-top: 2px;" id="scanLivePriceSource">Loading...</div>
+        </div>
+
+        <!-- v8.9 FIX: Symbol-only OCR; price always comes from the live feed -->
         <div style="background: linear-gradient(135deg, rgba(0, 212, 170, 0.15), rgba(0, 150, 255, 0.1)); border: 2px solid rgba(0, 212, 170, 0.4); border-radius: 12px; padding: 14px; margin-bottom: 15px;">
-            <div style="font-size: 13px; font-weight: 800; color: #00d4aa; margin-bottom: 6px;">📸 v8.3 SMART OCR</div>
+            <div style="font-size: 13px; font-weight: 800; color: #00d4aa; margin-bottom: 6px;">📸 SMART CHART UPLOAD</div>
             <div style="font-size: 12px; color: #ccc; line-height: 1.5;">
-                Take a picture of your MT5 chart. The app reads the <strong style="color: #00d4aa;">price number</strong> on the right side and uses YOUR real price (not random). You still pick the trend.
+                Upload your MT5 chart. The app identifies the <strong style="color: #00d4aa;">symbol</strong> and uses the live price above automatically. No price picker and no typing while the market moves.
             </div>
         </div>
 
@@ -2120,7 +2136,7 @@ HTML = """
 
             <div class="form-group">
                 <label>💱 Symbol</label>
-                <select id="symbol">
+                <select id="symbol" onchange="updateScanLivePricePreview(); useLivePrice();">
                     <option value="XAUUSDm">XAUUSDm (Gold)</option>
                     <option value="BTCUSDm" selected>BTCUSDm (Bitcoin)</option>
                     <option value="EURUSDm">EURUSDm</option>
@@ -2142,11 +2158,9 @@ HTML = """
             </div>
 
             <div class="form-group">
-                <label>💲 Current Price (auto-detected from photo or type)</label>
-                <input type="number" id="currentPrice" placeholder="e.g. 30532.69" step="0.0001">
-                <button onclick="useLivePrice()" style="margin-top: 6px; padding: 6px 12px; background: rgba(0, 150, 255, 0.1); border: 1px solid rgba(0, 150, 255, 0.3); color: #00d4ff; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: 600;">
-                    📊 Or Use Live Price from Server
-                </button>
+                <label>💲 Scan Price (live automatically)</label>
+                <input type="text" id="currentPrice" value="" readonly placeholder="Waiting for live price..." style="color: #00d4aa; font-weight: 700;">
+                <div style="font-size: 11px; color: #888; margin-top: 5px;">✅ Price is loaded from the live feed — you do not need to type it.</div>
             </div>
 
             <div class="form-group">
@@ -2159,7 +2173,7 @@ HTML = """
                 </select>
             </div>
 
-            <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()">🤖 Analyze Setup</button>
+            <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()">🤖 Analyze Live Setup</button>
         </div>
 
         <div class="loading" id="loading">
@@ -2431,11 +2445,13 @@ HTML = """
             loadReferenceLevels('BTCUSDm');
             loadSettings(); // v8.1 NEW: Load saved settings
             updateLivePricePreview(); // v8.9 NEW: Show live price banner
+            updateScanLivePricePreview(); // v8.9 NEW: same live price on Scan tab
             // Refresh drawdown and countdown every 60 seconds
             setInterval(() => {
                 loadNextSession();
                 loadDrawdown();
                 updateLivePricePreview(); // v8.9 NEW
+                updateScanLivePricePreview(); // v8.9 NEW
             }, 60000);
             // Refresh others every 5 min
             setInterval(() => {
@@ -2482,12 +2498,48 @@ HTML = """
                 });
         }
 
+        // v8.9 FIX: The Scan tab uses the same live price feed as Home.
+        function updateScanLivePricePreview() {
+            const symbolEl = document.getElementById('symbol');
+            const symbol = symbolEl ? symbolEl.value : selectedSymbol;
+            const priceEl = document.getElementById('scanLivePriceValue');
+            const sourceEl = document.getElementById('scanLivePriceSource');
+            if (!priceEl || !sourceEl || !symbol) return;
+
+            fetch('/api/prices')
+                .then(r => r.json())
+                .then(data => {
+                    livePricesCache = data;
+                    const info = data[symbol];
+                    if (!info) {
+                        priceEl.textContent = '—';
+                        sourceEl.textContent = '⚠️ No price available';
+                        return;
+                    }
+                    let priceStr;
+                    if (symbol === 'BTCUSDm') priceStr = '$' + info.price.toLocaleString('en-US', {maximumFractionDigits: 0});
+                    else if (symbol === 'XAUUSDm') priceStr = '$' + Number(info.price).toFixed(2);
+                    else if (symbol === 'USDJPYm') priceStr = Number(info.price).toFixed(2);
+                    else if (symbol === 'USTECm' || symbol === 'US30m') priceStr = Number(info.price).toFixed(0);
+                    else priceStr = Number(info.price).toFixed(4);
+                    priceEl.textContent = priceStr;
+                    sourceEl.textContent = (info.source === 'live' ? '🟢 LIVE from Yahoo Finance' : '🟡 Estimated feed unavailable') + ' · ' + symbol;
+                    const input = document.getElementById('currentPrice');
+                    if (input) input.value = info.price;
+                })
+                .catch(() => {
+                    priceEl.textContent = '—';
+                    sourceEl.textContent = '⚠️ Could not fetch live price';
+                });
+        }
+
         // ============ TAB SWITCH (FIXED from v6) ============
         function switchTab(tab, btn) {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.nav-btn, .scan-nav-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(tab + '-tab').classList.add('active');
             if (btn) btn.classList.add('active');
+            if (tab === 'scan') updateScanLivePricePreview();
             window.scrollTo({top: 0, behavior: 'smooth'});
         }
 
@@ -2496,6 +2548,8 @@ HTML = """
             document.querySelectorAll('#symbolPicker .symbol-chip').forEach(c => c.classList.remove('active'));
             chip.classList.add('active');
             selectedSymbol = symbol;
+            const scanSymbolEl = document.getElementById('symbol');
+            if (scanSymbolEl && symbol !== 'ALL') scanSymbolEl.value = symbol;
             loadHTFBias(symbol);
             if (symbol !== 'ALL') loadReferenceLevels(symbol);
             updateLivePricePreview(); // v8.9 NEW: refresh live price banner when symbol changes
@@ -2652,12 +2706,16 @@ HTML = """
             resultDiv.style.display = 'block';
             resultDiv.innerHTML = '<div style="text-align: center;"><div class="spinner" style="margin: 10px auto;"></div><p style="color: #00d4aa;">Scanning ' + selectedSymbol + '...</p></div>';
 
-            // v8.9: Just use the live price automatically — no typing needed
+            // v8.9: Just use the live price automatically — no typing needed.
+            // Send the Settings confidence choice to the server too; previously
+            // that setting was saved locally but the scanner always used 80%.
+            const confBtn = document.querySelector('.conf-btn.active');
+            const minConfidence = confBtn ? confBtn.dataset.conf : '75';
             let url;
             if (selectedSymbol === 'ALL') {
-                url = '/api/auto-scan-all';
+                url = '/api/auto-scan-all?min_confidence=' + encodeURIComponent(minConfidence);
             } else {
-                url = '/api/auto-scan?symbol=' + selectedSymbol;
+                url = '/api/auto-scan?symbol=' + selectedSymbol + '&min_confidence=' + encodeURIComponent(minConfidence);
             }
 
             fetch(url)
@@ -2733,6 +2791,7 @@ HTML = """
                     <span class="badge gold">Grade ${data.grade}</span>
                     <span class="badge">${data.strategy}</span>
                 </div>
+                <div style="margin-bottom: 10px; padding: 9px; background: ${data.direction === 'WAIT' ? 'rgba(255,215,0,0.08)' : 'rgba(0,212,170,0.08)'}; border: 1px solid ${data.direction === 'WAIT' ? 'rgba(255,215,0,0.25)' : 'rgba(0,212,170,0.25)'}; border-radius: 8px; color: ${data.direction === 'WAIT' ? '#ffd700' : '#00d4aa'}; font-size: 11px; text-align: center;">${data.signal_reason || (data.direction === 'WAIT' ? 'No trade: setup did not pass the scanner gate.' : 'Directional setup passed the scanner gate.')}</div>
                 <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; margin-bottom: 10px;">
                     <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Entry:</span><span style="color: ${data.direction === 'WAIT' ? '#666' : '#fff'}; font-weight: 700;">${data.direction === 'WAIT' ? '— (no trade)' : data.entry}</span></div>
                     <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Stop Loss:</span><span style="color: ${data.direction === 'WAIT' ? '#666' : '#ff6b6b'}; font-weight: 700;">${data.direction === 'WAIT' ? '— (no trade)' : data.sl}</span></div>
@@ -3015,63 +3074,69 @@ HTML = """
             reader.readAsDataURL(file);
         }
 
-        // v8.9 NEW: OCR engine - auto-picks MIDDLE price (most likely current price)
+        // v8.9 FIX: OCR detects the symbol only. Price comes from the live feed.
+        // Chart-axis OCR is unreliable because it can select the top/old label.
         async function runOCR(imageDataUrl) {
             const statusEl = document.getElementById("ocrStatus");
             const resultEl = document.getElementById("ocrResult");
-            statusEl.innerHTML = "🔍 Reading chart prices... (first scan takes ~10 sec)";
+            const selectedBeforeScan = document.getElementById("symbol").value || "BTCUSDm";
+            statusEl.innerHTML = "🔍 Reading the chart symbol... (first scan takes ~10 sec)";
             statusEl.style.color = "#ffd700";
+            resultEl.innerHTML = "";
 
             try {
                 const result = await Tesseract.recognize(imageDataUrl, "eng", {
                     logger: m => {
                         if (m.status === "recognizing text") {
-                            statusEl.innerHTML = `🔍 Reading... ${Math.round(m.progress * 100)}%`;
+                            statusEl.innerHTML = `🔍 Reading symbol... ${Math.round(m.progress * 100)}%`;
                         }
                     }
                 });
 
-                const text = result.data.text;
+                const text = result.data.text || "";
                 console.log("OCR text:", text);
+                const compact = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
+                const symbolRules = [
+                    {symbol: "US30m", tokens: ["US30M", "US30", "DJI", "DOWJONES", "DOW"]},
+                    {symbol: "USTECm", tokens: ["USTECM", "USTEC", "NAS100", "NASDAQ", "NQF"]},
+                    {symbol: "XAUUSDm", tokens: ["XAUUSDM", "XAUUSD", "GOLD"]},
+                    {symbol: "BTCUSDm", tokens: ["BTCUSDM", "BTCUSD", "BITCOIN"]},
+                    {symbol: "EURUSDm", tokens: ["EURUSDM", "EURUSD"]},
+                    {symbol: "GBPUSDm", tokens: ["GBPUSDM", "GBPUSD"]},
+                    {symbol: "USDJPYm", tokens: ["USDJPYM", "USDJPY"]}
+                ];
 
-                const priceRegex = new RegExp("\\\\b(\\\\d{2,6}\\\\.\\\\d{1,5})\\\\b", "g");
-                const matches = text.match(priceRegex) || [];
-
-                const validPrices = matches
-                    .map(m => parseFloat(m))
-                    .filter(p => p > 1 && p < 100000);
-
-                if (validPrices.length > 0) {
-                    const sortedPrices = [...new Set(validPrices)].sort((a, b) => a - b);
-                    const middleIndex = Math.floor(sortedPrices.length / 2);
-                    const smartPrice = sortedPrices[middleIndex];
-
-                    let detectedSymbol = null;
-                    const symbolPatterns = ["USTECm", "BTCUSDm", "XAUUSDm", "EURUSDm", "GBPUSDm", "USDJPYm", "US30m"];
-                    for (const sym of symbolPatterns) {
-                        if (text.toUpperCase().includes(sym.toUpperCase())) {
-                            detectedSymbol = sym;
-                            break;
-                        }
+                let detectedSymbol = null;
+                for (const rule of symbolRules) {
+                    if (rule.tokens.some(token => compact.includes(token))) {
+                        detectedSymbol = rule.symbol;
+                        break;
                     }
-
-                    if (detectedSymbol) {
-                        document.getElementById("symbol").value = detectedSymbol;
-                    }
-
-                    document.getElementById("currentPrice").value = smartPrice;
-                    statusEl.innerHTML = "✅ Auto-detected " + (detectedSymbol || "symbol") + " @ " + smartPrice + " (middle of chart range)";
-                    statusEl.style.color = "#00d4aa";
-
-                    resultEl.innerHTML = `<button onclick=\"document.getElementById('currentPrice').focus(); document.getElementById('currentPrice').select();\" style=\"margin-top: 8px; padding: 8px 16px; background: rgba(255,215,0,0.1); border: 1px solid rgba(255,215,0,0.3); color: #ffd700; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 600;\">⚠️ Price wrong? Tap to type yours</button>`;
-                } else {
-                    statusEl.innerHTML = "⚠️ Could not read price. Please type it below.";
-                    statusEl.style.color = "#ff6b6b";
                 }
+
+                if (detectedSymbol) {
+                    document.getElementById("symbol").value = detectedSymbol;
+                } else {
+                    detectedSymbol = selectedBeforeScan;
+                }
+
+                // Never trust a random axis label as the current price.
+                // The same live feed used by Home supplies the scan price.
+                updateScanLivePricePreview();
+                useLivePrice();
+                statusEl.innerHTML = detectedSymbol
+                    ? "✅ Detected " + detectedSymbol + ". Live price loaded automatically — no typing needed."
+                    : "✅ Chart uploaded. Live price loaded for the selected symbol.";
+                statusEl.style.color = "#00d4aa";
+                resultEl.innerHTML = `<div style="padding: 9px; background: rgba(0,212,170,0.08); border: 1px solid rgba(0,212,170,0.25); border-radius: 7px; color: #00d4aa; font-size: 11px; text-align: center;">📡 Using the current live ${detectedSymbol} price — chart labels are not used.</div>`;
             } catch (err) {
                 console.error("OCR error:", err);
-                statusEl.innerHTML = "❌ OCR failed. Please type the price below.";
-                statusEl.style.color = "#ff6b6b";
+                // Upload still works if OCR cannot read the symbol: keep the selected symbol.
+                updateScanLivePricePreview();
+                useLivePrice();
+                statusEl.innerHTML = "⚠️ Symbol not readable. Using selected " + selectedBeforeScan + " and loading its live price.";
+                statusEl.style.color = "#ffd700";
+                resultEl.innerHTML = `<div style="padding: 9px; background: rgba(255,215,0,0.08); border: 1px solid rgba(255,215,0,0.25); border-radius: 7px; color: #ffd700; font-size: 11px; text-align: center;">📡 Live price is still used — please confirm the Symbol selector before analysing.</div>`;
             }
         }
 
@@ -3088,26 +3153,25 @@ HTML = """
             setTimeout(function() { runAnalysis(); }, 100);
 
             function runAnalysis() {
-                const basePriceMap = {
-                    'XAUUSDm': 4350.50, 'BTCUSDm': 67189.00, 'EURUSDm': 1.0858,
-                    'GBPUSDm': 1.2734, 'USDJPYm': 149.85, 'USTECm': 29450.19, 'US30m': 42850.00
-                };
-                const basePrice = basePriceMap[symbol] || 100;
-
-                // v8.2: Use user-entered price OR fall back to base + small variance
-                let currentPrice;
-                if (priceInput && parseFloat(priceInput) > 0) {
-                    currentPrice = parseFloat(priceInput);
-                } else {
-                    currentPrice = basePrice + (Math.random() - 0.5) * (basePrice * 0.008);
+                // v8.9 FIX: Never invent a price. The scan must have a live quote.
+                const currentPrice = parseFloat(priceInput);
+                if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('previewSection').style.display = 'block';
+                    document.getElementById('ocrStatus').textContent = '⚠️ Live price is not available yet. Wait for the green live-price banner, then try again.';
+                    document.getElementById('ocrStatus').style.color = '#ff6b6b';
+                    return;
                 }
 
-                // v8.2: Use user-selected trend OR random if "auto"
+                // Use the user-selected trend. If Auto is selected, use the live
+                // feed's daily direction instead of inventing a random trend.
                 let structure;
                 if (trendInput === 'bullish' || trendInput === 'bearish' || trendInput === 'ranging') {
                     structure = trendInput;
                 } else {
-                    structure = Math.random() > 0.6 ? 'bullish' : Math.random() > 0.2 ? 'bearish' : 'ranging';
+                    const liveInfo = livePricesCache[symbol];
+                    const dailyChange = liveInfo ? Number(liveInfo.change || 0) : 0;
+                    structure = dailyChange > 0.15 ? 'bullish' : dailyChange < -0.15 ? 'bearish' : 'ranging';
                 }
 
                 const bos = Math.random() > 0.3;
@@ -3155,7 +3219,7 @@ HTML = """
 
                 if (structure === 'bullish' && confidence >= 60) {
                     direction = 'BUY';
-                    grade = confidence >= 85 ? 'A+' : 'A';
+                    grade = confidence >= 85 ? 'A+' : (confidence >= 80 ? 'A' : 'B');
                     strategy = liquidity ? 'PO3' : 'BOS';
                     sl = entry - slDistance;
                     tp = entry + (slDistance * 3);
@@ -3164,7 +3228,7 @@ HTML = """
                     bestAction = 'BEST TO BUY';
                 } else if (structure === 'bearish' && confidence >= 60) {
                     direction = 'SELL';
-                    grade = confidence >= 85 ? 'A+' : 'A';
+                    grade = confidence >= 85 ? 'A+' : (confidence >= 80 ? 'A' : 'B');
                     strategy = liquidity ? 'PO3' : 'BOS';
                     sl = entry + slDistance;
                     tp = entry - (slDistance * 3);
@@ -3321,15 +3385,23 @@ HTML = """
             }
         }
 
-        // v8.2 NEW: Use live price from server
+        // v8.9 FIX: Load the live price silently; no typing and no alert popup.
         function useLivePrice() {
             const symbol = document.getElementById('symbol').value;
             fetch('/api/prices')
                 .then(r => r.json())
                 .then(data => {
                     if (data[symbol]) {
-                        document.getElementById('currentPrice').value = data[symbol].price;
-                        alert('✅ Loaded current price: ' + data[symbol].price + ' for ' + symbol);
+                        const input = document.getElementById('currentPrice');
+                        if (input) input.value = data[symbol].price;
+                        updateScanLivePricePreview();
+                    }
+                })
+                .catch(() => {
+                    const statusEl = document.getElementById('ocrStatus');
+                    if (statusEl) {
+                        statusEl.textContent = '⚠️ Live price unavailable. Try again before analysing.';
+                        statusEl.style.color = '#ff6b6b';
                     }
                 });
         }
@@ -3417,7 +3489,12 @@ def api_auto_scan():
     """
     symbol = request.args.get('symbol', 'BTCUSDm')
     custom_price = request.args.get('price')
-    result = auto_scan_symbol(symbol, custom_price=float(custom_price) if custom_price else None)
+    min_confidence = request.args.get('min_confidence')
+    result = auto_scan_symbol(
+        symbol,
+        custom_price=float(custom_price) if custom_price else None,
+        min_confidence=int(min_confidence) if min_confidence else None
+    )
     if result:
         return jsonify(result)
     return jsonify({'error': 'Unknown symbol'}), 400
@@ -3425,9 +3502,11 @@ def api_auto_scan():
 @app.route('/api/auto-scan-all')
 def api_auto_scan_all():
     """NEW v7.0: Scan all 7 symbols at once."""
+    min_confidence = request.args.get('min_confidence')
+    gate = int(min_confidence) if min_confidence else None
     results = []
     for symbol in LIVE_PRICES.keys():
-        results.append(auto_scan_symbol(symbol))
+        results.append(auto_scan_symbol(symbol, min_confidence=gate))
     return jsonify({'results': results})
 
 @app.route('/api/next-session')
@@ -3471,7 +3550,7 @@ def health():
                      'real_prices', 'fast_scan', 'outcome_tracking',
                      'editable_balance', 'editable_risk_pct', 'editable_min_confidence',
                      'manual_chart_v8_2_safe'],
-        'new_in_v8_9': ['removed_manual_price_input', 'smart_ocr_middle_price', 'auto_live_price_preview'],
+        'new_in_v8_9': ['removed_manual_price_input', 'symbol_only_ocr_live_price', 'auto_live_price_preview', 'live_price_preview_on_scan_tab', 'confidence_gate_matches_settings'],
         'new_in_v8_8': ['yahoo_finance_live_prices', 'no_api_key_needed'],
         'new_in_v8_4': ['iphone_upload_two_buttons', 'camera_gallery_split',
                         'best_action_hidden_when_wait', 'best_action_color_dynamic'],

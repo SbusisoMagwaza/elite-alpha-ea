@@ -1,5 +1,5 @@
 """
-Elite Alpha EA - v8.9 — LIVE SCANNER FIX. NO TYPING NEEDED!
+Elite Alpha EA - v8.9.1 — MT5 PRICE MATCH FIX
 Partner: Sbusiso Magwaza | Broker: Exness MT5Real9 | Account: 134644333
 
 🎉 NEW IN v8.9 (THE REAL FINAL FIX):
@@ -7,8 +7,8 @@ Partner: Sbusiso Magwaza | Broker: Exness MT5Real9 | Account: 134644333
   ✅ REMOVED "TYPE YOUR MT5 PRICE" box — partner was confused by it
   ✅ REMOVED OCR price picker buttons — partner too slow to pick
   ✅ REMOVED leftover </old_text> tags from previous edits
-  ✅ OCR identifies the symbol; scanner uses the live price automatically
-  ✅ No wrong chart-axis price picker and no manual price typing
+  ✅ OCR identifies the symbol and reads the highlighted MT5 current-price box
+  ✅ Yahoo is clearly labelled as a proxy; no wrong chart-axis price picker
   ✅ Just pick symbol → tap SCAN → done. App does everything.
 
 🎉 PRESERVED FROM v8.8:
@@ -162,6 +162,16 @@ import re
 import base64
 import io
 from datetime import datetime, timedelta
+try:
+    from zoneinfo import ZoneInfo
+    JOHANNESBURG_TZ = ZoneInfo('Africa/Johannesburg')
+except Exception:
+    JOHANNESBURG_TZ = None
+
+def johannesburg_now():
+    """Return app timestamps in the partner's Johannesburg timezone (UTC+2)."""
+    return datetime.now(JOHANNESBURG_TZ) if JOHANNESBURG_TZ else datetime.now()
+
 import urllib.request
 import urllib.parse
 
@@ -298,7 +308,7 @@ def get_htf_bias(symbol):
     Uses deterministic random based on symbol + date so it stays stable per day.
     """
     # Seed by symbol + date so same symbol shows same bias all day
-    seed_str = f"{symbol}-{datetime.now().strftime('%Y-%m-%d')}"
+    seed_str = f"{symbol}-{johannesburg_now().strftime('%Y-%m-%d')}"
     seed = sum(ord(c) for c in seed_str) % 100
 
     # Biases match normal market behavior (trending 60%, ranging 25%, choppy 15%)
@@ -419,6 +429,7 @@ def get_next_session():
         'is_active': is_active,
         'active_session': active_name if is_active else None,
         'current_time_utc': now.strftime('%H:%M'),
+        'current_time_johannesburg': johannesburg_now().strftime('%H:%M'),
     }
 
 # ============================================
@@ -670,19 +681,19 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None):
     signal_gate = max(50, min(95, signal_gate))
 
     if custom_price and custom_price > 0:
-        # v8.7: Use the REAL price the user typed from their MT5 chart
+        # v8.9.1: Exact price captured from the user's MT5 screenshot.
         current_price = custom_price
+        price_source = 'MT5 screenshot'
     else:
-        # v8.8: AUTOMATICALLY use LIVE Yahoo Finance price (no typing needed!)
-        # Falls back to placeholder only if Yahoo fails
+        # Yahoo is a public proxy. It is not guaranteed to match Exness USTECm/US30m.
         live = fetch_live_prices()
         if live and symbol in live and live[symbol]['price'] > 0:
             current_price = live[symbol]['price']
+            price_source = 'Yahoo public proxy'
         else:
-            # Fall back to placeholder price with small variance
-            base_price = info['price']
-            volatility = random.uniform(-0.012, 0.012)
-            current_price = base_price * (1 + volatility)
+            # Never create a random market price. Mark the fallback clearly.
+            current_price = info['price']
+            price_source = 'fallback estimate'
 
     structure_options = ['bullish', 'bearish', 'ranging']
     structure_weights = [0.45, 0.40, 0.15]
@@ -764,6 +775,7 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None):
     return {
         'symbol': symbol,
         'timeframe': 'H1',
+        'price_source': price_source,
         'direction': direction,
         'confidence': confidence,
         'grade': grade,
@@ -785,7 +797,7 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None):
         'signal_reason': ('Directional setup passed the configured confidence gate.'
                           if direction != 'WAIT' else
                           f'WAIT: confidence {confidence}% is below the {signal_gate}% gate or market structure is ranging.'),
-        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'timestamp': johannesburg_now().strftime('%Y-%m-%d %H:%M:%S %Z'),
     }
 
 # Keep old function for backward-compat
@@ -1932,7 +1944,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v8.9</div>
+            <div class="scanner-name">Precision Scanner v8.9.1</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -1958,7 +1970,7 @@ HTML = """
             </div>
             <div class="countdown-session">
                 <div style="color: #00d4aa; font-weight: 700; font-size: 13px;" id="countdownSession">--</div>
-                <div style="font-size: 10px; color: #888;" id="countdownActive">-- UTC</div>
+                <div style="font-size: 10px; color: #888;" id="countdownActive">-- SAST</div>
             </div>
         </div>
 
@@ -2007,13 +2019,14 @@ HTML = """
         <div class="auto-scan-banner">
             <div class="auto-scan-icon">🎯</div>
             <div class="auto-scan-text">PRECISION SCAN</div>
-            <div class="auto-scan-sub">Pick a symbol & tap SCAN — live price is automatic</div>
+            <div class="auto-scan-sub">Pick a symbol & tap SCAN — upload MT5 first for exact price</div>
 
             <!-- v8.9 NEW: Live price banner showing current price BEFORE scan -->
             <div id="livePricePreview" style="background: rgba(0, 212, 170, 0.1); border: 1px solid rgba(0, 212, 170, 0.4); border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: center;">
-                <div style="font-size: 10px; color: #00d4aa; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px;">📡 LIVE PRICE (auto from Yahoo)</div>
+                <div style="font-size: 10px; color: #00d4aa; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px;">📡 MARKET PRICE (Yahoo proxy)</div>
                 <div style="font-size: 22px; color: #00d4aa; font-weight: 800;" id="livePriceValue">—</div>
                 <div style="font-size: 10px; color: #888; margin-top: 2px;" id="livePriceSource">Loading...</div>
+                <div style="font-size: 10px; color: #ffd700; margin-top: 6px;">📸 For exact Exness price: upload your MT5 chart in Scan</div>
             </div>
 
             <!-- NEW: Symbol picker chips -->
@@ -2104,7 +2117,7 @@ HTML = """
         <div style="background: linear-gradient(135deg, rgba(0, 212, 170, 0.15), rgba(0, 150, 255, 0.1)); border: 2px solid rgba(0, 212, 170, 0.4); border-radius: 12px; padding: 14px; margin-bottom: 15px;">
             <div style="font-size: 13px; font-weight: 800; color: #00d4aa; margin-bottom: 6px;">📸 SMART CHART UPLOAD</div>
             <div style="font-size: 12px; color: #ccc; line-height: 1.5;">
-                Upload your MT5 chart. The app identifies the <strong style="color: #00d4aa;">symbol</strong> and uses the live price above automatically. No price picker and no typing while the market moves.
+                Upload your MT5 chart. The app identifies the <strong style="color: #00d4aa;">symbol</strong> and reads the highlighted current-price box automatically. No price picker and no typing while the market moves.
             </div>
         </div>
 
@@ -2158,9 +2171,9 @@ HTML = """
             </div>
 
             <div class="form-group">
-                <label>💲 Scan Price (live automatically)</label>
+                <label>💲 Scan Price (MT5 screenshot or proxy fallback)</label>
                 <input type="text" id="currentPrice" value="" readonly placeholder="Waiting for live price..." style="color: #00d4aa; font-weight: 700;">
-                <div style="font-size: 11px; color: #888; margin-top: 5px;">✅ Price is loaded from the live feed — you do not need to type it.</div>
+                <div style="font-size: 11px; color: #888; margin-top: 5px;">✅ The highlighted MT5 price is used when detected. Yahoo is only a proxy fallback.</div>
             </div>
 
             <div class="form-group">
@@ -2400,7 +2413,7 @@ HTML = """
         <!-- App Info (simplified) -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v8.9</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v8.9.1</span></div>
             <div class="info-row"><span class="label">Account:</span><span class="value">Sbusiso</span></div>
             <div class="info-row"><span class="label">Broker:</span><span class="value">Exness</span></div>
             <div class="info-row"><span class="label">Account #:</span><span class="value">134644333</span></div>
@@ -2479,14 +2492,15 @@ HTML = """
                     const priceEl = document.getElementById('livePriceValue');
                     const sourceEl = document.getElementById('livePriceSource');
                     if (info) {
-                        let priceStr;
-                        if (selectedSymbol === 'BTCUSDm') priceStr = '$' + info.price.toLocaleString('en-US', {maximumFractionDigits: 0});
-                        else if (selectedSymbol === 'XAUUSDm') priceStr = '$' + info.price.toFixed(2);
-                        else if (selectedSymbol === 'USDJPYm') priceStr = info.price.toFixed(2);
-                        else if (selectedSymbol === 'USTECm' || selectedSymbol === 'US30m') priceStr = info.price.toFixed(0);
-                        else priceStr = info.price.toFixed(4);
-                        priceEl.textContent = priceStr;
-                        sourceEl.textContent = (info.source === 'live' ? '🟢 LIVE from Yahoo Finance' : '🟡 Estimated (price feed unavailable)') + ' · ' + selectedSymbol;
+                        const captured = getRecentMt5ScreenshotPrice(selectedSymbol);
+                        if (captured) {
+                            priceEl.textContent = formatPriceForSymbol(selectedSymbol, captured.price);
+                            const ageMin = Math.max(0, Math.round((Date.now() - captured.capturedAt) / 60000));
+                            sourceEl.textContent = '📸 MT5 screenshot price · captured ' + ageMin + 'm ago · ' + selectedSymbol;
+                        } else {
+                            priceEl.textContent = formatPriceForSymbol(selectedSymbol, info.price);
+                            sourceEl.textContent = (info.source === 'live' ? '🟡 Yahoo proxy — may differ from Exness' : '🟡 Estimated feed unavailable') + ' · ' + selectedSymbol;
+                        }
                     } else {
                         priceEl.textContent = '—';
                         sourceEl.textContent = '';
@@ -2498,7 +2512,151 @@ HTML = """
                 });
         }
 
-        // v8.9 FIX: The Scan tab uses the same live price feed as Home.
+        // v8.9.1 FIX: Prefer a recent MT5 screenshot price over the public Yahoo proxy.
+        // Yahoo's NQ=F/US30 futures quote can differ materially from Exness USTECm/US30m.
+        function formatPriceForSymbol(symbol, value) {
+            const n = Number(value);
+            if (!Number.isFinite(n)) return '—';
+            if (symbol === 'BTCUSDm') return '$' + n.toLocaleString('en-US', {maximumFractionDigits: 0});
+            if (symbol === 'XAUUSDm') return '$' + n.toFixed(2);
+            if (symbol === 'USDJPYm') return n.toFixed(2);
+            if (symbol === 'EURUSDm' || symbol === 'GBPUSDm') return n.toFixed(5);
+            return n.toFixed(2);
+        }
+
+        function saveMt5ScreenshotPrice(symbol, price) {
+            try {
+                const saved = JSON.parse(localStorage.getItem('eliteMt5Prices') || '{}');
+                saved[symbol] = {price: Number(price), capturedAt: Date.now()};
+                localStorage.setItem('eliteMt5Prices', JSON.stringify(saved));
+            } catch (e) { /* private browsing/localStorage unavailable */ }
+        }
+
+        function getRecentMt5ScreenshotPrice(symbol, maxAgeMs = 3 * 60 * 1000) {
+            try {
+                const saved = JSON.parse(localStorage.getItem('eliteMt5Prices') || '{}');
+                const item = saved[symbol];
+                if (item && Number(item.price) > 0 && Date.now() - Number(item.capturedAt) <= maxAgeMs) {
+                    return item;
+                }
+            } catch (e) { /* ignore */ }
+            return null;
+        }
+
+        function setScanPriceDisplay(symbol, price, sourceText) {
+            const priceEl = document.getElementById('scanLivePriceValue');
+            const sourceEl = document.getElementById('scanLivePriceSource');
+            const input = document.getElementById('currentPrice');
+            if (priceEl) priceEl.textContent = formatPriceForSymbol(symbol, price);
+            if (sourceEl) sourceEl.textContent = sourceText + ' · ' + symbol;
+            if (input) input.value = Number(price);
+        }
+
+        // Detect the large teal/green current-price box on MT5 screenshots.
+        // This avoids reading the older price-axis labels above it.
+        async function findCurrentPriceFromChartImage(imageDataUrl) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = async function() {
+                    try {
+                        const maxWidth = 1600;
+                        const scale = Math.min(1, maxWidth / img.naturalWidth);
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+                        canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+                        const ctx = canvas.getContext('2d', {willReadFrequently: true});
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const pixels = image.data;
+                        const w = canvas.width, h = canvas.height;
+                        let best = null;
+
+                        // Search horizontal background runs in the right half of the chart.
+                        // The highlighted current label is a wide teal rectangle; candles
+                        // and grid lines are narrow and therefore score much lower.
+                        for (let y = Math.floor(h * 0.10); y < Math.floor(h * 0.85); y++) {
+                            let x = Math.floor(w * 0.55);
+                            while (x < w) {
+                                const i = (y * w + x) * 4;
+                                const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+                                const isTeal = g > 105 && g > r * 1.25 && g >= b * 0.98 && r < 175;
+                                if (!isTeal) { x++; continue; }
+                                const start = x;
+                                while (x < w) {
+                                    const j = (y * w + x) * 4;
+                                    const rr = pixels[j], gg = pixels[j + 1], bb = pixels[j + 2];
+                                    if (!(gg > 105 && gg > rr * 1.25 && gg >= bb * 0.98 && rr < 175)) break;
+                                    x++;
+                                }
+                                const length = x - start;
+                                const minRun = Math.max(70, Math.floor(w * 0.055));
+                                if (length >= minRun && start > w * 0.65) {
+                                    const score = length * (1 + start / w);
+                                    if (!best || score > best.score) best = {x: start, y, length, score};
+                                }
+                            }
+                        }
+
+                        if (!best) { resolve(null); return; }
+
+                        // Include the full label and a little margin around the white digits.
+                        const cropX = Math.min(w - 1, Math.floor(best.x + 2));
+                        const cropY = Math.min(h - 1, Math.floor(best.y + 1));
+                        const cropRight = Math.min(w, Math.floor(best.x + best.length + w * 0.025));
+                        const cropBottom = Math.min(h, Math.floor(best.y + h * 0.019));
+                        const crop = document.createElement('canvas');
+                        crop.width = Math.max(1, cropRight - cropX);
+                        crop.height = Math.max(1, cropBottom - cropY);
+                        const cropCtx = crop.getContext('2d', {willReadFrequently: true});
+                        cropCtx.drawImage(canvas, cropX, cropY, crop.width, crop.height, 0, 0, crop.width, crop.height);
+
+                        // High-contrast pass: white MT5 digits become black text on
+                        // white, while the teal label background becomes white.
+                        const cropImage = cropCtx.getImageData(0, 0, crop.width, crop.height);
+                        for (let p = 0; p < cropImage.data.length; p += 4) {
+                            const rr = cropImage.data[p], gg = cropImage.data[p + 1], bb = cropImage.data[p + 2];
+                            const brightText = rr > 175 && gg > 175 && bb > 175;
+                            const value = brightText ? 0 : 255;
+                            cropImage.data[p] = value;
+                            cropImage.data[p + 1] = value;
+                            cropImage.data[p + 2] = value;
+                            cropImage.data[p + 3] = 255;
+                        }
+                        cropCtx.putImageData(cropImage, 0, 0);
+                        const cropUrl = crop.toDataURL('image/png');
+
+                        const ocr = await Tesseract.recognize(cropUrl, 'eng', {
+                            logger: m => {
+                                if (m.status === 'recognizing text') {
+                                    const pct = Math.round(m.progress * 100);
+                                    const status = document.getElementById('ocrStatus');
+                                    if (status) status.innerHTML = `🔍 Reading highlighted MT5 price... ${pct}%`;
+                                }
+                            },
+                            tessedit_pageseg_mode: 7
+                        });
+                        const text = ocr.data.text || '';
+                        const matches = text.match(/\\b\\d{2,6}(?:[.,]\\d{1,5})?\\b/g) || [];
+                        const prices = matches.map(v => parseFloat(v.replace(',', '.'))).filter(v => v > 1 && v < 100000);
+                        if (prices.length) {
+                            // The crop is only the highlighted current-price box, so the
+                            // first valid decimal is the intended price.
+                            resolve(prices.find(v => String(v).includes('.')) || prices[0]);
+                        } else {
+                            resolve(null);
+                        }
+                    } catch (e) {
+                        console.warn('Current-price box detection failed:', e);
+                        resolve(null);
+                    }
+                };
+                img.onerror = () => resolve(null);
+                img.src = imageDataUrl;
+            });
+        }
+
+        // v8.9 FIX: The Scan tab uses the same live price feed as Home, but a
+        // recent MT5 screenshot price always takes priority over Yahoo proxy data.
         function updateScanLivePricePreview() {
             const symbolEl = document.getElementById('symbol');
             const symbol = symbolEl ? symbolEl.value : selectedSymbol;
@@ -2516,16 +2674,15 @@ HTML = """
                         sourceEl.textContent = '⚠️ No price available';
                         return;
                     }
-                    let priceStr;
-                    if (symbol === 'BTCUSDm') priceStr = '$' + info.price.toLocaleString('en-US', {maximumFractionDigits: 0});
-                    else if (symbol === 'XAUUSDm') priceStr = '$' + Number(info.price).toFixed(2);
-                    else if (symbol === 'USDJPYm') priceStr = Number(info.price).toFixed(2);
-                    else if (symbol === 'USTECm' || symbol === 'US30m') priceStr = Number(info.price).toFixed(0);
-                    else priceStr = Number(info.price).toFixed(4);
-                    priceEl.textContent = priceStr;
-                    sourceEl.textContent = (info.source === 'live' ? '🟢 LIVE from Yahoo Finance' : '🟡 Estimated feed unavailable') + ' · ' + symbol;
-                    const input = document.getElementById('currentPrice');
-                    if (input) input.value = info.price;
+                    const captured = getRecentMt5ScreenshotPrice(symbol);
+                    if (captured) {
+                        setScanPriceDisplay(symbol, captured.price, '📸 MT5 screenshot price');
+                    } else {
+                        priceEl.textContent = formatPriceForSymbol(symbol, info.price);
+                        sourceEl.textContent = (info.source === 'live' ? '🟡 Yahoo proxy — may differ from Exness' : '🟡 Estimated feed unavailable') + ' · ' + symbol;
+                        const input = document.getElementById('currentPrice');
+                        if (input) input.value = info.price;
+                    }
                 })
                 .catch(() => {
                     priceEl.textContent = '—';
@@ -2569,7 +2726,7 @@ HTML = """
                     if (data.is_active) {
                         document.getElementById('countdownSession').textContent = 'Active: ' + data.active_session;
                         document.getElementById('countdownSession').style.color = '#00d4aa';
-                        document.getElementById('countdownActive').textContent = 'Right now (UTC ' + data.current_time_utc + ')';
+                        document.getElementById('countdownActive').textContent = 'Right now (SAST ' + data.current_time_johannesburg + ' / UTC ' + data.current_time_utc + ')';
                     } else {
                         document.getElementById('countdownSession').textContent = data.next_session;
                         document.getElementById('countdownSession').style.color = '#ffd700';
@@ -2711,11 +2868,15 @@ HTML = """
             // that setting was saved locally but the scanner always used 80%.
             const confBtn = document.querySelector('.conf-btn.active');
             const minConfidence = confBtn ? confBtn.dataset.conf : '75';
+            const mt5Snapshot = selectedSymbol !== 'ALL' ? getRecentMt5ScreenshotPrice(selectedSymbol) : null;
+            const mt5PriceQuery = mt5Snapshot
+                ? '&price=' + encodeURIComponent(mt5Snapshot.price) + '&price_source=mt5_screenshot'
+                : '';
             let url;
             if (selectedSymbol === 'ALL') {
                 url = '/api/auto-scan-all?min_confidence=' + encodeURIComponent(minConfidence);
             } else {
-                url = '/api/auto-scan?symbol=' + selectedSymbol + '&min_confidence=' + encodeURIComponent(minConfidence);
+                url = '/api/auto-scan?symbol=' + selectedSymbol + '&min_confidence=' + encodeURIComponent(minConfidence) + mt5PriceQuery;
             }
 
             fetch(url)
@@ -2790,6 +2951,7 @@ HTML = """
                     <div style="font-size: 48px; font-weight: 800; color: #00d4aa; margin: 8px 0;">${data.confidence}%</div>
                     <span class="badge gold">Grade ${data.grade}</span>
                     <span class="badge">${data.strategy}</span>
+                    <div style="margin-top: 8px; font-size: 10px; color: ${data.price_source === 'MT5 screenshot' ? '#00d4aa' : '#ffd700'};">Price source: ${data.price_source || 'unknown'}</div>
                 </div>
                 <div style="margin-bottom: 10px; padding: 9px; background: ${data.direction === 'WAIT' ? 'rgba(255,215,0,0.08)' : 'rgba(0,212,170,0.08)'}; border: 1px solid ${data.direction === 'WAIT' ? 'rgba(255,215,0,0.25)' : 'rgba(0,212,170,0.25)'}; border-radius: 8px; color: ${data.direction === 'WAIT' ? '#ffd700' : '#00d4aa'}; font-size: 11px; text-align: center;">${data.signal_reason || (data.direction === 'WAIT' ? 'No trade: setup did not pass the scanner gate.' : 'Directional setup passed the scanner gate.')}</div>
                 <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; margin-bottom: 10px;">
@@ -3074,69 +3236,66 @@ HTML = """
             reader.readAsDataURL(file);
         }
 
-        // v8.9 FIX: OCR detects the symbol only. Price comes from the live feed.
-        // Chart-axis OCR is unreliable because it can select the top/old label.
+        // v8.9.1 FIX: Read the highlighted current MT5 price, not the old axis labels.
         async function runOCR(imageDataUrl) {
             const statusEl = document.getElementById("ocrStatus");
             const resultEl = document.getElementById("ocrResult");
             const selectedBeforeScan = document.getElementById("symbol").value || "BTCUSDm";
-            statusEl.innerHTML = "🔍 Reading the chart symbol... (first scan takes ~10 sec)";
+            statusEl.innerHTML = "🔍 Finding the highlighted MT5 price...";
             statusEl.style.color = "#ffd700";
             resultEl.innerHTML = "";
 
+            // Read the symbol separately. If the symbol is not printed in the image,
+            // keep the symbol the user selected instead of guessing from price size.
+            let text = "";
             try {
                 const result = await Tesseract.recognize(imageDataUrl, "eng", {
                     logger: m => {
                         if (m.status === "recognizing text") {
-                            statusEl.innerHTML = `🔍 Reading symbol... ${Math.round(m.progress * 100)}%`;
+                            statusEl.innerHTML = `🔍 Reading chart... ${Math.round(m.progress * 100)}%`;
                         }
                     }
                 });
-
-                const text = result.data.text || "";
+                text = result.data.text || "";
                 console.log("OCR text:", text);
-                const compact = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
-                const symbolRules = [
-                    {symbol: "US30m", tokens: ["US30M", "US30", "DJI", "DOWJONES", "DOW"]},
-                    {symbol: "USTECm", tokens: ["USTECM", "USTEC", "NAS100", "NASDAQ", "NQF"]},
-                    {symbol: "XAUUSDm", tokens: ["XAUUSDM", "XAUUSD", "GOLD"]},
-                    {symbol: "BTCUSDm", tokens: ["BTCUSDM", "BTCUSD", "BITCOIN"]},
-                    {symbol: "EURUSDm", tokens: ["EURUSDM", "EURUSD"]},
-                    {symbol: "GBPUSDm", tokens: ["GBPUSDM", "GBPUSD"]},
-                    {symbol: "USDJPYm", tokens: ["USDJPYM", "USDJPY"]}
-                ];
-
-                let detectedSymbol = null;
-                for (const rule of symbolRules) {
-                    if (rule.tokens.some(token => compact.includes(token))) {
-                        detectedSymbol = rule.symbol;
-                        break;
-                    }
-                }
-
-                if (detectedSymbol) {
-                    document.getElementById("symbol").value = detectedSymbol;
-                } else {
-                    detectedSymbol = selectedBeforeScan;
-                }
-
-                // Never trust a random axis label as the current price.
-                // The same live feed used by Home supplies the scan price.
-                updateScanLivePricePreview();
-                useLivePrice();
-                statusEl.innerHTML = detectedSymbol
-                    ? "✅ Detected " + detectedSymbol + ". Live price loaded automatically — no typing needed."
-                    : "✅ Chart uploaded. Live price loaded for the selected symbol.";
-                statusEl.style.color = "#00d4aa";
-                resultEl.innerHTML = `<div style="padding: 9px; background: rgba(0,212,170,0.08); border: 1px solid rgba(0,212,170,0.25); border-radius: 7px; color: #00d4aa; font-size: 11px; text-align: center;">📡 Using the current live ${detectedSymbol} price — chart labels are not used.</div>`;
             } catch (err) {
-                console.error("OCR error:", err);
-                // Upload still works if OCR cannot read the symbol: keep the selected symbol.
+                console.warn("Full-chart OCR failed; trying the price box anyway:", err);
+            }
+
+            const compact = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
+            const symbolRules = [
+                {symbol: "US30m", tokens: ["US30M", "US30", "DJI", "DOWJONES", "DOW"]},
+                {symbol: "USTECm", tokens: ["USTECM", "USTEC", "USTECH100", "USTECH", "NAS100", "NASDAQ", "NQF"]},
+                {symbol: "XAUUSDm", tokens: ["XAUUSDM", "XAUUSD", "GOLD"]},
+                {symbol: "BTCUSDm", tokens: ["BTCUSDM", "BTCUSD", "BITCOIN"]},
+                {symbol: "EURUSDm", tokens: ["EURUSDM", "EURUSD"]},
+                {symbol: "GBPUSDm", tokens: ["GBPUSDM", "GBPUSD"]},
+                {symbol: "USDJPYm", tokens: ["USDJPYM", "USDJPY"]}
+            ];
+
+            let detectedSymbol = null;
+            for (const rule of symbolRules) {
+                if (rule.tokens.some(token => compact.includes(token))) {
+                    detectedSymbol = rule.symbol;
+                    break;
+                }
+            }
+            if (detectedSymbol) document.getElementById("symbol").value = detectedSymbol;
+            else detectedSymbol = selectedBeforeScan;
+
+            const screenshotPrice = await findCurrentPriceFromChartImage(imageDataUrl);
+            if (screenshotPrice && Number(screenshotPrice) > 0) {
+                saveMt5ScreenshotPrice(detectedSymbol, screenshotPrice);
+                setScanPriceDisplay(detectedSymbol, screenshotPrice, "🟢 MT5 screenshot price");
+                statusEl.innerHTML = "✅ Read MT5 current price: " + formatPriceForSymbol(detectedSymbol, screenshotPrice) + " for " + detectedSymbol + ". This price will be used.";
+                statusEl.style.color = "#00d4aa";
+                resultEl.innerHTML = `<div style="padding: 9px; background: rgba(0,212,170,0.08); border: 1px solid rgba(0,212,170,0.25); border-radius: 7px; color: #00d4aa; font-size: 11px; text-align: center;">📸 Exact highlighted MT5 price captured — Yahoo proxy is not being used for this scan.</div>`;
+            } else {
+                // Do not silently pretend Yahoo is Exness. Show the fallback clearly.
                 updateScanLivePricePreview();
-                useLivePrice();
-                statusEl.innerHTML = "⚠️ Symbol not readable. Using selected " + selectedBeforeScan + " and loading its live price.";
+                statusEl.innerHTML = "⚠️ I could not isolate the highlighted MT5 price. Confirm the symbol and use the live proxy only as a reference.";
                 statusEl.style.color = "#ffd700";
-                resultEl.innerHTML = `<div style="padding: 9px; background: rgba(255,215,0,0.08); border: 1px solid rgba(255,215,0,0.25); border-radius: 7px; color: #ffd700; font-size: 11px; text-align: center;">📡 Live price is still used — please confirm the Symbol selector before analysing.</div>`;
+                resultEl.innerHTML = `<div style="padding: 9px; background: rgba(255,215,0,0.08); border: 1px solid rgba(255,215,0,0.25); border-radius: 7px; color: #ffd700; font-size: 11px; text-align: center;">⚠️ No exact MT5 price captured. The displayed Yahoo price may differ from Exness; do not use it as an exact entry.</div>`;
             }
         }
 
@@ -3468,7 +3627,7 @@ def api_session():
 
 @app.route('/api/news')
 def api_news():
-    current_hour = datetime.now().hour
+    current_hour = johannesburg_now().hour
     upcoming = []
     for event in ECONOMIC_EVENTS:
         event_hour = int(event['time'].split(':')[0])
@@ -3541,7 +3700,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '8.9',
+        'version': '8.9.1',
         'features': ['robot', 'live_ticker', 'multi_symbol_scan', 'htf_bias',
                      'lot_size_calculator', 'multi_tp', 'signal_history',
                      '20_smc_factors', 'confluence_categories', 'drawdown_tracker',
@@ -3550,7 +3709,7 @@ def health():
                      'real_prices', 'fast_scan', 'outcome_tracking',
                      'editable_balance', 'editable_risk_pct', 'editable_min_confidence',
                      'manual_chart_v8_2_safe'],
-        'new_in_v8_9': ['removed_manual_price_input', 'symbol_only_ocr_live_price', 'auto_live_price_preview', 'live_price_preview_on_scan_tab', 'confidence_gate_matches_settings'],
+        'new_in_v8_9': ['removed_manual_price_input', 'highlighted_mt5_price_ocr', 'auto_live_price_preview', 'live_price_preview_on_scan_tab', 'confidence_gate_matches_settings', 'yahoo_proxy_warning'],
         'new_in_v8_8': ['yahoo_finance_live_prices', 'no_api_key_needed'],
         'new_in_v8_4': ['iphone_upload_two_buttons', 'camera_gallery_split',
                         'best_action_hidden_when_wait', 'best_action_color_dynamic'],

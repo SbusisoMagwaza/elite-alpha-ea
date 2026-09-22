@@ -1,6 +1,22 @@
 """
-Elite Alpha EA - v8.3 — SMART OCR (Price Auto-Detection from Photos)
+Elite Alpha EA - v8.4 — iPhone Upload Fix + Signal Accuracy Fixes
 Partner: Sbusiso Magwaza | Broker: Exness MT5Real9 | Account: 134644333
+
+NEW IN v8.4:
+  ✅ FIX: Upload button now works on iPhone Safari
+      - Split into TWO buttons: 📷 Camera + 🖼️ Gallery
+      - Added small delay (100ms) before triggering input click (iOS fix)
+      - Hidden file input positioned off-screen (-9999px) instead of display:none
+  ✅ FIX: "Best to Buy/Sell" badge now HIDDEN when signal is WAIT
+      - Prevents confusing display of "Best to Buy" with WAIT direction
+  ✅ FIX: Color of "Best to Buy" badge changes based on direction
+      - BUY = green, SELL = red (was always green before)
+
+PRESERVED FROM v8.3:
+  ✅ Tesseract.js OCR (works perfectly for screenshots)
+  ✅ Auto-fills price + symbol from photo
+  ✅ Camera capture support
+  ✅ All Home tab features (HTF bias, drawdown, multi-symbol scan)
 
 NEW IN v8.3:
   ✅ Take a picture of MT5 chart → app reads price automatically
@@ -1737,7 +1753,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v8.0</div>
+            <div class="scanner-name">Precision Scanner v8.4</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -1900,11 +1916,19 @@ HTML = """
         </div>
 
         <!-- v8.3 NEW: Upload area -->
-        <div class="upload-card" id="uploadCard" onclick="openGallery()">
+        <div class="upload-card" id="uploadCard">
             <span class="upload-icon">📸</span>
-            <div class="upload-text">Take or Upload Chart Photo</div>
-            <div class="upload-hint">App reads price from image (OCR)</div>
-            <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)">
+            <div class="upload-text">Choose Chart Photo</div>
+            <div class="upload-hint">Tap below to take photo or pick from gallery</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px;">
+                <button onclick="openCamera()" style="padding: 12px 8px; background: linear-gradient(135deg, rgba(0, 212, 170, 0.2), rgba(0, 150, 255, 0.1)); border: 2px solid #00d4aa; color: #00d4aa; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer;">
+                    📷 Camera
+                </button>
+                <button onclick="openGallery()" style="padding: 12px 8px; background: linear-gradient(135deg, rgba(0, 150, 255, 0.2), rgba(0, 212, 170, 0.1)); border: 2px solid #0096ff; color: #0096ff; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer;">
+                    🖼️ Gallery
+                </button>
+            </div>
+            <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)" style="position: absolute; left: -9999px;">
         </div>
 
         <div class="preview-section" id="previewSection">
@@ -2018,7 +2042,7 @@ HTML = """
                 </div>
             </div>
 
-            <div class="best-action" id="bestAction">BEST TO BUY</div>
+            <div class="best-action" id="bestAction" style="display: none;">BEST TO BUY</div>
 
             <div class="analysis-section">
                 <h4>📊 HTF Trend</h4>
@@ -2185,7 +2209,7 @@ HTML = """
         <!-- App Info (simplified) -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v8.1</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v8.4</span></div>
             <div class="info-row"><span class="label">Account:</span><span class="value">Sbusiso</span></div>
             <div class="info-row"><span class="label">Broker:</span><span class="value">Exness</span></div>
             <div class="info-row"><span class="label">Account #:</span><span class="value">134644333</span></div>
@@ -2486,10 +2510,10 @@ HTML = """
                     <span class="badge">${data.strategy}</span>
                 </div>
                 <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; margin-bottom: 10px;">
-                    <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Entry:</span><span style="color: #fff; font-weight: 700;">${data.entry}</span></div>
-                    <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Stop Loss:</span><span style="color: #ff6b6b; font-weight: 700;">${data.sl}</span></div>
-                    <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Take Profit:</span><span style="color: #00d4aa; font-weight: 700;">${data.tp}</span></div>
-                    <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Risk:Reward:</span><span style="color: #00d4ff; font-weight: 700;">${data.rr}</span></div>
+                    <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Entry:</span><span style="color: ${data.direction === 'WAIT' ? '#666' : '#fff'}; font-weight: 700;">${data.direction === 'WAIT' ? '— (no trade)' : data.entry}</span></div>
+                    <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Stop Loss:</span><span style="color: ${data.direction === 'WAIT' ? '#666' : '#ff6b6b'}; font-weight: 700;">${data.direction === 'WAIT' ? '— (no trade)' : data.sl}</span></div>
+                    <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Take Profit:</span><span style="color: ${data.direction === 'WAIT' ? '#666' : '#00d4aa'}; font-weight: 700;">${data.direction === 'WAIT' ? '— (no trade)' : data.tp}</span></div>
+                    <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Risk:Reward:</span><span style="color: ${data.direction === 'WAIT' ? '#666' : '#00d4ff'}; font-weight: 700;">${data.direction === 'WAIT' ? '—' : data.rr}</span></div>
                 </div>
                 ${lotHtml}
                 ${tpHtml}
@@ -2500,7 +2524,7 @@ HTML = """
                 </div>
                 <div style="margin-top: 12px;">
                     <button onclick="markOutcome('${data.symbol}', '${data.direction}', '${data.entry}', '${data.sl}', '${data.tp}')"
-                        style="width: 100%; padding: 10px; background: linear-gradient(135deg, rgba(0, 212, 170, 0.3), rgba(0, 150, 255, 0.2)); border: 1px solid #00d4aa; color: #00d4aa; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px;">
+                        style="width: 100%; padding: 10px; background: ${data.direction === 'WAIT' ? 'rgba(100,100,100,0.2)' : 'linear-gradient(135deg, rgba(0, 212, 170, 0.3), rgba(0, 150, 255, 0.2))'}; border: 1px solid ${data.direction === 'WAIT' ? '#666' : '#00d4aa'}; color: ${data.direction === 'WAIT' ? '#888' : '#00d4aa'}; border-radius: 8px; font-weight: 700; cursor: ${data.direction === 'WAIT' ? 'not-allowed' : 'pointer'}; font-size: 13px; ${data.direction === 'WAIT' ? 'display:none;' : ''}">
                         📌 Save Signal to History
                     </button>
                 </div>
@@ -2734,10 +2758,21 @@ HTML = """
         // ============ MANUAL UPLOAD + ANALYZE (v8.3 OCR) ============
         function openGallery() {
             const input = document.getElementById('fileInput');
-            // v8.3: Use camera by default on mobile (capture="environment")
-            // User can still pick from gallery by tapping "Cancel" then choosing photo
+            // v8.4: iPhone fix - explicitly remove capture first, then click
+            // User can choose: Take Photo or Choose from Library
+            input.removeAttribute('capture');
+            // iOS Safari needs a small delay sometimes
+            setTimeout(() => {
+                input.click();
+            }, 100);
+        }
+
+        function openCamera() {
+            const input = document.getElementById('fileInput');
             input.setAttribute('capture', 'environment');
-            input.click();
+            setTimeout(() => {
+                input.click();
+            }, 100);
         }
 
         function handleFile(event) {
@@ -2926,10 +2961,19 @@ HTML = """
                 document.getElementById('confidence').textContent = confidence + '%';
                 document.getElementById('grade').textContent = 'Grade ' + grade;
                 document.getElementById('strategy').textContent = strategy;
-                document.getElementById('entry').textContent = entry.toFixed(2);
-                document.getElementById('sl').textContent = sl.toFixed(2);
-                document.getElementById('tp').textContent = tp.toFixed(2);
-                document.getElementById('rr').textContent = '1:3.0';
+
+                // v8.4: Show N/A when WAIT to avoid confusing price display
+                if (direction === 'WAIT') {
+                    document.getElementById('entry').textContent = '— (no trade)';
+                    document.getElementById('sl').textContent = '— (no trade)';
+                    document.getElementById('tp').textContent = '— (no trade)';
+                    document.getElementById('rr').textContent = '—';
+                } else {
+                    document.getElementById('entry').textContent = entry.toFixed(2);
+                    document.getElementById('sl').textContent = sl.toFixed(2);
+                    document.getElementById('tp').textContent = tp.toFixed(2);
+                    document.getElementById('rr').textContent = '1:3.0';
+                }
 
                 // NEW v7.0 — Lot calc and multi-TP for manual analysis
                 if (direction !== 'WAIT') {
@@ -2962,7 +3006,12 @@ HTML = """
                     document.getElementById('tp3Value').textContent = '-';
                 }
 
-                document.getElementById('bestAction').textContent = bestAction;
+                const baEl = document.getElementById('bestAction');
+                baEl.textContent = bestAction;
+                baEl.style.display = direction !== 'WAIT' ? 'block' : 'none';
+                baEl.style.color = direction === 'BUY' ? '#00d4aa' : '#ff6b6b';
+                baEl.style.borderColor = direction === 'BUY' ? 'rgba(0, 212, 170, 0.3)' : 'rgba(255, 107, 107, 0.3)';
+                baEl.style.background = direction === 'BUY' ? 'rgba(0, 212, 170, 0.1)' : 'rgba(255, 107, 107, 0.1)';
 
                 const htfColor = direction === 'BUY' ? '#00d4aa' : '#ff6b6b';
                 document.getElementById('htfTrend').innerHTML = direction === 'BUY' ? `<span style="color: ${htfColor};">🟢 Bullish</span>` : `<span style="color: ${htfColor};">🔴 Bearish</span>`;
@@ -3170,7 +3219,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '8.3',
+        'version': '8.4',
         'features': ['robot', 'live_ticker', 'multi_symbol_scan', 'htf_bias',
                      'lot_size_calculator', 'multi_tp', 'signal_history',
                      '20_smc_factors', 'confluence_categories', 'drawdown_tracker',
@@ -3179,6 +3228,8 @@ def health():
                      'real_prices', 'fast_scan', 'outcome_tracking',
                      'editable_balance', 'editable_risk_pct', 'editable_min_confidence',
                      'manual_chart_v8_2_safe'],
+        'new_in_v8_4': ['iphone_upload_two_buttons', 'camera_gallery_split',
+                        'best_action_hidden_when_wait', 'best_action_color_dynamic'],
         'new_in_v8_3': ['tesseract_ocr_engine', 'auto_price_from_photo',
                         'auto_symbol_from_photo', 'camera_capture_environment',
                         'ocr_progress_indicator'],

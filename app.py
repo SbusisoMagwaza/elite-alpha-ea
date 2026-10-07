@@ -1,5 +1,5 @@
 """
-Elite Alpha EA - v8.9.1 — MT5 PRICE MATCH FIX
+Elite Alpha EA - v8.9.2 — EXACT MT5 BRIDGE
 Partner: Sbusiso Magwaza | Broker: Exness MT5Real9 | Account: 134644333
 
 🎉 NEW IN v8.9 (THE REAL FINAL FIX):
@@ -159,6 +159,9 @@ from flask import Flask, request, jsonify, render_template_string
 import json
 import random
 import re
+import os
+import hmac
+import time
 import base64
 import io
 from datetime import datetime, timedelta
@@ -195,6 +198,21 @@ YAHOO_TICKERS = {
 # Cached live prices (refreshed every 60 seconds)
 LIVE_PRICES_CACHE = {}
 LIVE_PRICES_LAST_UPDATE = None
+
+# v8.9.2: Optional exact MT5 quote bridge. The bridge is read-only: an EA
+# running on the user's own MT5 desktop sends bid/ask quotes to Render.
+MT5_BRIDGE_TOKEN = os.environ.get('MT5_BRIDGE_TOKEN', '')
+MT5_QUOTES = {}
+MT5_QUOTES_LAST_UPDATE = None
+
+def get_mt5_quote(symbol, max_age_seconds=10):
+    """Return a fresh quote pushed by the user's MT5 terminal, if available."""
+    quote = MT5_QUOTES.get(symbol)
+    if not quote:
+        return None
+    if time.time() - quote.get('received_at', 0) > max_age_seconds:
+        return None
+    return quote
 
 def fetch_live_prices():
     """Fetch live prices from Yahoo Finance for all symbols.
@@ -680,8 +698,14 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None):
         signal_gate = SIGNAL_MIN_CONFIDENCE
     signal_gate = max(50, min(95, signal_gate))
 
-    if custom_price and custom_price > 0:
-        # v8.9.1: Exact price captured from the user's MT5 screenshot.
+    # Prefer the exact MT5 bridge when it is fresh. A fresh bridge quote is
+    # better than a screenshot because the market may have moved after capture.
+    mt5_quote = get_mt5_quote(symbol)
+    if mt5_quote and mt5_quote.get('price', 0) > 0:
+        current_price = mt5_quote['price']
+        price_source = 'MT5 live bridge'
+    elif custom_price and custom_price > 0:
+        # Exact price captured from the user's MT5 screenshot.
         current_price = custom_price
         price_source = 'MT5 screenshot'
     else:
@@ -1944,7 +1968,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v8.9.1</div>
+            <div class="scanner-name">Precision Scanner v8.9.2</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2413,7 +2437,7 @@ HTML = """
         <!-- App Info (simplified) -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v8.9.1</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v8.9.2</span></div>
             <div class="info-row"><span class="label">Account:</span><span class="value">Sbusiso</span></div>
             <div class="info-row"><span class="label">Broker:</span><span class="value">Exness</span></div>
             <div class="info-row"><span class="label">Account #:</span><span class="value">134644333</span></div>
@@ -2493,7 +2517,10 @@ HTML = """
                     const sourceEl = document.getElementById('livePriceSource');
                     if (info) {
                         const captured = getRecentMt5ScreenshotPrice(selectedSymbol);
-                        if (captured) {
+                        if (info.source === 'mt5') {
+                            priceEl.textContent = formatPriceForSymbol(selectedSymbol, info.price);
+                            sourceEl.textContent = '🟢 EXACT MT5 / Exness bridge · updated ' + (info.age_seconds ?? 0) + 's ago · ' + selectedSymbol;
+                        } else if (captured) {
                             priceEl.textContent = formatPriceForSymbol(selectedSymbol, captured.price);
                             const ageMin = Math.max(0, Math.round((Date.now() - captured.capturedAt) / 60000));
                             sourceEl.textContent = '📸 MT5 screenshot price · captured ' + ageMin + 'm ago · ' + selectedSymbol;
@@ -2675,7 +2702,9 @@ HTML = """
                         return;
                     }
                     const captured = getRecentMt5ScreenshotPrice(symbol);
-                    if (captured) {
+                    if (info.source === 'mt5') {
+                        setScanPriceDisplay(symbol, info.price, '🟢 EXACT MT5 / Exness bridge · updated ' + (info.age_seconds ?? 0) + 's ago');
+                    } else if (captured) {
                         setScanPriceDisplay(symbol, captured.price, '📸 MT5 screenshot price');
                     } else {
                         priceEl.textContent = formatPriceForSymbol(symbol, info.price);
@@ -2857,13 +2886,30 @@ HTML = """
                 });
         }
 
-        // ============ MULTI-SYMBOL AUTO-SCAN (NEW v7.0) — v8.9 SIMPLIFIED ============
+        // USTECm and US30m are Exness CFD symbols; Yahoo NQ=F/YM=F are only proxies.
+        // Require a recent MT5 screenshot before allowing an index trade scan.
+        function needsExactMt5Price(symbol) {
+            return symbol === 'USTECm' || symbol === 'US30m';
+        }
+
+        function hasMt5BridgeQuote(symbol) {
+            return !!(livePricesCache[symbol] && livePricesCache[symbol].source === 'mt5');
+        }
+
+        // ============ MULTI-SYMBOL AUTO-SCAN (NEW v7.0) — v8.9.1 SAFE PRICE GATE ============
         function runAutoScan() {
             const resultDiv = document.getElementById('autoScanResult');
             resultDiv.style.display = 'block';
+
+            const exactMt5 = selectedSymbol !== 'ALL' ? getRecentMt5ScreenshotPrice(selectedSymbol) : null;
+            if (needsExactMt5Price(selectedSymbol) && !exactMt5 && !hasMt5BridgeQuote(selectedSymbol)) {
+                resultDiv.innerHTML = '<div style="text-align: center; padding: 18px; color: #ffd700;"><div style="font-size: 30px; margin-bottom: 8px;">📸</div><strong>MT5 price required for ' + selectedSymbol + '</strong><br><span style="font-size: 12px; color: #ccc; display: block; margin-top: 8px;">Upload your MT5 chart in the Scan tab first. Yahoo NQ=F/YM=F is not the exact Exness price, so no trade signal is generated from it.</span></div>';
+                return;
+            }
+
             resultDiv.innerHTML = '<div style="text-align: center;"><div class="spinner" style="margin: 10px auto;"></div><p style="color: #00d4aa;">Scanning ' + selectedSymbol + '...</p></div>';
 
-            // v8.9: Just use the live price automatically — no typing needed.
+            // v8.9.1: Use the exact recent MT5 screenshot price when available.
             // Send the Settings confidence choice to the server too; previously
             // that setting was saved locally but the scanner always used 80%.
             const confBtn = document.querySelector('.conf-btn.active');
@@ -2951,7 +2997,7 @@ HTML = """
                     <div style="font-size: 48px; font-weight: 800; color: #00d4aa; margin: 8px 0;">${data.confidence}%</div>
                     <span class="badge gold">Grade ${data.grade}</span>
                     <span class="badge">${data.strategy}</span>
-                    <div style="margin-top: 8px; font-size: 10px; color: ${data.price_source === 'MT5 screenshot' ? '#00d4aa' : '#ffd700'};">Price source: ${data.price_source || 'unknown'}</div>
+                    <div style="margin-top: 8px; font-size: 10px; color: ${(data.price_source === 'MT5 screenshot' || data.price_source === 'MT5 live bridge') ? '#00d4aa' : '#ffd700'};">Price source: ${data.price_source || 'unknown'}</div>
                 </div>
                 <div style="margin-bottom: 10px; padding: 9px; background: ${data.direction === 'WAIT' ? 'rgba(255,215,0,0.08)' : 'rgba(0,212,170,0.08)'}; border: 1px solid ${data.direction === 'WAIT' ? 'rgba(255,215,0,0.25)' : 'rgba(0,212,170,0.25)'}; border-radius: 8px; color: ${data.direction === 'WAIT' ? '#ffd700' : '#00d4aa'}; font-size: 11px; text-align: center;">${data.signal_reason || (data.direction === 'WAIT' ? 'No trade: setup did not pass the scanner gate.' : 'Directional setup passed the scanner gate.')}</div>
                 <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; margin-bottom: 10px;">
@@ -3312,8 +3358,19 @@ HTML = """
             setTimeout(function() { runAnalysis(); }, 100);
 
             function runAnalysis() {
+                // v8.9.1: Do not analyse an index from a Yahoo proxy.
+                const exactMt5 = getRecentMt5ScreenshotPrice(symbol);
+                const bridgeInfo = livePricesCache[symbol] && livePricesCache[symbol].source === 'mt5' ? livePricesCache[symbol] : null;
+                if (needsExactMt5Price(symbol) && !exactMt5 && !bridgeInfo) {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('previewSection').style.display = 'block';
+                    document.getElementById('ocrStatus').textContent = '⚠️ Exact MT5 price not captured. Upload a clear chart with the highlighted price box first.';
+                    document.getElementById('ocrStatus').style.color = '#ff6b6b';
+                    return;
+                }
+
                 // v8.9 FIX: Never invent a price. The scan must have a live quote.
-                const currentPrice = parseFloat(priceInput);
+                const currentPrice = bridgeInfo ? Number(bridgeInfo.price) : (exactMt5 ? Number(exactMt5.price) : parseFloat(priceInput));
                 if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
                     document.getElementById('loading').style.display = 'none';
                     document.getElementById('previewSection').style.display = 'block';
@@ -3586,19 +3643,92 @@ HTML = """
 def home():
     return render_template_string(HTML)
 
+@app.route('/api/mt5/quotes', methods=['POST'])
+def api_mt5_quotes():
+    """Receive read-only tick quotes from the user's MT5 bridge EA.
+
+    The EA sends bid/ask only; it never sends the account password and cannot
+    place trades through this endpoint. Configure MT5_BRIDGE_TOKEN in Render
+    and the same token in the EA input.
+    """
+    global MT5_QUOTES, MT5_QUOTES_LAST_UPDATE
+    if not MT5_BRIDGE_TOKEN:
+        return jsonify({'error': 'MT5 bridge is not configured on the server'}), 503
+
+    supplied = request.headers.get('X-Bridge-Token', '')
+    if not supplied or not hmac.compare_digest(supplied, MT5_BRIDGE_TOKEN):
+        return jsonify({'error': 'Unauthorized bridge token'}), 401
+
+    payload = request.get_json(silent=True) or {}
+    quotes = payload.get('quotes', [])
+    if not isinstance(quotes, list):
+        return jsonify({'error': 'quotes must be a list'}), 400
+
+    accepted = 0
+    now = time.time()
+    for item in quotes:
+        if not isinstance(item, dict):
+            continue
+        symbol = str(item.get('symbol', ''))
+        if symbol not in LIVE_PRICES:
+            continue
+        try:
+            bid = float(item.get('bid', 0) or 0)
+            ask = float(item.get('ask', 0) or 0)
+            price = bid if bid > 0 else ask
+            if bid > 0 and ask > 0:
+                price = (bid + ask) / 2.0
+            if price <= 0:
+                continue
+        except (TypeError, ValueError):
+            continue
+        MT5_QUOTES[symbol] = {
+            'price': round(price, 5),
+            'bid': round(bid, 5),
+            'ask': round(ask, 5),
+            'tick_time_msc': item.get('time_msc'),
+            'received_at': now,
+            'server': str(payload.get('server', '')),
+            'account': str(payload.get('account', '')),
+        }
+        accepted += 1
+
+    MT5_QUOTES_LAST_UPDATE = now if accepted else MT5_QUOTES_LAST_UPDATE
+    return jsonify({'status': 'ok', 'accepted': accepted, 'received_at': now})
+
+@app.route('/api/mt5/status')
+def api_mt5_status():
+    fresh = {}
+    for symbol in LIVE_PRICES:
+        quote = get_mt5_quote(symbol)
+        if quote:
+            fresh[symbol] = {
+                'price': quote['price'],
+                'bid': quote['bid'],
+                'ask': quote['ask'],
+                'server': quote.get('server', ''),
+                'age_seconds': round(time.time() - quote.get('received_at', time.time()), 1),
+            }
+    return jsonify({'configured': bool(MT5_BRIDGE_TOKEN), 'connected': bool(fresh), 'quotes': fresh})
+
 @app.route('/api/prices')
 def api_prices():
-    """v8.8: Returns LIVE prices from Yahoo Finance (free, no API key).
-    Falls back to LIVE_PRICES placeholder if API fails.
-    Caches for 60 seconds to avoid hammering the API.
-    """
-    # Try to get live prices
+    """Return the best available quote, preferring the user's exact MT5 bridge."""
     live = fetch_live_prices()
-
     prices = {}
     for symbol, data in LIVE_PRICES.items():
-        if live and symbol in live:
-            # Use real Yahoo price
+        bridge = get_mt5_quote(symbol)
+        if bridge:
+            yahoo = live.get(symbol, {}) if live else {}
+            prices[symbol] = {
+                'price': bridge['price'],
+                'change': yahoo.get('change', 0),
+                'high': yahoo.get('high', bridge['price']),
+                'low': yahoo.get('low', bridge['price']),
+                'source': 'mt5',
+                'age_seconds': round(time.time() - bridge.get('received_at', time.time()), 1),
+            }
+        elif live and symbol in live:
             prices[symbol] = {
                 'price': live[symbol]['price'],
                 'change': live[symbol]['change'],
@@ -3607,18 +3737,14 @@ def api_prices():
                 'source': 'live'
             }
         else:
-            # Fallback: use placeholder with small variance
-            import random as rnd
-            change_pct = rnd.uniform(-1.5, 1.5)
-            new_price = data['price'] * (1 + change_pct/100)
+            # Stable fallback only; never add random movement to a quote.
             prices[symbol] = {
-                'price': round(new_price, 4),
-                'change': round(change_pct, 2),
+                'price': data['price'],
+                'change': data.get('change', 0.0),
                 'high': data['high'],
                 'low': data['low'],
                 'source': 'fallback'
             }
-
     return jsonify(prices)
 
 @app.route('/api/session')
@@ -3700,7 +3826,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '8.9.1',
+        'version': '8.9.2',
         'features': ['robot', 'live_ticker', 'multi_symbol_scan', 'htf_bias',
                      'lot_size_calculator', 'multi_tp', 'signal_history',
                      '20_smc_factors', 'confluence_categories', 'drawdown_tracker',
@@ -3709,7 +3835,7 @@ def health():
                      'real_prices', 'fast_scan', 'outcome_tracking',
                      'editable_balance', 'editable_risk_pct', 'editable_min_confidence',
                      'manual_chart_v8_2_safe'],
-        'new_in_v8_9': ['removed_manual_price_input', 'highlighted_mt5_price_ocr', 'auto_live_price_preview', 'live_price_preview_on_scan_tab', 'confidence_gate_matches_settings', 'yahoo_proxy_warning'],
+        'new_in_v8_9': ['removed_manual_price_input', 'highlighted_mt5_price_ocr', 'auto_live_price_preview', 'live_price_preview_on_scan_tab', 'confidence_gate_matches_settings', 'yahoo_proxy_warning', 'exact_mt5_required_for_indices', 'mt5_read_only_quote_bridge'],
         'new_in_v8_8': ['yahoo_finance_live_prices', 'no_api_key_needed'],
         'new_in_v8_4': ['iphone_upload_two_buttons', 'camera_gallery_split',
                         'best_action_hidden_when_wait', 'best_action_color_dynamic'],

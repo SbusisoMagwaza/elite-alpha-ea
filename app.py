@@ -1,170 +1,23 @@
 """
-Elite Alpha EA - v8.9.2 — EXACT MT5 BRIDGE
-Partner: Sbusiso Magwaza | Broker: Exness MT5Real9 | Account: 134644333
+Elite Alpha EA v9.0.0 — exact Exness quotes only + conditional news scenarios.
 
-🎉 NEW IN v8.9 (THE REAL FINAL FIX):
-  ✅ LIVE prices from Yahoo Finance (FREE, no API key!) - already working in v8.8
-  ✅ REMOVED "TYPE YOUR MT5 PRICE" box — partner was confused by it
-  ✅ REMOVED OCR price picker buttons — partner too slow to pick
-  ✅ REMOVED leftover </old_text> tags from previous edits
-  ✅ OCR identifies the symbol and reads the highlighted MT5 current-price box
-  ✅ Yahoo is clearly labelled as a proxy; no wrong chart-axis price picker
-  ✅ Just pick symbol → tap SCAN → done. App does everything.
-
-🎉 PRESERVED FROM v8.8:
-  ✅ REAL-TIME LIVE prices from Yahoo Finance
-  ✅ Symbol → Yahoo ticker mapping for all 7 pairs
-  ✅ Auto-scan NOW uses LIVE price automatically
-  ✅ Scan tab also shows the selected symbol live price
-  ✅ Cache 60 seconds to avoid API spam
-  ✅ Graceful fallback to placeholder if Yahoo API fails
-
-PRESERVED FROM v8.7:
-  ✅ Both scanners hardened
-  ✅ Smart screenshot upload: detects symbol, then loads live price
-
-PARTNER THIS MEANS: You don't need to type anything! The app knows the price.
-
-PRESERVED FROM v8.6:
-  ✅ Both scanners hardened, symbol shown on button
-  ✅ Smart screenshot upload: detects symbol, then loads live price (user picks correct price)
-  ✅ iPhone upload fix
-  ✅ WAIT signal hides fake prices
-  ✅ All 7 symbols return correct prices
-
-PRESERVED FROM EARLIER:
-  ✅ Tesseract.js OCR
-  ✅ All Home tab features intact
-
-NEW IN v8.6:
-  ✅ Both scanners hardened:
-      - Home SCAN NOW button shows which symbol it's scanning
-      - Button label updates as you tap different symbols (BTC/XAU/EUR/etc.)
-      - Results always show the scanned symbol prominently
-  ✅ All 7 symbols verified returning CORRECT prices:
-      - BTCUSDm: $60k-$75k range
-      - XAUUSDm: $4k-$5k range
-      - EURUSDm: 1.05-1.12
-      - GBPUSDm: 1.24-1.31
-      - USDJPYm: 146-154
-      - USTECm: $25k-$35k
-      - US30m: $41k-$45k
-
-PRESERVED FROM v8.5:
-  ✅ Smart screenshot upload: detects symbol, then loads live price buttons (user picks correct price from chart)
-  ✅ iPhone upload fix (Camera + Gallery buttons)
-  ✅ WAIT signal hides fake prices
-  ✅ "Best to Buy" hidden when WAIT
-
-PRESERVED FROM v8.3:
-  ✅ Tesseract.js OCR works for screenshots
-  ✅ All Home tab features intact
-
-NEW IN v8.5:
-  ✅ Chart uploads no longer use unreliable price-axis OCR
-  ✅ Live price feed is used for the scan price
-
-PRESERVED FROM v8.4:
-  ✅ iPhone upload fix (Camera + Gallery buttons)
-  ✅ WAIT signal hides fake prices (shows "— (no trade)")
-  ✅ Hidden "Best to Buy" when WAIT
-  ✅ All other features intact
-
-PRESERVED FROM v8.3:
-  ✅ Tesseract.js OCR (works for symbol detection)
-  ✅ Camera capture support
-  ✅ All Home tab features
-
-NEW IN v8.4:
-  ✅ FIX: Upload button now works on iPhone Safari
-      - Split into TWO buttons: 📷 Camera + 🖼️ Gallery
-      - Added small delay (100ms) before triggering input click (iOS fix)
-      - Hidden file input positioned off-screen (-9999px) instead of display:none
-  ✅ FIX: "Best to Buy/Sell" badge now HIDDEN when signal is WAIT
-      - Prevents confusing display of "Best to Buy" with WAIT direction
-  ✅ FIX: Color of "Best to Buy" badge changes based on direction
-      - BUY = green, SELL = red (was always green before)
-
-PRESERVED FROM v8.3:
-  ✅ Tesseract.js OCR (works perfectly for screenshots)
-  ✅ Auto-fills price + symbol from photo
-  ✅ Camera capture support
-  ✅ All Home tab features (HTF bias, drawdown, multi-symbol scan)
-
-NEW IN v8.3:
-  ✅ Take a picture of MT5 chart → app reads price automatically
-  ✅ Tesseract.js OCR engine (browser-based, no server cost, works offline)
-  ✅ Auto-fills Symbol field if detected in image
-  ✅ Camera opens directly (capture="environment")
-  ✅ Progress bar shows "🔍 Reading... 23%"
-  ✅ Falls back to manual input if OCR fails
-
-PRESERVED FROM v8.2:
-  ✅ Fixed random price bug (uses the live feed price)
-  ✅ Trend selector dropdown (Bullish/Bearish/Ranging/Auto)
-  ✅ Honest "DEMO MODE" copy if you don't upload photo
-
-PRESERVED FROM v8.1:
-  ✅ Editable Account Balance
-  ✅ Editable Risk % buttons
-  ✅ Editable Min Confidence buttons
-  ✅ Live risk preview
-  ✅ Clear History button
-  ✅ Save Settings button
-
-NEW IN v8.0 (preserved):
-  ✅ Confluence grouped by category
-  ✅ Drawdown tracker
-  ✅ Time-of-day countdown
-  ✅ Breaker Blocks + Mitigation Blocks
-  ✅ Asian Range + PDH/PDL markers
-
-NEW IN v8.0:
-  ✅ Confluence grouped by category (Structure / Liquidity / Entry / Context)
-  ✅ Drawdown tracker (daily/weekly loss limits with auto-stop)
-  ✅ Time-of-day countdown ("London opens in 2h 15m")
-  ✅ Breaker Blocks + Mitigation Blocks (17 SMC factors total)
-  ✅ Asian Range + PDH/PDL markers (visual reference levels)
-
-NEW IN v7.0 (preserved):
-  ✅ Multi-symbol auto-scan (pick any pair, not just BTC)
-  ✅ Lot size calculator (R-risk → exact lots for Exness)
-  ✅ HTF bias banner (Daily/4H direction on Home)
-  ✅ Signal history with WIN/LOSS tracking (real win rate)
-  ✅ Multiple TP levels (TP1/TP2/TP3 with partial close %)
-
-REMOVED (per partner request):
-  ❌ Profit target tracker — was biasing robot
-  ❌ Account balance pressure from main view — Settings only
-  ❌ "Win rate: 0%" fake stat — replaced with REAL history
-  ❌ MT5 webhook push — needs always-on PC, too complex
-  ❌ "Open in MT5" deep link — you tap MT5 manually
-  ❌ Real broker API prices — needs API token
-  ❌ AI photo symbol detection — too risky
-
-PRESERVED FROM v6.0 (unchanged, working):
-  ✅ Custom robot image + glow animation
-  ✅ Live ticker (7 pairs)
-  ✅ Session quality indicator
-  ✅ Economic calendar
-  ✅ Manual chart upload + analyze
-  ✅ 17 SMC factors (was 15, +2 in v8.0)
-  ✅ Confluence checklist (Vertex style)
-  ✅ Top-down analysis
-  ✅ Push notification setup guide
-  ✅ Fixed switchTab(tab, btn) bug
+Safety changes:
+- No public proxy prices or static quote estimates are presented or scanned.
+- Trade-direction scanners stay in WAIT until real MT5 candle history is available.
+- Randomly generated market structure, bias, levels and scores have been removed.
+- Economic calendar events are fetched from FinanceCalendar.com with visible attribution.
+- News analysis is conditional scenario information, not a guaranteed prediction.
 """
 
 from flask import Flask, request, jsonify, render_template_string
 import json
-import random
 import re
 import os
 import hmac
 import time
 import base64
 import io
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 try:
     from zoneinfo import ZoneInfo
     JOHANNESBURG_TZ = ZoneInfo('Africa/Johannesburg')
@@ -181,26 +34,22 @@ import urllib.parse
 app = Flask(__name__)
 
 # ============================================
-# v8.8: SYMBOL → YAHOO FINANCE TICKER MAP
-# Yahoo Finance is FREE, no API key needed!
-# Format: YF ticker symbols for each Exness pair
+# v9.0: SYMBOL METADATA — NEVER USED AS A MARKET QUOTE
+# Current prices can only come from a fresh MT5 bridge quote or an explicitly
+# captured MT5 screenshot in the browser. There are no proxy/static prices.
 # ============================================
-YAHOO_TICKERS = {
-    'XAUUSDm': 'XAUUSD=X',      # Gold
-    'BTCUSDm': 'BTC-USD',       # Bitcoin
-    'EURUSDm': 'EURUSD=X',      # EUR/USD
-    'GBPUSDm': 'GBPUSD=X',      # GBP/USD
-    'USDJPYm': 'JPY=X',         # USD/JPY (Yahoo uses JPY=X for USD/JPY)
-    'USTECm':  'NQ=F',          # NASDAQ 100 futures (closest to USTECm)
-    'US30m':   'YM=F',          # Dow Jones futures (closest to US30m)
+
+SYMBOL_CONFIG = {
+    'XAUUSDm': {'pip': 0.10, 'lot_value': 1.0},
+    'BTCUSDm': {'pip': 1.0, 'lot_value': 1.0},
+    'EURUSDm': {'pip': 0.0001, 'lot_value': 10.0},
+    'GBPUSDm': {'pip': 0.0001, 'lot_value': 10.0},
+    'USDJPYm': {'pip': 0.01, 'lot_value': 6.67},
+    'USTECm':  {'pip': 1.0, 'lot_value': 1.0},
+    'US30m':   {'pip': 1.0, 'lot_value': 1.0},
 }
 
-# Cached live prices (refreshed every 60 seconds)
-LIVE_PRICES_CACHE = {}
-LIVE_PRICES_LAST_UPDATE = None
-
-# v8.9.2: Optional exact MT5 quote bridge. The bridge is read-only: an EA
-# running on the user's own MT5 desktop sends bid/ask quotes to Render.
+# v8.9.2: read-only quote bridge retained in v9.0. The EA sends bid/ask; it cannot trade.
 MT5_BRIDGE_TOKEN = os.environ.get('MT5_BRIDGE_TOKEN', '')
 MT5_QUOTES = {}
 MT5_QUOTES_LAST_UPDATE = None
@@ -214,85 +63,281 @@ def get_mt5_quote(symbol, max_age_seconds=10):
         return None
     return quote
 
-def fetch_live_prices():
-    """Fetch live prices from Yahoo Finance for all symbols.
-    FREE, no API key, returns real-time quotes.
-    Uses v8 chart API which is more reliable than v7 quote API.
-    """
-    global LIVE_PRICES_CACHE, LIVE_PRICES_LAST_UPDATE
-    import time
+# ============================================
+# v9.0: LIVE ECONOMIC CALENDAR
+# FinanceCalendar API is keyless for this usage; the UI includes the required
+# visible source attribution. Cache for 5 minutes to keep requests low.
+# ============================================
 
-    # Use cache if recent (60 seconds)
-    if LIVE_PRICES_LAST_UPDATE and (datetime.utcnow() - LIVE_PRICES_LAST_UPDATE).seconds < 60:
-        return LIVE_PRICES_CACHE
+FINANCE_CALENDAR_API = 'https://www.financecalendar.com/wp-json/fc/v1/calendar'
+FINANCE_CALENDAR_ATTRIBUTION = 'https://www.financecalendar.com'
+ECONOMIC_CALENDAR_CACHE = {'events': [], 'fetched_at': 0.0, 'status': 'empty'}
+ECONOMIC_CALENDAR_TTL_SECONDS = 300
+ECONOMIC_CALENDAR_COUNTRIES = 'US,GB,EU,JP,CN'
+
+
+def _calendar_datetime_utc(value):
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def get_economic_calendar_data(force_refresh=False):
+    """Fetch real upcoming medium/high-impact macro events; never substitute fixtures."""
+    global ECONOMIC_CALENDAR_CACHE
+    now_epoch = time.time()
+    if (not force_refresh and ECONOMIC_CALENDAR_CACHE.get('fetched_at')
+            and now_epoch - ECONOMIC_CALENDAR_CACHE['fetched_at'] < ECONOMIC_CALENDAR_TTL_SECONDS):
+        return dict(ECONOMIC_CALENDAR_CACHE)
+
+    local_now = johannesburg_now()
+    if local_now.tzinfo is None:
+        local_now = local_now.replace(tzinfo=timezone.utc).astimezone(JOHANNESBURG_TZ or timezone.utc)
+    now_utc = local_now.astimezone(timezone.utc)
+    from_date = local_now.date()
+    to_date = from_date + timedelta(days=7)
+    params = urllib.parse.urlencode({
+        'from': from_date.isoformat(),
+        'to': to_date.isoformat(),
+        'country': ECONOMIC_CALENDAR_COUNTRIES,
+        'tz': 'Africa/Johannesburg',
+        'limit': 100,
+    })
+    url = FINANCE_CALENDAR_API + '?' + params
+    req = urllib.request.Request(url, headers={
+        'User-Agent': 'EliteAlphaEA/9.0 (economic calendar; visible attribution in app)',
+        'Accept': 'application/json',
+    })
 
     try:
-        # Map back to our symbols
-        yf_to_ours = {v: k for k, v in YAHOO_TICKERS.items()}
+        with urllib.request.urlopen(req, timeout=8) as response:
+            raw = json.loads(response.read().decode('utf-8'))
+        source_events = raw.get('events', []) if isinstance(raw, dict) else raw
+        if not isinstance(source_events, list):
+            raise ValueError('Calendar provider returned an unexpected response shape')
 
-        for yf_ticker, our_symbol in yf_to_ours.items():
-            try:
-                # Use v8 chart API (single ticker per request, more reliable)
-                url = f'https://query1.finance.yahoo.com/v8/finance/chart/{yf_ticker}?interval=1m&range=1d'
-                req = urllib.request.Request(url, headers={
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-                })
-                with urllib.request.urlopen(req, timeout=5) as response:
-                    data = json.loads(response.read().decode())
-
-                chart = data.get('chart', {}).get('result', [])
-                if not chart:
-                    continue
-                meta = chart[0].get('meta', {})
-                price = meta.get('regularMarketPrice', 0)
-                if price > 0:
-                    prev_close = meta.get('chartPreviousClose', meta.get('previousClose', price))
-                    change_pct = ((price - prev_close) / prev_close * 100) if prev_close > 0 else 0
-                    LIVE_PRICES_CACHE[our_symbol] = {
-                        'price': round(price, 5),
-                        'change': round(change_pct, 2),
-                        'high': meta.get('regularMarketDayHigh', price),
-                        'low': meta.get('regularMarketDayLow', price),
-                    }
-            except Exception as e:
-                # Skip this ticker, continue with others
+        normalized = []
+        for item in source_events:
+            if not isinstance(item, dict):
                 continue
+            impact = str(item.get('impact') or '').strip().lower()
+            if impact not in ('high', 'medium'):
+                continue
+            title = str(item.get('title') or item.get('name') or item.get('event') or '').strip()
+            if not title:
+                continue
+            country = str(item.get('country') or '').strip()
+            release_raw = item.get('release_at_utc') or item.get('time_utc')
+            release_dt = _calendar_datetime_utc(release_raw)
+            if release_dt:
+                # Keep upcoming events and just-released events while their actual
+                # values may still be populating. Exclude stale past placeholders.
+                if release_dt < now_utc - timedelta(minutes=90):
+                    continue
+                if release_dt > now_utc + timedelta(days=8):
+                    continue
+                local_release = release_dt.astimezone(JOHANNESBURG_TZ or timezone.utc)
+                local_date = local_release.strftime('%Y-%m-%d')
+                local_time = item.get('time_local') or local_release.strftime('%H:%M')
+            else:
+                local_date = str(item.get('date') or '')[:10]
+                local_time = str(item.get('time_local') or 'Time TBC')
 
-        if LIVE_PRICES_CACHE:
-            LIVE_PRICES_LAST_UPDATE = datetime.utcnow()
-            return LIVE_PRICES_CACHE
+            slug_source = str(item.get('id') or item.get('series_code') or title).lower()
+            slug = re.sub(r'[^a-z0-9]+', '-', slug_source).strip('-')[:60]
+            event_id = f'{slug}-{local_date or "date-tbc"}'
+            currency = str(item.get('currency') or {
+                'US': 'USD', 'GB': 'GBP', 'UK': 'GBP', 'EU': 'EUR',
+                'JP': 'JPY', 'CN': 'CNY'
+            }.get(country.upper(), '')).upper()
+            normalized.append({
+                'id': event_id,
+                'title': title,
+                'country': country,
+                'currency': currency,
+                'category': str(item.get('category') or ''),
+                'impact': impact.upper(),
+                'date_local': local_date,
+                'time_local': str(local_time),
+                'release_at_utc': release_dt.isoformat() if release_dt else str(release_raw or ''),
+                'status': str(item.get('status') or ('released' if item.get('actual') is not None else 'scheduled')),
+                'consensus': (item.get('consensus', item.get('forecast')) if str(item.get('consensus', item.get('forecast')) or '').strip() else None),
+                'prior': (item.get('prior', item.get('previous')) if str(item.get('prior', item.get('previous')) or '').strip() else None),
+                'actual': (item.get('actual') if str(item.get('actual') or '').strip() else None),
+                'unit': str(item.get('unit') or ''),
+                'source_name': str(item.get('source_name') or ''),
+                'source_url': (str(item.get('source_url') or '') if str(item.get('source_url') or '').startswith('https://') else ''),
+                'url': (str(item.get('url') or FINANCE_CALENDAR_ATTRIBUTION) if str(item.get('url') or FINANCE_CALENDAR_ATTRIBUTION).startswith('https://') else FINANCE_CALENDAR_ATTRIBUTION),
+            })
+
+        normalized.sort(key=lambda e: e.get('release_at_utc') or '9999')
+        ECONOMIC_CALENDAR_CACHE = {
+            'events': normalized,
+            'fetched_at': now_epoch,
+            'updated_at': local_now.strftime('%Y-%m-%d %H:%M:%S SAST'),
+            'status': 'live',
+            'message': '',
+        }
+        return dict(ECONOMIC_CALENDAR_CACHE)
+    except Exception as exc:
+        if ECONOMIC_CALENDAR_CACHE.get('events'):
+            stale = dict(ECONOMIC_CALENDAR_CACHE)
+            stale['status'] = 'stale'
+            stale['message'] = 'Calendar refresh failed; showing cached events. Verify event times before use.'
+            return stale
+        return {
+            'events': [], 'fetched_at': 0, 'updated_at': None,
+            'status': 'unavailable',
+            'message': 'Live calendar could not be reached. No placeholder events are shown.',
+            'error': str(exc)[:180],
+        }
+
+
+def _macro_number(value):
+    if value is None:
+        return None
+    text = str(value).replace(',', '')
+    match = re.search(r'[-+]?(?:\d+(?:\.\d*)?|\.\d+)', text)
+    if not match:
+        return None
+    try:
+        return float(match.group(0))
+    except ValueError:
         return None
 
-    except Exception as e:
-        print(f'Yahoo Finance API error: {e}')
-        return None
 
-# ============================================
-# TRADING DATA - REAL EXNESS PRICES
-# Fallback prices (used if Yahoo API fails)
-# ============================================
+def _event_family(event):
+    text = (str(event.get('title', '')) + ' ' + str(event.get('category', ''))).lower()
+    if re.search(r'\b(cpi|ppi|pce|inflation|producer price|consumer price|price index)\b', text):
+        return 'inflation'
+    if re.search(r'\b(payroll|employment|unemployment|jobless|claims|wage|labor market|labour market|nonfarm|non-farm)\b', text):
+        return 'labor'
+    if re.search(r'\b(fomc|rate decision|interest rate|central bank|monetary policy|bank of england|ecb|boj|boe)\b', text):
+        return 'central_bank'
+    if re.search(r'\b(gdp|retail sales|industrial production|pmi|ism|growth)\b', text):
+        return 'growth'
+    return 'other'
 
-LIVE_PRICES = {
-    'XAUUSDm': {'price': 4350.50, 'change': 0.0, 'high': 4365.00, 'low': 4338.00, 'pip': 0.10, 'lot_value': 1.0},     # Gold: 1 pip = $0.10, 1 lot = 100 oz
-    'BTCUSDm': {'price': 67189.00, 'change': 0.0, 'high': 67450.00, 'low': 66900.00, 'pip': 1.0, 'lot_value': 1.0},    # BTC: 1 pip = $1, 1 lot = 1 BTC
-    'EURUSDm': {'price': 1.0858, 'change': 0.0, 'high': 1.0870, 'low': 1.0845, 'pip': 0.0001, 'lot_value': 10.0},       # Forex: 1 pip = 0.0001, 1 lot = $10/pip
-    'GBPUSDm': {'price': 1.2734, 'change': 0.0, 'high': 1.2755, 'low': 1.2718, 'pip': 0.0001, 'lot_value': 10.0},
-    'USDJPYm': {'price': 149.85, 'change': 0.0, 'high': 150.20, 'low': 149.60, 'pip': 0.01, 'lot_value': 6.67},          # JPY pairs: 1 pip = 0.01
-    'USTECm': {'price': 29450.19, 'change': 0.0, 'high': 29480.00, 'low': 29380.00, 'pip': 1.0, 'lot_value': 1.0},       # NAS100: 1 pip = 1 point, 1 lot = $1/point
-    'US30m':  {'price': 42850.00, 'change': 0.0, 'high': 42920.00, 'low': 42780.00, 'pip': 1.0, 'lot_value': 1.0},
-}
 
-# ============================================
-# ECONOMIC CALENDAR
-# ============================================
+def _asset_effect_for_currency(symbol, currency, stance):
+    """Qualitative conditional mapping, not a trade signal or probability."""
+    if not stance or stance == 'mixed':
+        return 'Mixed/unclear reaction is possible; wait for the release and price confirmation.'
+    firm = stance == 'firm'
+    if currency == 'USD':
+        if symbol == 'XAUUSDm':
+            return 'A firmer USD/yield outlook can pressure gold lower.' if firm else 'A softer USD/yield outlook can support gold.'
+        if symbol in ('EURUSDm', 'GBPUSDm'):
+            return 'USD support can pressure this pair lower.' if firm else 'USD softness can support this pair higher.'
+        if symbol == 'USDJPYm':
+            return 'USD support can lift this pair.' if firm else 'USD softness can weigh on this pair.'
+        if symbol in ('USTECm', 'US30m'):
+            return 'Higher-yield expectations can pressure index valuations; the reaction can reverse.' if firm else 'Lower-yield expectations can support valuations; the reaction can reverse.'
+        if symbol == 'BTCUSDm':
+            return 'Potential USD/liquidity pressure, but crypto response is mixed and not one-directional.'
+    if currency == 'GBP' and symbol == 'GBPUSDm':
+        return 'Stronger GBP fundamentals can support this pair.' if firm else 'Weaker GBP fundamentals can pressure this pair.'
+    if currency == 'EUR' and symbol == 'EURUSDm':
+        return 'Stronger EUR fundamentals can support this pair.' if firm else 'Weaker EUR fundamentals can pressure this pair.'
+    if currency == 'JPY' and symbol == 'USDJPYm':
+        return 'A firmer JPY can weigh on USDJPY.' if firm else 'A softer JPY can support USDJPY.'
+    return 'This event may have an indirect or mixed effect on this symbol; no one-way call is justified.'
 
-ECONOMIC_EVENTS = [
-    {'time': '14:30', 'currency': 'USD', 'event': 'Non-Farm Payrolls', 'impact': 'HIGH'},
-    {'time': '15:00', 'currency': 'USD', 'event': 'Unemployment Rate', 'impact': 'HIGH'},
-    {'time': '16:00', 'currency': 'EUR', 'event': 'ECB Press Conference', 'impact': 'HIGH'},
-    {'time': '11:30', 'currency': 'GBP', 'event': 'CPI YoY', 'impact': 'MEDIUM'},
-    {'time': '03:30', 'currency': 'JPY', 'event': 'BOJ Rate Decision', 'impact': 'HIGH'},
-]
+
+def _stance_from_surprise(event, family, comparison):
+    if family == 'central_bank':
+        return 'firm' if comparison == 'above' else 'soft' if comparison == 'below' else 'mixed'
+    if family in ('inflation', 'growth'):
+        return 'firm' if comparison == 'above' else 'soft' if comparison == 'below' else 'mixed'
+    if family == 'labor':
+        text = (str(event.get('title', '')) + ' ' + str(event.get('category', ''))).lower()
+        higher_is_weaker = bool(re.search(r'\b(unemployment|jobless|claims)\b', text))
+        stronger = (comparison == 'below') if higher_is_weaker else (comparison == 'above')
+        if comparison == 'inline':
+            return 'mixed'
+        return 'firm' if stronger else 'soft'
+    return 'mixed'
+
+
+def build_news_scenario(event, symbol):
+    family = _event_family(event)
+    currency = str(event.get('currency') or '').upper()
+    actual = _macro_number(event.get('actual'))
+    consensus = _macro_number(event.get('consensus'))
+    prior = event.get('prior')
+    actual_vs_consensus = None
+    released_note = None
+
+    if actual is not None and consensus is not None:
+        tolerance = max(abs(consensus) * 0.002, 0.01)
+        if actual > consensus + tolerance:
+            comparison = 'above'
+            comparison_label = 'above consensus'
+        elif actual < consensus - tolerance:
+            comparison = 'below'
+            comparison_label = 'below consensus'
+        else:
+            comparison = 'inline'
+            comparison_label = 'roughly in line with consensus'
+        stance = _stance_from_surprise(event, family, comparison)
+        effect = _asset_effect_for_currency(symbol, currency, stance)
+        actual_vs_consensus = {
+            'actual': str(event.get('actual')),
+            'consensus': str(event.get('consensus')),
+            'label': comparison_label,
+        }
+        released_note = f"Actual was {comparison_label}. {effect}"
+
+    if family == 'central_bank':
+        scenarios = [
+            {'label': 'More hawkish than expected', 'text': _asset_effect_for_currency(symbol, currency, 'firm')},
+            {'label': 'More dovish than expected', 'text': _asset_effect_for_currency(symbol, currency, 'soft')},
+            {'label': 'In line / mixed statement', 'text': _asset_effect_for_currency(symbol, currency, 'mixed')},
+        ]
+    elif family in ('inflation', 'labor', 'growth'):
+        higher_stance = _stance_from_surprise(event, family, 'above')
+        lower_stance = _stance_from_surprise(event, family, 'below')
+        high_label = 'Actual higher / hotter than consensus' if family == 'inflation' else 'Actual above consensus'
+        low_label = 'Actual lower / cooler than consensus' if family == 'inflation' else 'Actual below consensus'
+        scenarios = [
+            {'label': high_label, 'text': _asset_effect_for_currency(symbol, currency, higher_stance)},
+            {'label': low_label, 'text': _asset_effect_for_currency(symbol, currency, lower_stance)},
+            {'label': 'Near consensus / mixed details', 'text': _asset_effect_for_currency(symbol, currency, 'mixed')},
+        ]
+    else:
+        scenarios = [
+            {'label': 'Before release', 'text': 'The event title alone does not support a defensible BUY/SELL direction.'},
+            {'label': 'After release', 'text': 'Compare actual with consensus, then wait for the Exness chart to confirm a reaction.'},
+        ]
+
+    phase = 'POST-RELEASE' if event.get('actual') is not None else 'PRE-RELEASE / WAITING FOR DATA'
+    if event.get('consensus') is None:
+        summary = 'No consensus value is currently published by the calendar source. The app will not invent a pre-event direction.'
+    else:
+        summary = 'This is a conditional scenario map, not a prediction. Markets can price consensus in beforehand and can reverse after the release.'
+    if released_note:
+        summary = released_note + ' The first reaction can still reverse; this is not a trade instruction.'
+
+    return {
+        'event': event.get('title', 'Economic event'),
+        'symbol': symbol,
+        'phase': phase,
+        'family': family,
+        'summary': summary,
+        'consensus': event.get('consensus'),
+        'prior': prior,
+        'actual': event.get('actual'),
+        'actual_vs_consensus': actual_vs_consensus,
+        'scenarios': scenarios,
+        'caution': 'Do not enter solely because of a calendar scenario. News can cause slippage, spread widening, whipsaws and reversals. Wait for a verified Exness price and price-action confirmation.',
+        'source_url': event.get('url') or FINANCE_CALENDAR_ATTRIBUTION,
+    }
 
 # ============================================
 # ACCOUNT CONFIG (Settings only — not displayed on Home)
@@ -322,50 +367,16 @@ SIGNAL_HISTORY = []  # Each: {id, symbol, direction, entry, sl, tp, outcome, tim
 # ============================================
 
 def get_htf_bias(symbol):
-    """Returns Daily and 4H bias for any symbol.
-    Uses deterministic random based on symbol + date so it stays stable per day.
-    """
-    # Seed by symbol + date so same symbol shows same bias all day
-    seed_str = f"{symbol}-{johannesburg_now().strftime('%Y-%m-%d')}"
-    seed = sum(ord(c) for c in seed_str) % 100
-
-    # Biases match normal market behavior (trending 60%, ranging 25%, choppy 15%)
-    daily_options = ['BULLISH', 'BEARISH', 'NEUTRAL']
-    daily_weights = [0.40, 0.35, 0.25]
-
-    h4_options = ['BULLISH', 'BEARISH', 'NEUTRAL']
-    h4_weights = [0.40, 0.35, 0.25]
-
-    daily_bias = random.choices(daily_options, weights=daily_weights)[0]
-    h4_bias = random.choices(h4_options, weights=h4_weights)[0]
-
-    # 4H usually aligns with Daily in trending markets
-    if daily_bias == 'BULLISH' and h4_bias == 'BEARISH' and seed > 70:
-        h4_bias = 'BULLISH'  # Force alignment 30% of the time
-    elif daily_bias == 'BEARISH' and h4_bias == 'BULLISH' and seed > 70:
-        h4_bias = 'BEARISH'
-
-    # Alignment status
-    if daily_bias == h4_bias:
-        if daily_bias == 'BULLISH':
-            alignment = 'STRONG BUY BIAS'
-            alignment_color = '#00d4aa'
-        elif daily_bias == 'BEARISH':
-            alignment = 'STRONG SELL BIAS'
-            alignment_color = '#ff6b6b'
-        else:
-            alignment = 'NEUTRAL — WAIT'
-            alignment_color = '#ffd700'
-    else:
-        alignment = 'CONFLICTING — CAUTION'
-        alignment_color = '#ff6b6b'
-
+    """HTF bias is unavailable until real MT5 candle bars are connected."""
+    if symbol not in SYMBOL_CONFIG:
+        return None
     return {
         'symbol': symbol,
-        'daily': daily_bias,
-        'h4': h4_bias,
-        'alignment': alignment,
-        'alignment_color': alignment_color,
+        'daily': 'UNAVAILABLE',
+        'h4': 'UNAVAILABLE',
+        'alignment': 'Waiting for MT5 candle history',
+        'alignment_color': '#888888',
+        'available': False,
     }
 
 # ============================================
@@ -456,41 +467,13 @@ def get_next_session():
 # ============================================
 
 def get_reference_levels(symbol):
-    """Returns simulated reference levels for any symbol.
-    These are the "magnets" smart money targets:
-      - Asian Range: high/low during Asian session
-      - PDH/PDL: Previous Day High/Low
-      - PWH/PWL: Previous Week High/Low (optional)
-    """
-    info = LIVE_PRICES.get(symbol)
-    if not info:
+    """Return an explicit unavailable state; no synthetic levels are generated."""
+    if symbol not in SYMBOL_CONFIG:
         return None
-
-    price = info['price']
-    daily_range_pct = 0.015  # 1.5% typical daily range
-
-    # Simulated but realistic levels
-    pdh = round(price * (1 + random.uniform(0.005, 0.012)), 2)
-    pdl = round(price * (1 - random.uniform(0.005, 0.012)), 2)
-
-    # Asian range is typically tighter (low volatility session)
-    asian_range_pct = 0.008
-    asian_high = round(price * (1 + random.uniform(0.001, asian_range_pct)), 2)
-    asian_low = round(price * (1 - random.uniform(0.001, asian_range_pct)), 2)
-
-    # Equal highs/lows (liquidity pools)
-    equal_highs = round(pdh * 1.0005, 2)  # Just above PDH
-    equal_lows = round(pdl * 0.9995, 2)   # Just below PDL
-
     return {
         'symbol': symbol,
-        'pdh': pdh,
-        'pdl': pdl,
-        'asian_high': asian_high,
-        'asian_low': asian_low,
-        'equal_highs': equal_highs,
-        'equal_lows': equal_lows,
-        'current_price': price,
+        'available': False,
+        'reason': 'Verified MT5 OHLC candle history is not connected yet.',
     }
 
 # ============================================
@@ -644,7 +627,7 @@ def calculate_lot_size(symbol, sl_distance, balance, risk_pct):
         'US30m': 1.0,
     }
 
-    info = LIVE_PRICES.get(symbol, {})
+    info = SYMBOL_CONFIG.get(symbol, {})
     pip_size = info.get('pip', 0.0001)
     contract_size = contract_sizes.get(symbol, 1.0)
 
@@ -682,145 +665,65 @@ def calculate_lot_size(symbol, sl_distance, balance, risk_pct):
 # ============================================
 
 def auto_scan_symbol(symbol, custom_price=None, min_confidence=None):
-    """Scans any symbol with same 15-factor SMC engine.
-    custom_price: optional real price from user's MT5 (overrides placeholder).
-    min_confidence: optional client-selected gate (65/75/85 from Settings).
-    """
-    info = LIVE_PRICES.get(symbol)
-    if not info:
-        return None
+    """Safe placeholder: quote alone is not candle/structure data.
 
-    # The Settings tab can choose Aggressive (65), Balanced (75), or
-    # Conservative (85). Keep the server default safe when no value is sent.
+    No BUY/SELL is generated until a real MT5 OHLC history feed is connected.
+    custom_price is accepted only as an explicitly labelled MT5 screenshot value.
+    """
+    if symbol not in SYMBOL_CONFIG:
+        return None
     try:
         signal_gate = int(min_confidence) if min_confidence is not None else SIGNAL_MIN_CONFIDENCE
     except (TypeError, ValueError):
         signal_gate = SIGNAL_MIN_CONFIDENCE
     signal_gate = max(50, min(95, signal_gate))
 
-    # Prefer the exact MT5 bridge when it is fresh. A fresh bridge quote is
-    # better than a screenshot because the market may have moved after capture.
-    mt5_quote = get_mt5_quote(symbol)
-    if mt5_quote and mt5_quote.get('price', 0) > 0:
-        current_price = mt5_quote['price']
+    quote = get_mt5_quote(symbol)
+    if quote and float(quote.get('price', 0) or 0) > 0:
+        current_price = float(quote['price'])
         price_source = 'MT5 live bridge'
-    elif custom_price and custom_price > 0:
-        # Exact price captured from the user's MT5 screenshot.
-        current_price = custom_price
-        price_source = 'MT5 screenshot'
     else:
-        # Yahoo is a public proxy. It is not guaranteed to match Exness USTECm/US30m.
-        live = fetch_live_prices()
-        if live and symbol in live and live[symbol]['price'] > 0:
-            current_price = live[symbol]['price']
-            price_source = 'Yahoo public proxy'
+        try:
+            screenshot_price = float(custom_price) if custom_price is not None else None
+        except (TypeError, ValueError):
+            screenshot_price = None
+        if screenshot_price is not None and screenshot_price > 0:
+            current_price = screenshot_price
+            price_source = 'MT5 screenshot'
         else:
-            # Never create a random market price. Mark the fallback clearly.
-            current_price = info['price']
-            price_source = 'fallback estimate'
+            current_price = None
+            price_source = 'unavailable'
 
-    structure_options = ['bullish', 'bearish', 'ranging']
-    structure_weights = [0.45, 0.40, 0.15]
-    structure = random.choices(structure_options, weights=structure_weights)[0]
-
-    factors = {
-        'Market Structure': {'pass': structure != 'ranging', 'weight': 2, 'detail': f'{structure.title()} structure confirmed'},
-        'BOS (Break of Structure)': {'pass': random.random() > 0.3, 'weight': 2, 'detail': 'Recent BOS detected'},
-        'CHoCH (Change of Character)': {'pass': random.random() > 0.5, 'weight': 1, 'detail': 'CHoCH pattern forming'},
-        'Breaker Block (NEW v8)': {'pass': random.random() > 0.5, 'weight': 2, 'detail': 'Failed OB now acting as breaker'},
-        'Mitigation Block (NEW v8)': {'pass': random.random() > 0.55, 'weight': 1, 'detail': 'OB being mitigated'},
-        'Liquidity Sweep': {'pass': random.random() > 0.4, 'weight': 2, 'detail': 'Stop hunt identified'},
-        'Equal Highs/Lows': {'pass': random.random() > 0.5, 'weight': 1, 'detail': 'Equal highs/lows detected'},
-        'Order Block': {'pass': random.random() > 0.3, 'weight': 2, 'detail': 'OB at key level'},
-        'Fair Value Gap (FVG)': {'pass': random.random() > 0.5, 'weight': 1, 'detail': 'FVG created'},
-        'Displacement': {'pass': random.random() > 0.4, 'weight': 2, 'detail': 'Strong displacement candle'},
-        'Premium/Discount': {'pass': structure != 'ranging', 'weight': 1, 'detail': f'Price in {"discount" if structure == "bullish" else "premium"} zone'},
-        'PO3 (Power of 3)': {'pass': structure != 'ranging' and random.random() > 0.4, 'weight': 1, 'detail': 'Accumulation → Manipulation → Distribution'},
-        'Judas Swing': {'pass': random.random() > 0.5, 'weight': 1, 'detail': 'False breakout detected'},
-        'OTE (Optimal Trade Entry)': {'pass': structure != 'ranging' and random.random() > 0.4, 'weight': 1, 'detail': '62-79% Fib retracement'},
-        'Session Quality': {'pass': True, 'weight': 1, 'detail': 'Active session'},
-        'News Clear': {'pass': random.random() > 0.3, 'weight': 1, 'detail': 'No major news in 4h'},
-        'HTF Alignment': {'pass': structure != 'ranging', 'weight': 1, 'detail': 'Aligned with HTF'},
-        'Volume Confirmation': {'pass': random.random() > 0.4, 'weight': 1, 'detail': 'Volume spike detected'},
-        'Asian Range Position': {'pass': random.random() > 0.4, 'weight': 1, 'detail': 'Price at Asian range extreme'},
-        'PDH/PDL Distance': {'pass': random.random() > 0.5, 'weight': 1, 'detail': 'Price near PDH/PDL magnet'},
-    }
-
-    total_weight = sum(f['weight'] for f in factors.values())
-    passed_weight = sum(f['weight'] for f in factors.values() if f['pass'])
-    confidence = round((passed_weight / total_weight) * 100)
-
-    # Initialize defaults so lot calc works even on WAIT
-    sl_distance = current_price * 0.015
-    sl = current_price
-    tp = current_price
-    tp1 = current_price
-    tp2 = current_price
-    tp3 = current_price
-    rr = '-'
-    direction = 'WAIT'
-    grade = 'C'
-    strategy = 'No Setup'
-
-    if confidence >= signal_gate and structure == 'bullish':
-        direction = 'BUY'
-        grade = 'A+' if confidence >= 85 else ('A' if confidence >= 80 else 'B')
-        strategy = 'PO3' if factors['Liquidity Sweep']['pass'] else 'BOS'
-        sl_distance = current_price * 0.015
-        sl = current_price - sl_distance
-        tp = current_price + (sl_distance * 3.5)
-        rr = '1:3.5'
-    elif confidence >= signal_gate and structure == 'bearish':
-        direction = 'SELL'
-        grade = 'A+' if confidence >= 85 else ('A' if confidence >= 80 else 'B')
-        strategy = 'PO3' if factors['Liquidity Sweep']['pass'] else 'BOS'
-        sl_distance = current_price * 0.015
-        sl = current_price + sl_distance
-        tp = current_price - (sl_distance * 3.5)
-        rr = '1:3.5'
-
-    # Calculate lot size
-    lot_info = calculate_lot_size(symbol, sl_distance, ACCOUNT_CONFIG['balance'], ACCOUNT_CONFIG['risk_pct'])
-
-    # Multi-TP levels (TP1 = 1R, TP2 = 2R, TP3 = 3.5R)
-    if direction != 'WAIT':
-        risk_per_unit = abs(current_price - sl)
-        if direction == 'BUY':
-            tp1 = current_price + risk_per_unit
-            tp2 = current_price + (risk_per_unit * 2)
-            tp3 = tp
-        else:
-            tp1 = current_price - risk_per_unit
-            tp2 = current_price - (risk_per_unit * 2)
-            tp3 = tp
+    if current_price is None:
+        reason = 'WAIT: no fresh exact Exness price. Connect the MT5 bridge or upload a current MT5 chart.'
     else:
-        tp1 = tp2 = tp3 = current_price
+        reason = 'WAIT: exact price is available, but real MT5 candle history is not connected. A single quote cannot verify SMC structure, so no BUY/SELL or Entry/SL/TP is generated.'
 
     return {
         'symbol': symbol,
         'timeframe': 'H1',
+        'price': round(current_price, 5) if current_price is not None else None,
         'price_source': price_source,
-        'direction': direction,
-        'confidence': confidence,
-        'grade': grade,
-        'strategy': strategy,
-        'entry': round(current_price, 4),
-        'sl': round(sl, 4),
-        'tp': round(tp, 4),
-        'tp1': round(tp1, 4),
-        'tp2': round(tp2, 4),
-        'tp3': round(tp3, 4),
-        'rr': rr,
-        'structure': structure,
-        'factors': factors,
-        'factors_grouped': group_factors_by_category(factors),  # NEW v8.0
-        'passed_count': sum(1 for f in factors.values() if f['pass']),
-        'total_count': len(factors),
-        'lot_info': lot_info,
+        'direction': 'WAIT',
+        'confidence': None,
+        'grade': '—',
+        'strategy': 'No fabricated setup',
+        'entry': None,
+        'sl': None,
+        'tp': None,
+        'tp1': None,
+        'tp2': None,
+        'tp3': None,
+        'rr': '—',
+        'structure': 'UNAVAILABLE',
+        'factors': {},
+        'factors_grouped': {},
+        'passed_count': 0,
+        'total_count': 0,
+        'lot_info': None,
         'signal_min_confidence': signal_gate,
-        'signal_reason': ('Directional setup passed the configured confidence gate.'
-                          if direction != 'WAIT' else
-                          f'WAIT: confidence {confidence}% is below the {signal_gate}% gate or market structure is ranging.'),
+        'signal_reason': reason,
+        'signal_available': False,
         'timestamp': johannesburg_now().strftime('%Y-%m-%d %H:%M:%S %Z'),
     }
 
@@ -1968,7 +1871,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v8.9.2</div>
+            <div class="scanner-name">Precision Scanner v9.0.0</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -1999,7 +1902,7 @@ HTML = """
         </div>
 
         <!-- HTF BIAS BANNER (NEW v7.0) -->
-        <div class="htf-banner">
+        <div class="htf-banner" id="htfBanner" style="display: none;">
             <div class="htf-title">📊 Higher Timeframe Bias</div>
             <div class="htf-timeframes">
                 <div class="htf-tf">
@@ -2017,8 +1920,8 @@ HTML = """
 
         <!-- v8.0 NEW: DRAWDOWN TRACKER -->
         <div class="drawdown-card" id="drawdownCard">
-            <div class="drawdown-title" style="color: #00d4aa;" id="drawdownTitle">🛡️ Risk Status</div>
-            <div class="drawdown-message" id="drawdownMessage" style="color: #00d4aa;">✅ Within safe limits</div>
+            <div class="drawdown-title" style="color: #ffd700;" id="drawdownTitle">🛡️ Risk Tracker (not synced to MT5)</div>
+            <div class="drawdown-message" id="drawdownMessage" style="color: #ffd700;">MT5 account history is not connected; these values are not live account risk.</div>
             <input type="hidden" id="dailyPnl" value="0">
             <input type="hidden" id="weeklyPnl" value="0">
             <div class="drawdown-bars">
@@ -2043,14 +1946,14 @@ HTML = """
         <div class="auto-scan-banner">
             <div class="auto-scan-icon">🎯</div>
             <div class="auto-scan-text">PRECISION SCAN</div>
-            <div class="auto-scan-sub">Pick a symbol & tap SCAN — upload MT5 first for exact price</div>
+            <div class="auto-scan-sub">Exact MT5 price only. Trade signals wait for real candle data.</div>
 
-            <!-- v8.9 NEW: Live price banner showing current price BEFORE scan -->
+            <!-- v9.0: verified MT5 price banner; no public proxy -->
             <div id="livePricePreview" style="background: rgba(0, 212, 170, 0.1); border: 1px solid rgba(0, 212, 170, 0.4); border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: center;">
-                <div style="font-size: 10px; color: #00d4aa; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px;">📡 MARKET PRICE (Yahoo proxy)</div>
+                <div style="font-size: 10px; color: #00d4aa; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px;">📡 VERIFIED EXNESS PRICE (MT5 ONLY)</div>
                 <div style="font-size: 22px; color: #00d4aa; font-weight: 800;" id="livePriceValue">—</div>
                 <div style="font-size: 10px; color: #888; margin-top: 2px;" id="livePriceSource">Loading...</div>
-                <div style="font-size: 10px; color: #ffd700; margin-top: 6px;">📸 For exact Exness price: upload your MT5 chart in Scan</div>
+                <div style="font-size: 10px; color: #ffd700; margin-top: 6px;">No public proxy or estimate is shown. Connect MT5 or upload a current chart.</div>
             </div>
 
             <!-- NEW: Symbol picker chips -->
@@ -2070,7 +1973,7 @@ HTML = """
         </div>
 
         <!-- v8.0 NEW: REFERENCE LEVELS -->
-        <div class="ref-levels" id="refLevels">
+        <div class="ref-levels" id="refLevels" style="display: none;">
             <div class="ref-levels-title">📍 Reference Levels (PDH/PDL · Asian Range)</div>
             <div class="ref-level-row">
                 <span class="ref-level-label">PDH</span>
@@ -2095,10 +1998,23 @@ HTML = """
             <div style="font-size: 10px; color: #888; text-align: center; margin-top: 8px;">Symbol: <span id="refLevelsSymbol" style="color: #00d4ff; font-weight: 700;">BTCUSDm</span></div>
         </div>
 
-        <!-- NEWS PANEL -->
+        <!-- LIVE ECONOMIC CALENDAR + CONDITIONAL SCENARIOS -->
         <div class="news-panel">
-            <div class="news-title">📰 Economic Calendar</div>
+            <div class="news-title">📰 Live Economic Calendar · SAST</div>
+            <div id="newsStatus" style="font-size:11px;color:#aaa;margin:0 0 8px;">Loading live calendar…</div>
             <div id="newsList"></div>
+            <div style="font-size:10px;color:#777;margin-top:8px;">Calendar source: <a href="https://www.financecalendar.com" target="_blank" rel="noopener" style="color:#00d4aa;">FinanceCalendar.com</a></div>
+            <div id="newsScenarioPanel" style="display:none;margin-top:12px;padding:12px;background:rgba(0,0,0,.32);border:1px solid rgba(0,212,170,.25);border-radius:10px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                    <strong style="color:#00d4aa;font-size:12px;">CONDITIONAL EVENT OUTLOOK</strong>
+                    <button onclick="closeNewsScenario()" aria-label="Close" style="border:0;background:transparent;color:#aaa;font-size:18px;">×</button>
+                </div>
+                <label for="newsAssetSelect" style="display:block;margin-top:8px;font-size:11px;color:#aaa;">View scenario for</label>
+                <select id="newsAssetSelect" onchange="refreshNewsScenarioAsset()" style="width:100%;margin:5px 0 8px;padding:8px;background:#071318;color:#fff;border:1px solid #24534b;border-radius:7px;">
+                    <option value="XAUUSDm">XAUUSDm · Gold</option><option value="BTCUSDm">BTCUSDm · Bitcoin</option><option value="EURUSDm">EURUSDm</option><option value="GBPUSDm">GBPUSDm</option><option value="USDJPYm">USDJPYm</option><option value="USTECm">USTECm</option><option value="US30m">US30m</option>
+                </select>
+                <div id="newsScenarioContent" style="font-size:12px;color:#ddd;line-height:1.5;">Choose an event to view conditional scenarios.</div>
+            </div>
         </div>
 
         <!-- Signal History (NEW v7.0) -->
@@ -2128,11 +2044,11 @@ HTML = """
 
     <!-- SCAN TAB (OCR v8.3) -->
     <div class="tab-content" id="scan-tab">
-        <div class="card-title" style="padding: 10px 0;">📊 Manual Chart Analysis</div>
+        <div class="card-title" style="padding: 10px 0;">📊 MT5 Chart Upload (symbol/price OCR)</div>
 
         <!-- v8.9 FIX: Same live-price theme as Home, now also on the scanner -->
         <div id="scanLivePricePreview" style="background: rgba(0, 212, 170, 0.1); border: 1px solid rgba(0, 212, 170, 0.4); border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: center;">
-            <div style="font-size: 10px; color: #00d4aa; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px;">📡 LIVE PRICE USED FOR SCAN</div>
+            <div style="font-size: 10px; color: #00d4aa; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px;">📡 VERIFIED EXNESS PRICE USED FOR SCAN</div>
             <div style="font-size: 22px; color: #00d4aa; font-weight: 800;" id="scanLivePriceValue">—</div>
             <div style="font-size: 10px; color: #888; margin-top: 2px;" id="scanLivePriceSource">Loading...</div>
         </div>
@@ -2195,9 +2111,9 @@ HTML = """
             </div>
 
             <div class="form-group">
-                <label>💲 Scan Price (MT5 screenshot or proxy fallback)</label>
+                <label>💲 Verified MT5 price only</label>
                 <input type="text" id="currentPrice" value="" readonly placeholder="Waiting for live price..." style="color: #00d4aa; font-weight: 700;">
-                <div style="font-size: 11px; color: #888; margin-top: 5px;">✅ The highlighted MT5 price is used when detected. Yahoo is only a proxy fallback.</div>
+                <div style="font-size: 11px; color: #888; margin-top: 5px;">No public proxy or estimate is used. Without exact price and candle history, the result remains WAIT.</div>
             </div>
 
             <div class="form-group">
@@ -2210,13 +2126,13 @@ HTML = """
                 </select>
             </div>
 
-            <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()">🤖 Analyze Live Setup</button>
+            <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()">🤖 Check MT5 Price / Scan Status</button>
         </div>
 
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p style="color: #00d4aa; font-weight: 600;">🤖 AI Analyzing...</p>
-            <p style="color: #888; font-size: 12px; margin-top: 8px;">Detecting price, structure & 15 SMC factors</p>
+            <p style="color: #00d4aa; font-weight: 600;">Checking MT5 data…</p>
+            <p style="color: #888; font-size: 12px; margin-top: 8px;">Reading the chart price; real candle analysis is not connected yet</p>
         </div>
 
         <div id="result">
@@ -2316,15 +2232,15 @@ HTML = """
                 <div class="topdown-header">🎯 TOP-DOWN ANALYSIS</div>
                 <div class="topdown-action" id="topdownAction">
                     <span class="topdown-action-label">BEST ACTION NOW</span>
-                    <span class="topdown-action-text" id="topdownActionText">BEST TO SELL</span>
+                    <span class="topdown-action-text" id="topdownActionText">WAIT — candle feed required</span>
                 </div>
                 <div class="topdown-trigger-row">
                     <div class="topdown-trigger-label">⏭️ NEXT TRIGGER</div>
-                    <div class="topdown-trigger-text" id="nextTriggerText">M15 bearish rejection candle closing below 29600</div>
+                    <div class="topdown-trigger-text" id="nextTriggerText">No verified candle trigger is available yet</div>
                 </div>
                 <div class="topdown-trigger-row">
                     <div class="topdown-trigger-label">🚫 INVALIDATION</div>
-                    <div class="topdown-trigger-text" id="invalidationText">Sustained M15 candle close above the manipulation swing high at 29645.0</div>
+                    <div class="topdown-trigger-text" id="invalidationText">No verified invalidation level is available yet</div>
                 </div>
             </div>
 
@@ -2437,7 +2353,7 @@ HTML = """
         <!-- App Info (simplified) -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v8.9.2</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.0.0</span></div>
             <div class="info-row"><span class="label">Account:</span><span class="value">Sbusiso</span></div>
             <div class="info-row"><span class="label">Broker:</span><span class="value">Exness</span></div>
             <div class="info-row"><span class="label">Account #:</span><span class="value">134644333</span></div>
@@ -2468,7 +2384,9 @@ HTML = """
         // ============ STATE (NEW v7.0) ============
         let selectedSymbol = 'BTCUSDm';
         let signalHistory = []; // Local cache of signals with outcomes
-        let livePricesCache = {}; // v8.9 NEW: cache live prices for the preview banner
+        let livePricesCache = {}; // fresh MT5 quotes only
+        let economicEventsCache = [];
+        let activeNewsEventIndex = -1;
 
         // ============ INIT ============
         window.onload = function() {
@@ -2515,32 +2433,29 @@ HTML = """
                     const info = data[selectedSymbol];
                     const priceEl = document.getElementById('livePriceValue');
                     const sourceEl = document.getElementById('livePriceSource');
-                    if (info) {
-                        const captured = getRecentMt5ScreenshotPrice(selectedSymbol);
-                        if (info.source === 'mt5') {
-                            priceEl.textContent = formatPriceForSymbol(selectedSymbol, info.price);
-                            sourceEl.textContent = '🟢 EXACT MT5 / Exness bridge · updated ' + (info.age_seconds ?? 0) + 's ago · ' + selectedSymbol;
-                        } else if (captured) {
-                            priceEl.textContent = formatPriceForSymbol(selectedSymbol, captured.price);
-                            const ageMin = Math.max(0, Math.round((Date.now() - captured.capturedAt) / 60000));
-                            sourceEl.textContent = '📸 MT5 screenshot price · captured ' + ageMin + 'm ago · ' + selectedSymbol;
-                        } else {
-                            priceEl.textContent = formatPriceForSymbol(selectedSymbol, info.price);
-                            sourceEl.textContent = (info.source === 'live' ? '🟡 Yahoo proxy — may differ from Exness' : '🟡 Estimated feed unavailable') + ' · ' + selectedSymbol;
-                        }
+                    if (!priceEl || !sourceEl) return;
+                    const captured = getRecentMt5ScreenshotPrice(selectedSymbol);
+                    if (info && info.source === 'mt5' && Number(info.price) > 0) {
+                        priceEl.textContent = formatPriceForSymbol(selectedSymbol, info.price);
+                        sourceEl.textContent = '🟢 EXACT MT5 / Exness bridge · updated ' + (info.age_seconds ?? 0) + 's ago · ' + selectedSymbol;
+                    } else if (captured) {
+                        priceEl.textContent = formatPriceForSymbol(selectedSymbol, captured.price);
+                        const ageMin = Math.max(0, Math.round((Date.now() - captured.capturedAt) / 60000));
+                        sourceEl.textContent = '📸 MT5 screenshot price · captured ' + ageMin + 'm ago · ' + selectedSymbol;
                     } else {
                         priceEl.textContent = '—';
-                        sourceEl.textContent = '';
+                        sourceEl.textContent = selectedSymbol === 'ALL'
+                            ? 'Select one symbol to view its exact Exness price.'
+                            : '🔴 No exact Exness quote. Keep MT5 bridge connected or upload a current MT5 chart.';
                     }
                 })
-                .catch(err => {
+                .catch(() => {
                     document.getElementById('livePriceValue').textContent = '—';
-                    document.getElementById('livePriceSource').textContent = '⚠️ Could not fetch';
+                    document.getElementById('livePriceSource').textContent = '🔴 Exact Exness price unavailable';
                 });
         }
 
-        // v8.9.1 FIX: Prefer a recent MT5 screenshot price over the public Yahoo proxy.
-        // Yahoo's NQ=F/US30 futures quote can differ materially from Exness USTECm/US30m.
+        // Format only exact MT5 bridge or OCR-captured prices.
         function formatPriceForSymbol(symbol, value) {
             const n = Number(value);
             if (!Number.isFinite(n)) return '—';
@@ -2682,13 +2597,13 @@ HTML = """
             });
         }
 
-        // v8.9 FIX: The Scan tab uses the same live price feed as Home, but a
-        // recent MT5 screenshot price always takes priority over Yahoo proxy data.
+        // Scan preview uses only fresh MT5 quotes or recent screenshot OCR.
         function updateScanLivePricePreview() {
             const symbolEl = document.getElementById('symbol');
             const symbol = symbolEl ? symbolEl.value : selectedSymbol;
             const priceEl = document.getElementById('scanLivePriceValue');
             const sourceEl = document.getElementById('scanLivePriceSource');
+            const input = document.getElementById('currentPrice');
             if (!priceEl || !sourceEl || !symbol) return;
 
             fetch('/api/prices')
@@ -2696,26 +2611,21 @@ HTML = """
                 .then(data => {
                     livePricesCache = data;
                     const info = data[symbol];
-                    if (!info) {
-                        priceEl.textContent = '—';
-                        sourceEl.textContent = '⚠️ No price available';
-                        return;
-                    }
                     const captured = getRecentMt5ScreenshotPrice(symbol);
-                    if (info.source === 'mt5') {
+                    if (info && info.source === 'mt5' && Number(info.price) > 0) {
                         setScanPriceDisplay(symbol, info.price, '🟢 EXACT MT5 / Exness bridge · updated ' + (info.age_seconds ?? 0) + 's ago');
                     } else if (captured) {
                         setScanPriceDisplay(symbol, captured.price, '📸 MT5 screenshot price');
                     } else {
-                        priceEl.textContent = formatPriceForSymbol(symbol, info.price);
-                        sourceEl.textContent = (info.source === 'live' ? '🟡 Yahoo proxy — may differ from Exness' : '🟡 Estimated feed unavailable') + ' · ' + symbol;
-                        const input = document.getElementById('currentPrice');
-                        if (input) input.value = info.price;
+                        priceEl.textContent = '—';
+                        sourceEl.textContent = '🔴 No exact Exness quote. Connect the MT5 bridge or upload a current MT5 chart.';
+                        if (input) input.value = '';
                     }
                 })
                 .catch(() => {
                     priceEl.textContent = '—';
-                    sourceEl.textContent = '⚠️ Could not fetch live price';
+                    sourceEl.textContent = '🔴 Exact Exness price unavailable';
+                    if (input) input.value = '';
                 });
         }
 
@@ -2764,38 +2674,24 @@ HTML = """
                 });
         }
 
-        // ============ v8.0 NEW: DRAWDOWN TRACKER ============
+        // Account trade history is not connected to this app. Do not label hidden
+        // zero defaults as live 'safe' risk status; keep the panel explicitly manual.
         function loadDrawdown() {
-            const dailyPnl = parseFloat(document.getElementById('dailyPnl').value) || 0;
-            const weeklyPnl = parseFloat(document.getElementById('weeklyPnl').value) || 0;
-            fetch('/api/drawdown-status?daily_pnl=' + dailyPnl + '&weekly_pnl=' + weeklyPnl)
-                .then(r => r.json())
-                .then(data => {
-                    const card = document.getElementById('drawdownCard');
-                    card.className = 'drawdown-card';
-                    if (data.status === 'WARNING' || data.status === 'HARD_STOP') {
-                        card.classList.add('danger');
-                    } else if (data.status === 'CAUTION') {
-                        card.classList.add('warning');
-                    }
-                    document.getElementById('drawdownTitle').style.color = data.color;
-                    document.getElementById('drawdownMessage').style.color = data.color;
-                    document.getElementById('drawdownMessage').textContent = data.message;
-
-                    const dailyBar = document.getElementById('dailyBar');
-                    dailyBar.style.width = Math.min(100, data.daily_loss_pct * 20) + '%';
-                    dailyBar.className = 'dd-bar-fill';
-                    if (data.daily_loss_pct >= 3) dailyBar.classList.add('danger');
-                    else if (data.daily_loss_pct >= 2) dailyBar.classList.add('warning');
-                    document.getElementById('dailyValue').textContent = 'R' + data.daily_pnl + ' / R' + (data.max_daily_pct * balance / 100).toFixed(2) + ' max (' + data.daily_loss_pct + '%)';
-
-                    const weeklyBar = document.getElementById('weeklyBar');
-                    weeklyBar.style.width = Math.min(100, data.weekly_loss_pct * 10) + '%';
-                    weeklyBar.className = 'dd-bar-fill';
-                    if (data.weekly_loss_pct >= 7) weeklyBar.classList.add('danger');
-                    else if (data.weekly_loss_pct >= 5) weeklyBar.classList.add('warning');
-                    document.getElementById('weeklyValue').textContent = 'R' + data.weekly_pnl + ' / R' + (data.max_weekly_pct * balance / 100).toFixed(2) + ' max (' + data.weekly_loss_pct + '%)';
-                });
+            const message = document.getElementById('drawdownMessage');
+            if (message) {
+                message.textContent = 'Not synced to MT5. Daily/weekly figures are not live account risk.';
+                message.style.color = '#ffd700';
+            }
+            const title = document.getElementById('drawdownTitle');
+            if (title) title.textContent = '🛡️ Risk Tracker (manual only)';
+            const daily = document.getElementById('dailyValue');
+            const weekly = document.getElementById('weeklyValue');
+            if (daily) daily.textContent = 'Not synced to MT5';
+            if (weekly) weekly.textContent = 'Not synced to MT5';
+            const dailyBar = document.getElementById('dailyBar');
+            const weeklyBar = document.getElementById('weeklyBar');
+            if (dailyBar) dailyBar.style.width = '0%';
+            if (weeklyBar) weeklyBar.style.width = '0%';
         }
 
         // Helper for drawdown bar values
@@ -2803,31 +2699,21 @@ HTML = """
 
         // ============ v8.0 NEW: REFERENCE LEVELS ============
         function loadReferenceLevels(symbol) {
-            fetch('/api/reference-levels?symbol=' + symbol)
+            fetch('/api/reference-levels?symbol=' + encodeURIComponent(symbol))
                 .then(r => r.json())
                 .then(data => {
-                    document.getElementById('pdhValue').textContent = data.pdh;
-                    document.getElementById('pdlValue').textContent = data.pdl;
-                    document.getElementById('asianHigh').textContent = data.asian_high;
-                    document.getElementById('asianLow').textContent = data.asian_low;
-                    document.getElementById('refLevelsSymbol').textContent = data.symbol;
+                    const panel = document.getElementById('refLevels');
+                    if (panel) panel.style.display = data.available ? 'block' : 'none';
+                })
+                .catch(() => {
+                    const panel = document.getElementById('refLevels');
+                    if (panel) panel.style.display = 'none';
                 });
         }
 
-        // ============ HTF BIAS LOADER (NEW v7.0) ============
         function loadHTFBias(symbol) {
-            if (symbol === 'ALL') symbol = 'BTCUSDm';
-            fetch('/api/htf-bias?symbol=' + symbol)
-                .then(r => r.json())
-                .then(data => {
-                    document.getElementById('htfDaily').textContent = data.daily;
-                    document.getElementById('htfDaily').className = 'htf-tf-value ' + data.daily.toLowerCase();
-                    document.getElementById('htf4H').textContent = data.h4;
-                    document.getElementById('htf4H').className = 'htf-tf-value ' + data.h4.toLowerCase();
-                    document.getElementById('htfAlignment').textContent = data.alignment;
-                    document.getElementById('htfAlignment').style.color = data.alignment_color;
-                    document.getElementById('htfSymbolName').textContent = symbol;
-                });
+            const panel = document.getElementById('htfBanner');
+            if (panel) panel.style.display = 'none';
         }
 
         // ============ TICKER (unchanged) ============
@@ -2835,22 +2721,24 @@ HTML = """
             fetch('/api/prices')
                 .then(r => r.json())
                 .then(data => {
+                    livePricesCache = data;
+                    const symbols = ['XAUUSDm', 'BTCUSDm', 'EURUSDm', 'GBPUSDm', 'USDJPYm', 'USTECm', 'US30m'];
                     let html = '';
-                    Object.entries(data).forEach(([symbol, info]) => {
-                        const arrow = info.change > 0 ? '▲' : info.change < 0 ? '▼' : '●';
-                        const cls = info.change > 0 ? 'ticker-up' : info.change < 0 ? 'ticker-down' : '';
-                        const priceStr = symbol.includes('JPY') ? info.price.toFixed(2) :
-                                       symbol === 'BTCUSDm' ? '$' + info.price.toFixed(0) :
-                                       symbol === 'USTECm' || symbol === 'US30m' ? info.price.toFixed(0) :
-                                       info.price.toFixed(4);
+                    symbols.forEach(symbol => {
+                        const info = data[symbol] || {};
+                        const exact = info.source === 'mt5' && Number(info.price) > 0;
+                        const priceStr = exact ? formatPriceForSymbol(symbol, info.price) : '—';
+                        const label = exact ? 'EXNESS' : 'NO MT5 QUOTE';
                         html += `<div class="ticker-item">
                             <span class="ticker-symbol">${symbol}</span>
                             <span class="ticker-price">${priceStr}</span>
-                            <span class="${cls}">${arrow} ${Math.abs(info.change).toFixed(2)}%</span>
+                            <span style="color:${exact ? '#00d4aa' : '#ff6b6b'};font-size:10px;">${label}</span>
                         </div>`;
                     });
-                    html += html;
-                    document.getElementById('tickerContent').innerHTML = html;
+                    document.getElementById('tickerContent').innerHTML = html + html;
+                })
+                .catch(() => {
+                    document.getElementById('tickerContent').innerHTML = '<div class="ticker-item"><span style="color:#ff6b6b">Exact MT5 prices unavailable</span></div>';
                 });
         }
 
@@ -2864,83 +2752,139 @@ HTML = """
                 });
         }
 
-        // ============ NEWS (unchanged) ============
+        // ============ LIVE ECONOMIC CALENDAR + CONDITIONAL EVENT SCENARIOS ============
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+        }
+
         function loadNews() {
             fetch('/api/news')
                 .then(r => r.json())
                 .then(data => {
-                    let html = '';
-                    if (data.events.length === 0) {
-                        html = '<div style="color: #00d4aa; font-size: 13px;">✅ No major news in next 24h - Safe to trade</div>';
-                    } else {
-                        data.events.forEach(event => {
-                            const cls = event.impact === 'HIGH' ? 'news-impact-high' :
-                                       event.impact === 'MEDIUM' ? 'news-impact-medium' : 'news-impact-low';
-                            html += `<div class="news-item">
-                                <span><strong>${event.time}</strong> ${event.currency} - ${event.event}</span>
-                                <span class="${cls}">${event.impact}</span>
-                            </div>`;
-                        });
+                    economicEventsCache = Array.isArray(data.events) ? data.events : [];
+                    const status = document.getElementById('newsStatus');
+                    const list = document.getElementById('newsList');
+                    if (status) {
+                        status.textContent = data.status === 'live'
+                            ? 'Live calendar · updated ' + (data.updated_at || 'just now')
+                            : data.status === 'stale'
+                                ? '⚠️ ' + (data.message || 'Showing cached calendar data; verify before use.')
+                                : '⚠️ ' + (data.message || 'Live calendar unavailable; no placeholder events shown.');
+                        status.style.color = data.status === 'live' ? '#8fc7bb' : '#ffd700';
                     }
-                    document.getElementById('newsList').innerHTML = html;
+                    if (!list) return;
+                    if (economicEventsCache.length === 0) {
+                        list.innerHTML = `<div style="color:#aaa;font-size:12px;line-height:1.5;">${escapeHtml(data.status === 'unavailable' ? (data.message || 'Calendar unavailable.') : 'No medium/high-impact events listed in the next 7 days. This does not mean trading is risk-free.')}</div>`;
+                        return;
+                    }
+                    list.innerHTML = economicEventsCache.map((event, index) => {
+                        const impact = String(event.impact || 'MEDIUM').toUpperCase();
+                        const cls = impact === 'HIGH' ? 'news-impact-high' : 'news-impact-medium';
+                        const dateLabel = event.date_local || '';
+                        const timeLabel = event.time_local || 'Time TBC';
+                        const title = event.title || 'Economic event';
+                        return `<button class="news-item" type="button" onclick="showNewsScenario(${index})" style="width:100%;text-align:left;background:transparent;color:#ddd;border:0;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;">
+                            <span><strong>${escapeHtml(dateLabel)} ${escapeHtml(timeLabel)}</strong> · ${escapeHtml(event.country || event.currency || '')} · ${escapeHtml(title)}<small style="display:block;color:#888;margin-top:2px;">Tap for conditional scenarios · consensus: ${escapeHtml(event.consensus ?? 'not published')}</small></span>
+                            <span class="${cls}">${escapeHtml(impact)}</span>
+                        </button>`;
+                    }).join('');
+                })
+                .catch(() => {
+                    const status = document.getElementById('newsStatus');
+                    const list = document.getElementById('newsList');
+                    if (status) status.textContent = '⚠️ Live calendar unavailable.';
+                    if (list) list.innerHTML = '<div style="color:#aaa;font-size:12px;">No placeholder events are shown while the feed is unavailable.</div>';
                 });
         }
 
-        // USTECm and US30m are Exness CFD symbols; Yahoo NQ=F/YM=F are only proxies.
-        // Require a recent MT5 screenshot before allowing an index trade scan.
-        function needsExactMt5Price(symbol) {
-            return symbol === 'USTECm' || symbol === 'US30m';
+        function showNewsScenario(index) {
+            if (index < 0 || index >= economicEventsCache.length) return;
+            activeNewsEventIndex = index;
+            const panel = document.getElementById('newsScenarioPanel');
+            const asset = document.getElementById('newsAssetSelect');
+            if (panel) panel.style.display = 'block';
+            if (asset && !asset.dataset.userSelected) asset.value = 'XAUUSDm';
+            refreshNewsScenarioAsset();
         }
+
+        function closeNewsScenario() {
+            const panel = document.getElementById('newsScenarioPanel');
+            if (panel) panel.style.display = 'none';
+            activeNewsEventIndex = -1;
+        }
+
+        function refreshNewsScenarioAsset() {
+            if (activeNewsEventIndex < 0 || !economicEventsCache[activeNewsEventIndex]) return;
+            const asset = document.getElementById('newsAssetSelect');
+            const symbol = asset ? asset.value : 'XAUUSDm';
+            if (asset) asset.dataset.userSelected = 'true';
+            const event = economicEventsCache[activeNewsEventIndex];
+            const content = document.getElementById('newsScenarioContent');
+            if (content) content.innerHTML = '<div style="color:#aaa">Preparing conditional scenarios…</div>';
+            fetch('/api/news-scenario?event_id=' + encodeURIComponent(event.id) + '&symbol=' + encodeURIComponent(symbol))
+                .then(r => r.json())
+                .then(data => {
+                    if (!content) return;
+                    if (data.error) {
+                        content.textContent = data.error;
+                        return;
+                    }
+                    const scenarios = (data.scenarios || []).map(item => `<div style="margin:8px 0;padding:8px;border-radius:7px;background:rgba(255,255,255,.04);"><strong style="color:#00d4aa;">${escapeHtml(item.label)}</strong><div style="color:#ccc;margin-top:3px;">${escapeHtml(item.text)}</div></div>`).join('');
+                    const metrics = `<div style="color:#aaa;margin:5px 0 8px;">Consensus: ${escapeHtml(data.consensus ?? 'not published')} · Previous: ${escapeHtml(data.prior ?? '—')} · Actual: ${escapeHtml(data.actual ?? 'not released')}</div>`;
+                    const source = data.source_url ? `<div style="margin-top:7px;"><a href="${escapeHtml(data.source_url)}" target="_blank" rel="noopener" style="color:#00d4aa;">Event source / details</a></div>` : '';
+                    content.innerHTML = `<div style="font-weight:700;color:#ffd700;">${escapeHtml(data.phase)} · ${escapeHtml(data.symbol)}</div><div style="margin:6px 0;color:#ddd;">${escapeHtml(data.event)}</div><div style="color:#ccc;">${escapeHtml(data.summary)}</div>${metrics}${scenarios}<div style="margin-top:8px;color:#ffcc80;font-size:11px;">⚠️ ${escapeHtml(data.caution)}</div>${source}`;
+                })
+                .catch(() => { if (content) content.textContent = 'Could not load the event scenario. Try again.'; });
+        }
+
+        // Every symbol requires an exact Exness price. A quote is not candle history,
+        // so the app will not invent a BUY/SELL direction from it.
+        function needsExactMt5Price(symbol) { return true; }
 
         function hasMt5BridgeQuote(symbol) {
-            return !!(livePricesCache[symbol] && livePricesCache[symbol].source === 'mt5');
+            return !!(livePricesCache[symbol] && livePricesCache[symbol].source === 'mt5' && Number(livePricesCache[symbol].price) > 0);
         }
 
-        // ============ MULTI-SYMBOL AUTO-SCAN (NEW v7.0) — v8.9.1 SAFE PRICE GATE ============
+        function showSafeScanWait(symbol, price, source, message) {
+            const resultDiv = document.getElementById('autoScanResult');
+            const priceLine = Number(price) > 0
+                ? `<div style="margin:8px 0;color:#00d4aa;">Verified price: ${formatPriceForSymbol(symbol, price)} · ${escapeHtml(source)}</div>`
+                : '<div style="margin:8px 0;color:#ff6b6b;">Verified Exness price: unavailable</div>';
+            resultDiv.innerHTML = `<div style="text-align:center;padding:18px;color:#ddd;background:rgba(0,0,0,.28);border-radius:10px;">
+                <div style="font-size:30px;color:#ffd700;font-weight:800;">WAIT</div>${priceLine}
+                <div style="font-size:12px;line-height:1.55;margin-top:8px;">${escapeHtml(message)}</div>
+                <div style="font-size:11px;color:#ffcc80;margin-top:10px;">No fabricated confidence, entry, stop-loss or take-profit is shown.</div>
+            </div>`;
+        }
+
         function runAutoScan() {
             const resultDiv = document.getElementById('autoScanResult');
             resultDiv.style.display = 'block';
-
-            const exactMt5 = selectedSymbol !== 'ALL' ? getRecentMt5ScreenshotPrice(selectedSymbol) : null;
-            if (needsExactMt5Price(selectedSymbol) && !exactMt5 && !hasMt5BridgeQuote(selectedSymbol)) {
-                resultDiv.innerHTML = '<div style="text-align: center; padding: 18px; color: #ffd700;"><div style="font-size: 30px; margin-bottom: 8px;">📸</div><strong>MT5 price required for ' + selectedSymbol + '</strong><br><span style="font-size: 12px; color: #ccc; display: block; margin-top: 8px;">Upload your MT5 chart in the Scan tab first. Yahoo NQ=F/YM=F is not the exact Exness price, so no trade signal is generated from it.</span></div>';
+            if (selectedSymbol === 'ALL') {
+                const symbols = ['XAUUSDm','BTCUSDm','EURUSDm','GBPUSDm','USDJPYm','USTECm','US30m'];
+                const missing = symbols.filter(s => !hasMt5BridgeQuote(s));
+                showSafeScanWait('ALL', null, 'unavailable', missing.length
+                    ? 'Waiting for fresh exact MT5 quotes for: ' + missing.join(', ') + '.'
+                    : 'All seven exact quotes are present, but actual MT5 candle history is not connected. The technical signal engine remains paused.');
                 return;
             }
-
-            resultDiv.innerHTML = '<div style="text-align: center;"><div class="spinner" style="margin: 10px auto;"></div><p style="color: #00d4aa;">Scanning ' + selectedSymbol + '...</p></div>';
-
-            // v8.9.1: Use the exact recent MT5 screenshot price when available.
-            // Send the Settings confidence choice to the server too; previously
-            // that setting was saved locally but the scanner always used 80%.
-            const confBtn = document.querySelector('.conf-btn.active');
-            const minConfidence = confBtn ? confBtn.dataset.conf : '75';
-            const mt5Snapshot = selectedSymbol !== 'ALL' ? getRecentMt5ScreenshotPrice(selectedSymbol) : null;
-            const mt5PriceQuery = mt5Snapshot
-                ? '&price=' + encodeURIComponent(mt5Snapshot.price) + '&price_source=mt5_screenshot'
-                : '';
-            let url;
-            if (selectedSymbol === 'ALL') {
-                url = '/api/auto-scan-all?min_confidence=' + encodeURIComponent(minConfidence);
-            } else {
-                url = '/api/auto-scan?symbol=' + selectedSymbol + '&min_confidence=' + encodeURIComponent(minConfidence) + mt5PriceQuery;
-            }
-
-            fetch(url)
-                .then(r => r.json())
-                .then(data => {
-                    if (selectedSymbol === 'ALL' && data.results) {
-                        renderMultiSymbolResults(data.results);
-                    } else {
-                        renderSingleResult(data);
-                    }
-                })
-                .catch(err => {
-                    resultDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #ff6b6b;">❌ Scan failed. Pull down to refresh and try again.</div>';
-                });
+            const screenshot = getRecentMt5ScreenshotPrice(selectedSymbol);
+            const bridge = livePricesCache[selectedSymbol];
+            const quote = hasMt5BridgeQuote(selectedSymbol) ? bridge : null;
+            const price = quote ? quote.price : screenshot ? screenshot.price : null;
+            const source = quote ? 'MT5 live bridge' : screenshot ? 'MT5 screenshot' : 'unavailable';
+            const message = price
+                ? 'The price is verified, but the app does not yet receive real MT5 OHLC candles. Without candles it cannot truthfully confirm market structure, so this scan stays WAIT.'
+                : 'Connect MT5 so the bridge shows green, or upload a current MT5 chart. No public proxy or estimated quote is used.';
+            showSafeScanWait(selectedSymbol, price, source, message);
         }
 
         function renderSingleResult(data) {
             const resultDiv = document.getElementById('autoScanResult');
+            if (data && data.signal_available === false) {
+                showSafeScanWait(data.symbol || selectedSymbol, data.price, data.price_source || 'unavailable', data.signal_reason || 'Verified candle history is required.');
+                return;
+            }
             const dirColor = data.direction === 'BUY' ? '#00d4aa' : data.direction === 'SELL' ? '#ff6b6b' : '#888';
 
             const factorsHtml = Object.entries(data.factors).map(([name, info]) => {
@@ -3335,290 +3279,57 @@ HTML = """
                 setScanPriceDisplay(detectedSymbol, screenshotPrice, "🟢 MT5 screenshot price");
                 statusEl.innerHTML = "✅ Read MT5 current price: " + formatPriceForSymbol(detectedSymbol, screenshotPrice) + " for " + detectedSymbol + ". This price will be used.";
                 statusEl.style.color = "#00d4aa";
-                resultEl.innerHTML = `<div style="padding: 9px; background: rgba(0,212,170,0.08); border: 1px solid rgba(0,212,170,0.25); border-radius: 7px; color: #00d4aa; font-size: 11px; text-align: center;">📸 Exact highlighted MT5 price captured — Yahoo proxy is not being used for this scan.</div>`;
+                resultEl.innerHTML = `<div style="padding: 9px; background: rgba(0,212,170,0.08); border: 1px solid rgba(0,212,170,0.25); border-radius: 7px; color: #00d4aa; font-size: 11px; text-align: center;">📸 Exact highlighted MT5 price captured and saved for this symbol.</div>`;
             } else {
-                // Do not silently pretend Yahoo is Exness. Show the fallback clearly.
+                // Do not show a proxy or estimated price when OCR fails.
                 updateScanLivePricePreview();
-                statusEl.innerHTML = "⚠️ I could not isolate the highlighted MT5 price. Confirm the symbol and use the live proxy only as a reference.";
+                statusEl.innerHTML = "⚠️ I could not isolate the highlighted MT5 price. Confirm the symbol. No proxy price is available or used.";
                 statusEl.style.color = "#ffd700";
-                resultEl.innerHTML = `<div style="padding: 9px; background: rgba(255,215,0,0.08); border: 1px solid rgba(255,215,0,0.25); border-radius: 7px; color: #ffd700; font-size: 11px; text-align: center;">⚠️ No exact MT5 price captured. The displayed Yahoo price may differ from Exness; do not use it as an exact entry.</div>`;
+                resultEl.innerHTML = `<div style="padding: 9px; background: rgba(255,215,0,0.08); border: 1px solid rgba(255,215,0,0.25); border-radius: 7px; color: #ffd700; font-size: 11px; text-align: center;">⚠️ No exact MT5 price captured. No verified Exness price was captured; wait for a fresh MT5 price.</div>`;
             }
         }
 
         function analyzeImage() {
             const symbol = document.getElementById('symbol').value;
             const timeframe = document.getElementById('timeframe').value;
-            const priceInput = document.getElementById('currentPrice').value;
-            const trendInput = document.getElementById('visibleTrend').value;
-
-            document.getElementById('loading').style.display = 'block';
+            const screenshot = getRecentMt5ScreenshotPrice(symbol);
+            const info = livePricesCache[symbol];
+            const bridge = info && info.source === 'mt5' && Number(info.price) > 0 ? info : null;
+            const price = bridge ? Number(bridge.price) : screenshot ? Number(screenshot.price) : null;
+            const source = bridge ? 'MT5 live bridge' : screenshot ? 'MT5 screenshot' : 'unavailable';
+            document.getElementById('loading').style.display = 'none';
             document.getElementById('previewSection').style.display = 'none';
-            document.getElementById('result').style.display = 'none';
-
-            setTimeout(function() { runAnalysis(); }, 100);
-
-            function runAnalysis() {
-                // v8.9.1: Do not analyse an index from a Yahoo proxy.
-                const exactMt5 = getRecentMt5ScreenshotPrice(symbol);
-                const bridgeInfo = livePricesCache[symbol] && livePricesCache[symbol].source === 'mt5' ? livePricesCache[symbol] : null;
-                if (needsExactMt5Price(symbol) && !exactMt5 && !bridgeInfo) {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('previewSection').style.display = 'block';
-                    document.getElementById('ocrStatus').textContent = '⚠️ Exact MT5 price not captured. Upload a clear chart with the highlighted price box first.';
-                    document.getElementById('ocrStatus').style.color = '#ff6b6b';
-                    return;
-                }
-
-                // v8.9 FIX: Never invent a price. The scan must have a live quote.
-                const currentPrice = bridgeInfo ? Number(bridgeInfo.price) : (exactMt5 ? Number(exactMt5.price) : parseFloat(priceInput));
-                if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('previewSection').style.display = 'block';
-                    document.getElementById('ocrStatus').textContent = '⚠️ Live price is not available yet. Wait for the green live-price banner, then try again.';
-                    document.getElementById('ocrStatus').style.color = '#ff6b6b';
-                    return;
-                }
-
-                // Use the user-selected trend. If Auto is selected, use the live
-                // feed's daily direction instead of inventing a random trend.
-                let structure;
-                if (trendInput === 'bullish' || trendInput === 'bearish' || trendInput === 'ranging') {
-                    structure = trendInput;
-                } else {
-                    const liveInfo = livePricesCache[symbol];
-                    const dailyChange = liveInfo ? Number(liveInfo.change || 0) : 0;
-                    structure = dailyChange > 0.15 ? 'bullish' : dailyChange < -0.15 ? 'bearish' : 'ranging';
-                }
-
-                const bos = Math.random() > 0.3;
-                const choch = Math.random() > 0.5;
-                const liquidity = Math.random() > 0.4;
-                const fvg = Math.random() > 0.5;
-                const orderblock = Math.random() > 0.4;
-                const displacement = Math.random() > 0.5;
-
-                let score = 0;
-                let factors = [];
-
-                if (structure !== 'ranging') score += 2;
-                factors.push({name: 'Market Structure', pass: structure !== 'ranging', w: 2});
-                if (bos) score += 2;
-                factors.push({name: 'BOS', pass: bos, w: 2});
-                if (choch) score += 1;
-                factors.push({name: 'CHoCH', pass: choch, w: 1});
-                if (liquidity) score += 2;
-                factors.push({name: 'Liquidity Sweep', pass: liquidity, w: 2});
-                if (orderblock) score += 2;
-                factors.push({name: 'Order Block', pass: orderblock, w: 2});
-                if (fvg) score += 1;
-                factors.push({name: 'FVG', pass: fvg, w: 1});
-                if (displacement) score += 2;
-                factors.push({name: 'Displacement', pass: displacement, w: 2});
-                if (structure !== 'ranging') score += 1;
-                factors.push({name: structure === 'bullish' ? 'Discount' : 'Premium', pass: structure !== 'ranging', w: 1});
-                score += 1;
-                factors.push({name: 'PO3', pass: structure !== 'ranging' && liquidity, w: 1});
-                score += 1;
-                factors.push({name: 'Judas Swing', pass: choch, w: 1});
-                score += 1;
-                factors.push({name: 'OTE', pass: structure !== 'ranging' && bos, w: 1});
-
-                const confidence = Math.min(95, Math.round((score / 19) * 100) + (structure !== 'ranging' ? 5 : 0));
-
-                let direction = 'WAIT';
-                let grade = 'C';
-                let strategy = 'None';
-                let entry = currentPrice;
-                let slDistance = currentPrice * 0.01;
-                let sl, tp, tp2, tp3;
-                let bestAction = 'WAIT';
-
-                if (structure === 'bullish' && confidence >= 60) {
-                    direction = 'BUY';
-                    grade = confidence >= 85 ? 'A+' : (confidence >= 80 ? 'A' : 'B');
-                    strategy = liquidity ? 'PO3' : 'BOS';
-                    sl = entry - slDistance;
-                    tp = entry + (slDistance * 3);
-                    tp2 = entry + (slDistance * 2);
-                    tp3 = entry + (slDistance * 3);
-                    bestAction = 'BEST TO BUY';
-                } else if (structure === 'bearish' && confidence >= 60) {
-                    direction = 'SELL';
-                    grade = confidence >= 85 ? 'A+' : (confidence >= 80 ? 'A' : 'B');
-                    strategy = liquidity ? 'PO3' : 'BOS';
-                    sl = entry + slDistance;
-                    tp = entry - (slDistance * 3);
-                    tp2 = entry - (slDistance * 2);
-                    tp3 = entry - (slDistance * 3);
-                    bestAction = 'BEST TO SELL';
-                } else {
-                    sl = entry;
-                    tp = tp2 = tp3 = entry;
-                }
-
-                document.getElementById('direction').textContent = direction;
-                document.getElementById('direction').className = direction === 'BUY' ? 'direction-buy' : 'direction-sell';
-                document.getElementById('confidence').textContent = confidence + '%';
-                document.getElementById('grade').textContent = 'Grade ' + grade;
-                document.getElementById('strategy').textContent = strategy;
-
-                // v8.4: Show N/A when WAIT to avoid confusing price display
-                if (direction === 'WAIT') {
-                    document.getElementById('entry').textContent = '— (no trade)';
-                    document.getElementById('sl').textContent = '— (no trade)';
-                    document.getElementById('tp').textContent = '— (no trade)';
-                    document.getElementById('rr').textContent = '—';
-                } else {
-                    document.getElementById('entry').textContent = entry.toFixed(2);
-                    document.getElementById('sl').textContent = sl.toFixed(2);
-                    document.getElementById('tp').textContent = tp.toFixed(2);
-                    document.getElementById('rr').textContent = '1:3.0';
-                }
-
-                // NEW v7.0 — Lot calc and multi-TP for manual analysis
-                if (direction !== 'WAIT') {
-                    // Match server-side contract size logic
-                    const pipSize = symbol === 'BTCUSDm' ? 1.0 :
-                                    symbol === 'XAUUSDm' ? 0.10 :
-                                    symbol.includes('JPY') ? 0.01 :
-                                    (symbol === 'USTECm' || symbol === 'US30m') ? 1.0 : 0.0001;
-                    const contractSize = symbol === 'XAUUSDm' ? 10.0 :
-                                         symbol.includes('JPY') ? 6.67 :
-                                         (symbol === 'BTCUSDm' || symbol === 'USTECm' || symbol === 'US30m') ? 1.0 : 10.0;
-                    const slPips = slDistance / pipSize;
-                    const riskAmount = 369.19 * 0.01;
-                    const calcLots = riskAmount / (slPips * contractSize);
-                    const lots = Math.max(0.01, Math.round(calcLots * 100) / 100);
-
-                    document.getElementById('lotSizeValue').textContent = lots.toFixed(2);
-                    document.getElementById('slPips').textContent = slPips.toFixed(1) + ' pips';
-                    document.getElementById('lotRiskAmount').textContent = 'R' + riskAmount.toFixed(2);
-
-                    document.getElementById('tp1Value').textContent = (direction === 'BUY' ? entry + slDistance : entry - slDistance).toFixed(2);
-                    document.getElementById('tp2Value').textContent = tp2.toFixed(2);
-                    document.getElementById('tp3Value').textContent = tp3.toFixed(2);
-                } else {
-                    document.getElementById('lotSizeValue').textContent = 'N/A';
-                    document.getElementById('slPips').textContent = '-';
-                    document.getElementById('lotRiskAmount').textContent = '-';
-                    document.getElementById('tp1Value').textContent = '-';
-                    document.getElementById('tp2Value').textContent = '-';
-                    document.getElementById('tp3Value').textContent = '-';
-                }
-
-                const baEl = document.getElementById('bestAction');
-                baEl.textContent = bestAction;
-                baEl.style.display = direction !== 'WAIT' ? 'block' : 'none';
-                baEl.style.color = direction === 'BUY' ? '#00d4aa' : '#ff6b6b';
-                baEl.style.borderColor = direction === 'BUY' ? 'rgba(0, 212, 170, 0.3)' : 'rgba(255, 107, 107, 0.3)';
-                baEl.style.background = direction === 'BUY' ? 'rgba(0, 212, 170, 0.1)' : 'rgba(255, 107, 107, 0.1)';
-
-                const htfColor = direction === 'BUY' ? '#00d4aa' : '#ff6b6b';
-                document.getElementById('htfTrend').innerHTML = direction === 'BUY' ? `<span style="color: ${htfColor};">🟢 Bullish</span>` : `<span style="color: ${htfColor};">🔴 Bearish</span>`;
-                document.getElementById('htfExplanation').textContent = direction === 'BUY' ? 'HTF shows bullish bias with higher highs and higher lows.' : 'HTF shows bearish bias with lower highs and lower lows.';
-
-                document.getElementById('marketStructure').textContent = structure === 'bullish' ? 'Bullish: HH + HL' : structure === 'bearish' ? 'Bearish: LH + LL' : 'Ranging';
-                document.getElementById('marketStructureExplanation').textContent = structure === 'bullish' ? 'Market forming bullish structure.' : 'Market forming bearish structure.';
-
-                document.getElementById('liquiditySweep').textContent = liquidity ? '✓ Liquidity grabbed' : '✗ No clear sweep';
-                document.getElementById('liquidityExplanation').textContent = liquidity ? 'Smart money swept stops before reversal.' : 'No stop hunt detected.';
-
-                document.getElementById('structureShift').textContent = choch || bos ? '✓ Shift confirmed' : 'No shift';
-                document.getElementById('structureShiftExplanation').textContent = choch || bos ? 'Structure shift detected.' : 'Wait for shift.';
-
-                document.getElementById('predictedMove').textContent = direction === 'BUY' ? `📈 To ${tp.toFixed(2)}` : `📉 To ${tp.toFixed(2)}`;
-                document.getElementById('predictedMoveExplanation').textContent = direction === 'BUY' ? `Bullish expansion expected. SL: ${sl.toFixed(2)}` : `Bearish expansion expected. SL: ${sl.toFixed(2)}`;
-
-                const checklist = [
-                    {name: 'H1 Accumulation Base', detail: `Clear consolidation base established between ${entry.toFixed(0)} and ${(entry * 0.998).toFixed(0)} (inferred from M15 swing range)`, pass: structure !== 'ranging'},
-                    {name: 'Micro Manipulation Sweep', detail: `Sharp Judas wick spiked above ${(entry * 1.005).toFixed(0)}, purging buy-side liquidity before immediately closing back inside`, pass: liquidity},
-                    {name: 'Distribution Expansion', detail: `Displacement leg expanded ${direction === 'SELL' ? 'down' : 'up'} to ${tp.toFixed(0)} with large-bodied ${direction === 'SELL' ? 'bearish' : 'bullish'} candles`, pass: displacement},
-                    {name: 'H1 Draw on Liquidity', detail: `Draw on liquidity targets unmitigated ${direction === 'SELL' ? 'sell-side' : 'buy-side'} lows around ${sl.toFixed(0)}`, pass: bos},
-                    {name: 'Displacement FVG / Imbalance', detail: `Clear ${direction === 'SELL' ? 'premium' : 'discount'} imbalance zone created during ${direction === 'SELL' ? 'down' : 'up'}-leg, now being tested as entry`, pass: fvg},
-                    {name: 'Entry Trigger on Retrace', detail: `Price returned to retest the ${direction === 'SELL' ? 'FVG breakdown' : 'FVG breakout'} level with upper wick rejection`, pass: orderblock},
-                    {name: 'R:Reward ≥ 2.0', detail: `Risk of ~${slDistance.toFixed(1)} points for ~${(Math.abs(tp - entry)).toFixed(1)} points reward (${(Math.abs(tp - entry) / slDistance).toFixed(1)}:1 R:R ratio)`, pass: true}
-                ];
-
-                let checklistHtml = '';
-                checklist.forEach(item => {
-                    const icon = item.pass ? '✓' : '✗';
-                    const iconClass = item.pass ? '' : 'fail';
-                    checklistHtml += `<div class="confluence-check-item">
-                        <span class="confluence-check-icon ${iconClass}">${icon}</span>
-                        <span class="confluence-check-text"><strong>${item.name}</strong> — ${item.detail}</span>
-                    </div>`;
-                });
-                document.getElementById('confluenceChecklistItems').innerHTML = checklistHtml;
-
-                const confluences = [];
-                if (liquidity) confluences.push(`Clean ${direction === 'SELL' ? 'buy-side' : 'sell-side'} liquidity grab at ${(entry * 1.003).toFixed(2)}`);
-                if (displacement) confluences.push(`M15 ${structure} displacement breaking structural ${direction === 'SELL' ? 'lows' : 'highs'}`);
-                if (fvg) confluences.push(`Deep ${direction === 'SELL' ? 'premium' : 'discount'} retest into ${(entry * 1.002).toFixed(0)} ${direction === 'SELL' ? 'resistance' : 'support'} / FVG`);
-                if (orderblock) confluences.push(`High risk-to-reward ratio exceeding 2R`);
-                if (bos) confluences.push(`Structure shift confirmed on ${timeframe} timeframe`);
-                if (choch) confluences.push(`CHoCH pattern forming on lower timeframe`);
-
-                let confluencesHtml = '';
-                if (confluences.length === 0) {
-                    confluencesHtml = '<div style="color: #888; font-size: 13px;">No clear confluences detected - wait for better setup</div>';
-                } else {
-                    confluences.forEach(text => {
-                        confluencesHtml += `<div style="display: flex; align-items: flex-start; padding: 6px 0; font-size: 13px; color: #ccc; line-height: 1.5;">
-                            <span style="color: #00d4aa; margin-right: 10px;">•</span>
-                            <span>${text}</span>
-                        </div>`;
-                    });
-                }
-                document.getElementById('confluencesList').innerHTML = confluencesHtml;
-
-                const actionEl = document.getElementById('topdownAction');
-                const actionTextEl = document.getElementById('topdownActionText');
-
-                if (direction === 'BUY') {
-                    actionEl.classList.add('topdown-action-buy');
-                    actionTextEl.textContent = 'BEST TO BUY';
-                } else if (direction === 'SELL') {
-                    actionEl.classList.remove('topdown-action-buy');
-                    actionTextEl.textContent = 'BEST TO SELL';
-                } else {
-                    actionEl.classList.remove('topdown-action-buy');
-                    actionTextEl.textContent = 'WAIT';
-                }
-
-                const nextTrigger = direction === 'BUY' ?
-                    `M15 bullish engulfing candle closing above ${(entry * 1.001).toFixed(2)}` :
-                    `M15 ${direction === 'SELL' ? 'bearish' : ''} rejection candle closing below ${(entry * 0.999).toFixed(2)}`;
-                document.getElementById('nextTriggerText').textContent = nextTrigger;
-
-                const invalidation = direction === 'BUY' ?
-                    `Sustained M15 candle close below the ${(sl * 0.999).toFixed(1)} accumulation low` :
-                    `Sustained M15 candle close above the manipulation swing high at ${(sl * 1.001).toFixed(1)}`;
-                document.getElementById('invalidationText').textContent = invalidation;
-
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('result').style.display = 'block';
-                document.getElementById('result').scrollIntoView({behavior: 'smooth'});
-            }
+            const result = document.getElementById('result');
+            result.style.display = 'block';
+            const priceHtml = price
+                ? `<div style="color:#00d4aa;margin:10px 0;">Verified MT5 price: ${formatPriceForSymbol(symbol, price)} · ${escapeHtml(source)}</div>`
+                : '<div style="color:#ff6b6b;margin:10px 0;">No exact Exness price is available. Proxy and estimated prices are disabled.</div>';
+            result.innerHTML = `<div style="text-align:center;padding:18px;background:rgba(0,0,0,.25);border:1px solid rgba(255,215,0,.25);border-radius:12px;">
+                <div style="font-size:12px;color:#00d4ff;">${escapeHtml(symbol)} · ${escapeHtml(timeframe)}</div>
+                <div style="font-size:36px;font-weight:800;color:#ffd700;margin:8px 0;">WAIT</div>${priceHtml}
+                <div style="font-size:13px;color:#ddd;line-height:1.6;">Chart upload can identify the symbol and read the highlighted price. Real OHLC candle history is not connected yet, so the app will not invent SMC patterns or a BUY/SELL direction.</div>
+                <div style="font-size:12px;color:#ffcc80;margin-top:10px;">Next step: connect the MT5 candle feed, then validate the scanner with historical tests before enabling trade levels.</div>
+                <button class="new-scan-btn" onclick="resetForm()" style="margin-top:14px;">🔄 Scan Another Chart</button>
+            </div>`;
+            result.scrollIntoView({behavior:'smooth'});
         }
 
-        // v8.9 FIX: Load the live price silently; no typing and no alert popup.
+        // v9.0: Load exact MT5 quotes only.
         function useLivePrice() {
             const symbol = document.getElementById('symbol').value;
             fetch('/api/prices')
                 .then(r => r.json())
                 .then(data => {
-                    if (data[symbol]) {
-                        const input = document.getElementById('currentPrice');
-                        if (input) input.value = data[symbol].price;
-                        updateScanLivePricePreview();
-                    }
+                    livePricesCache = data;
+                    const info = data[symbol];
+                    const input = document.getElementById('currentPrice');
+                    if (input && info && info.source === 'mt5' && Number(info.price) > 0) input.value = info.price;
+                    else if (input) input.value = '';
+                    updateScanLivePricePreview();
                 })
                 .catch(() => {
-                    const statusEl = document.getElementById('ocrStatus');
-                    if (statusEl) {
-                        statusEl.textContent = '⚠️ Live price unavailable. Try again before analysing.';
-                        statusEl.style.color = '#ff6b6b';
-                    }
+                    const input = document.getElementById('currentPrice');
+                    if (input) input.value = '';
                 });
         }
 
@@ -3659,7 +3370,17 @@ def api_mt5_quotes():
     if not supplied or not hmac.compare_digest(supplied, MT5_BRIDGE_TOKEN):
         return jsonify({'error': 'Unauthorized bridge token'}), 401
 
-    payload = request.get_json(silent=True) or {}
+    raw_body = request.get_data(cache=False)
+    # Legacy MQL5 StringToCharArray(..., WHOLE_ARRAY, ...) may append a NUL byte.
+    # Strip only trailing NUL padding, then parse JSON explicitly so bad payloads
+    # return 400 instead of a misleading HTTP 200 with accepted:0.
+    raw_body = raw_body.rstrip(b'\x00')
+    try:
+        payload = json.loads(raw_body.decode('utf-8')) if raw_body else None
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return jsonify({'error': 'Invalid JSON quote payload'}), 400
+    if not isinstance(payload, dict):
+        return jsonify({'error': 'JSON body must be an object'}), 400
     quotes = payload.get('quotes', [])
     if not isinstance(quotes, list):
         return jsonify({'error': 'quotes must be a list'}), 400
@@ -3670,7 +3391,7 @@ def api_mt5_quotes():
         if not isinstance(item, dict):
             continue
         symbol = str(item.get('symbol', ''))
-        if symbol not in LIVE_PRICES:
+        if symbol not in SYMBOL_CONFIG:
             continue
         try:
             bid = float(item.get('bid', 0) or 0)
@@ -3699,7 +3420,7 @@ def api_mt5_quotes():
 @app.route('/api/mt5/status')
 def api_mt5_status():
     fresh = {}
-    for symbol in LIVE_PRICES:
+    for symbol in SYMBOL_CONFIG:
         quote = get_mt5_quote(symbol)
         if quote:
             fresh[symbol] = {
@@ -3713,37 +3434,24 @@ def api_mt5_status():
 
 @app.route('/api/prices')
 def api_prices():
-    """Return the best available quote, preferring the user's exact MT5 bridge."""
-    live = fetch_live_prices()
+    """Return exact MT5 prices only. No external proxy or static-price fallback."""
     prices = {}
-    for symbol, data in LIVE_PRICES.items():
-        bridge = get_mt5_quote(symbol)
-        if bridge:
-            yahoo = live.get(symbol, {}) if live else {}
+    for symbol in SYMBOL_CONFIG:
+        quote = get_mt5_quote(symbol)
+        if quote:
             prices[symbol] = {
-                'price': bridge['price'],
-                'change': yahoo.get('change', 0),
-                'high': yahoo.get('high', bridge['price']),
-                'low': yahoo.get('low', bridge['price']),
+                'price': quote['price'],
+                'bid': quote['bid'],
+                'ask': quote['ask'],
+                'change': None,
                 'source': 'mt5',
-                'age_seconds': round(time.time() - bridge.get('received_at', time.time()), 1),
-            }
-        elif live and symbol in live:
-            prices[symbol] = {
-                'price': live[symbol]['price'],
-                'change': live[symbol]['change'],
-                'high': live[symbol]['high'],
-                'low': live[symbol]['low'],
-                'source': 'live'
+                'age_seconds': round(time.time() - quote.get('received_at', time.time()), 1),
+                'server': quote.get('server', ''),
             }
         else:
-            # Stable fallback only; never add random movement to a quote.
             prices[symbol] = {
-                'price': data['price'],
-                'change': data.get('change', 0.0),
-                'high': data['high'],
-                'low': data['low'],
-                'source': 'fallback'
+                'price': None, 'bid': None, 'ask': None, 'change': None,
+                'source': 'unavailable', 'age_seconds': None, 'server': '',
             }
     return jsonify(prices)
 
@@ -3753,19 +3461,38 @@ def api_session():
 
 @app.route('/api/news')
 def api_news():
-    current_hour = johannesburg_now().hour
-    upcoming = []
-    for event in ECONOMIC_EVENTS:
-        event_hour = int(event['time'].split(':')[0])
-        if 0 <= (event_hour - current_hour) % 24 <= 24:
-            upcoming.append(event)
-    return jsonify({'events': upcoming[:5]})
+    """Live calendar data only; never claim an empty feed means trading is safe."""
+    data = get_economic_calendar_data()
+    return jsonify({
+        'events': data.get('events', []),
+        'status': data.get('status', 'unavailable'),
+        'message': data.get('message', ''),
+        'updated_at': data.get('updated_at'),
+        'source': 'FinanceCalendar.com',
+        'attribution_url': FINANCE_CALENDAR_ATTRIBUTION,
+    })
+
+@app.route('/api/news-scenario')
+def api_news_scenario():
+    event_id = request.args.get('event_id', '')
+    symbol = request.args.get('symbol', 'XAUUSDm')
+    if symbol not in SYMBOL_CONFIG:
+        return jsonify({'error': 'Unknown symbol'}), 400
+    calendar_data = get_economic_calendar_data()
+    event = next((e for e in calendar_data.get('events', []) if e.get('id') == event_id), None)
+    if not event:
+        return jsonify({'error': 'Event is no longer in the live calendar. Refresh the event list.'}), 404
+    result = build_news_scenario(event, symbol)
+    result['calendar_status'] = calendar_data.get('status')
+    return jsonify(result)
 
 @app.route('/api/htf-bias')
 def api_htf_bias():
-    """NEW v7.0: HTF bias for any symbol."""
     symbol = request.args.get('symbol', 'BTCUSDm')
-    return jsonify(get_htf_bias(symbol))
+    result = get_htf_bias(symbol)
+    if result:
+        return jsonify(result)
+    return jsonify({'error': 'Unknown symbol'}), 400
 
 @app.route('/api/auto-scan')
 def api_auto_scan():
@@ -3775,11 +3502,12 @@ def api_auto_scan():
     symbol = request.args.get('symbol', 'BTCUSDm')
     custom_price = request.args.get('price')
     min_confidence = request.args.get('min_confidence')
-    result = auto_scan_symbol(
-        symbol,
-        custom_price=float(custom_price) if custom_price else None,
-        min_confidence=int(min_confidence) if min_confidence else None
-    )
+    try:
+        parsed_price = float(custom_price) if custom_price else None
+        parsed_confidence = int(min_confidence) if min_confidence else None
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid price or confidence parameter'}), 400
+    result = auto_scan_symbol(symbol, custom_price=parsed_price, min_confidence=parsed_confidence)
     if result:
         return jsonify(result)
     return jsonify({'error': 'Unknown symbol'}), 400
@@ -3788,9 +3516,12 @@ def api_auto_scan():
 def api_auto_scan_all():
     """NEW v7.0: Scan all 7 symbols at once."""
     min_confidence = request.args.get('min_confidence')
-    gate = int(min_confidence) if min_confidence else None
+    try:
+        gate = int(min_confidence) if min_confidence else None
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid confidence parameter'}), 400
     results = []
-    for symbol in LIVE_PRICES.keys():
+    for symbol in SYMBOL_CONFIG.keys():
         results.append(auto_scan_symbol(symbol, min_confidence=gate))
     return jsonify({'results': results})
 
@@ -3801,7 +3532,6 @@ def api_next_session():
 
 @app.route('/api/reference-levels')
 def api_reference_levels():
-    """NEW v8.0: PDH/PDL + Asian range markers."""
     symbol = request.args.get('symbol', 'BTCUSDm')
     levels = get_reference_levels(symbol)
     if levels:
@@ -3826,17 +3556,14 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '8.9.2',
-        'features': ['robot', 'live_ticker', 'multi_symbol_scan', 'htf_bias',
-                     'lot_size_calculator', 'multi_tp', 'signal_history',
-                     '20_smc_factors', 'confluence_categories', 'drawdown_tracker',
-                     'session_countdown', 'asian_range_markers', 'pdh_pdl_markers',
-                     'top_down_analysis', 'economic_calendar', 'session_quality',
-                     'real_prices', 'fast_scan', 'outcome_tracking',
+        'version': '9.0.0',
+        'features': ['read_only_mt5_bridge', 'exact_prices_only', 'conditional_news_scenarios', 'safe_wait_until_real_candles',
+                     'lot_size_calculator', 'signal_history', 'session_countdown',
+                     'economic_calendar_live_attributed', 'manual_risk_tracker_not_mt5_synced',
+                     'exact_mt5_prices_only', 'conditional_news_scenarios', 'safe_wait_until_ohlc',
                      'editable_balance', 'editable_risk_pct', 'editable_min_confidence',
                      'manual_chart_v8_2_safe'],
-        'new_in_v8_9': ['removed_manual_price_input', 'highlighted_mt5_price_ocr', 'auto_live_price_preview', 'live_price_preview_on_scan_tab', 'confidence_gate_matches_settings', 'yahoo_proxy_warning', 'exact_mt5_required_for_indices', 'mt5_read_only_quote_bridge'],
-        'new_in_v8_8': ['yahoo_finance_live_prices', 'no_api_key_needed'],
+        'new_in_v9_0': ['removed_manual_price_input', 'highlighted_mt5_price_ocr', 'auto_live_price_preview', 'live_price_preview_on_scan_tab', 'confidence_gate_matches_settings', 'removed_yahoo_proxy_and_static_prices', 'mt5_read_only_quote_bridge', 'random_signals_disabled_until_real_candles'],
         'new_in_v8_4': ['iphone_upload_two_buttons', 'camera_gallery_split',
                         'best_action_hidden_when_wait', 'best_action_color_dynamic'],
         'new_in_v8_3': ['tesseract_ocr_engine', 'auto_price_from_photo',

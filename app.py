@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.0.0 — exact Exness quotes only + conditional news scenarios.
+Elite Alpha EA v9.1.0 — exact Exness quotes + read-only MT5 OHLC transport.
 
 Safety changes:
 - No public proxy prices or static quote estimates are presented or scanned.
@@ -15,6 +15,7 @@ import re
 import os
 import hmac
 import time
+import math
 import base64
 import io
 from datetime import datetime, timedelta, timezone
@@ -53,6 +54,12 @@ SYMBOL_CONFIG = {
 MT5_BRIDGE_TOKEN = os.environ.get('MT5_BRIDGE_TOKEN', '')
 MT5_QUOTES = {}
 MT5_QUOTES_LAST_UPDATE = None
+# Keyed by (symbol, timeframe); each record stores closed OHLC bars only.
+MT5_CANDLES = {}
+MT5_CANDLE_MAX_AGE_SECONDS = 180
+MT5_TIMEFRAMES = ('M15', 'H1', 'H4', 'D1')
+MT5_CANDLE_MIN_COUNTS = {'M15': 40, 'H1': 40, 'H4': 30, 'D1': 30}
+MT5_CANDLE_MAX_PER_SERIES = 120
 
 def get_mt5_quote(symbol, max_age_seconds=10):
     """Return a fresh quote pushed by the user's MT5 terminal, if available."""
@@ -62,6 +69,31 @@ def get_mt5_quote(symbol, max_age_seconds=10):
     if time.time() - quote.get('received_at', 0) > max_age_seconds:
         return None
     return quote
+
+def get_mt5_candle_status(symbol):
+    """Describe which fresh, closed candle series have reached Render."""
+    now = time.time()
+    frames = {}
+    for timeframe in MT5_TIMEFRAMES:
+        record = MT5_CANDLES.get((symbol, timeframe))
+        age = round(now - record.get('received_at', 0), 1) if record else None
+        candles = record.get('candles', []) if record else []
+        fresh = bool(record and age is not None and age <= MT5_CANDLE_MAX_AGE_SECONDS)
+        minimum = MT5_CANDLE_MIN_COUNTS[timeframe]
+        frames[timeframe] = {
+            'available': fresh,
+            'bars': len(candles) if fresh else 0,
+            'minimum_bars': minimum,
+            'age_seconds': age,
+            'latest_bar_time': candles[-1]['time'] if fresh and candles else None,
+            'ready': bool(fresh and len(candles) >= minimum),
+        }
+    return {
+        'symbol': symbol,
+        'timeframes': frames,
+        'ready': all(frames[tf]['ready'] for tf in MT5_TIMEFRAMES),
+        'max_age_seconds': MT5_CANDLE_MAX_AGE_SECONDS,
+    }
 
 # ============================================
 # v9.0: LIVE ECONOMIC CALENDAR
@@ -694,10 +726,14 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None):
             current_price = None
             price_source = 'unavailable'
 
+    candle_status = get_mt5_candle_status(symbol)
     if current_price is None:
         reason = 'WAIT: no fresh exact Exness price. Connect the MT5 bridge or upload a current MT5 chart.'
+    elif not candle_status['ready']:
+        missing = [tf for tf, info in candle_status['timeframes'].items() if not info['ready']]
+        reason = 'WAIT: exact price is live; waiting for enough fresh closed MT5 candles on ' + ', '.join(missing) + '. Keep MT5 open while history loads.'
     else:
-        reason = 'WAIT: exact price is available, but real MT5 candle history is not connected. A single quote cannot verify SMC structure, so no BUY/SELL or Entry/SL/TP is generated.'
+        reason = 'WAIT: fresh MT5 candles are received, but the deterministic strategy is still disabled pending validation/backtesting. No trade levels are fabricated.'
 
     return {
         'symbol': symbol,
@@ -724,6 +760,7 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None):
         'signal_min_confidence': signal_gate,
         'signal_reason': reason,
         'signal_available': False,
+        'candle_status': candle_status,
         'timestamp': johannesburg_now().strftime('%Y-%m-%d %H:%M:%S %Z'),
     }
 
@@ -1946,14 +1983,14 @@ HTML = """
         <div class="auto-scan-banner">
             <div class="auto-scan-icon">🎯</div>
             <div class="auto-scan-text">PRECISION SCAN</div>
-            <div class="auto-scan-sub">Exact MT5 price only. Trade signals wait for real candle data.</div>
+            <div class="auto-scan-sub">Exact MT5 quotes and closed candles only. Signals stay WAIT until rules are validated.</div>
 
             <!-- v9.0: verified MT5 price banner; no public proxy -->
             <div id="livePricePreview" style="background: rgba(0, 212, 170, 0.1); border: 1px solid rgba(0, 212, 170, 0.4); border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: center;">
                 <div style="font-size: 10px; color: #00d4aa; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px;">📡 VERIFIED EXNESS PRICE (MT5 ONLY)</div>
                 <div style="font-size: 22px; color: #00d4aa; font-weight: 800;" id="livePriceValue">—</div>
                 <div style="font-size: 10px; color: #888; margin-top: 2px;" id="livePriceSource">Loading...</div>
-                <div style="font-size: 10px; color: #ffd700; margin-top: 6px;">No public proxy or estimate is shown. Connect MT5 or upload a current chart.</div>
+                <div style="font-size: 10px; color: #ffd700; margin-top: 6px;">Only fresh MT5 quotes or a recent MT5 screenshot are shown; stale/missing data stays blank.</div>
             </div>
 
             <!-- NEW: Symbol picker chips -->
@@ -2857,15 +2894,25 @@ HTML = """
             </div>`;
         }
 
+        function describeCandleStatus(data) {
+            const frames = data && data.timeframes ? data.timeframes : {};
+            const parts = Object.entries(frames).map(([tf, info]) =>
+                `${tf}: ${info.bars || 0}/${info.minimum_bars || 0}${info.ready ? ' ready' : ' waiting'}`
+            );
+            return parts.length ? parts.join(' · ') : 'No candle status received';
+        }
+
         function runAutoScan() {
             const resultDiv = document.getElementById('autoScanResult');
             resultDiv.style.display = 'block';
             if (selectedSymbol === 'ALL') {
                 const symbols = ['XAUUSDm','BTCUSDm','EURUSDm','GBPUSDm','USDJPYm','USTECm','US30m'];
                 const missing = symbols.filter(s => !hasMt5BridgeQuote(s));
-                showSafeScanWait('ALL', null, 'unavailable', missing.length
-                    ? 'Waiting for fresh exact MT5 quotes for: ' + missing.join(', ') + '.'
-                    : 'All seven exact quotes are present, but actual MT5 candle history is not connected. The technical signal engine remains paused.');
+                if (missing.length) {
+                    showSafeScanWait('ALL', null, 'unavailable', 'Waiting for fresh exact MT5 quotes for: ' + missing.join(', ') + '.');
+                    return;
+                }
+                showSafeScanWait('ALL', null, 'unavailable', 'All seven exact prices are live. Check individual symbol scans for the M15/H1/H4/D1 candle-feed counts. Trade signals remain paused until the candle strategy is validated.');
                 return;
             }
             const screenshot = getRecentMt5ScreenshotPrice(selectedSymbol);
@@ -2873,10 +2920,21 @@ HTML = """
             const quote = hasMt5BridgeQuote(selectedSymbol) ? bridge : null;
             const price = quote ? quote.price : screenshot ? screenshot.price : null;
             const source = quote ? 'MT5 live bridge' : screenshot ? 'MT5 screenshot' : 'unavailable';
-            const message = price
-                ? 'The price is verified, but the app does not yet receive real MT5 OHLC candles. Without candles it cannot truthfully confirm market structure, so this scan stays WAIT.'
-                : 'Connect MT5 so the bridge shows green, or upload a current MT5 chart. No public proxy or estimated quote is used.';
-            showSafeScanWait(selectedSymbol, price, source, message);
+            if (!price) {
+                showSafeScanWait(selectedSymbol, null, source, 'Connect the MT5 bridge or upload a current MT5 chart. No public proxy or estimated quote is used.');
+                return;
+            }
+            showSafeScanWait(selectedSymbol, price, source, 'Checking fresh closed MT5 candle history…');
+            fetch('/api/mt5/candles/status?symbol=' + encodeURIComponent(selectedSymbol))
+                .then(r => r.json())
+                .then(data => {
+                    const statusLine = 'MT5 candle feed: ' + describeCandleStatus(data) + '.';
+                    const message = data.ready
+                        ? statusLine + ' The bars are arriving, but trade signals remain paused until the rule set is validated on historical data. No confidence, Entry, SL or TP is generated yet.'
+                        : statusLine + ' The scanner needs fresh closed candles before it can test structure. Keep MT5 open and let the history feed load.';
+                    showSafeScanWait(selectedSymbol, price, source, message);
+                })
+                .catch(() => showSafeScanWait(selectedSymbol, price, source, 'Exact price is live, but the candle-status check failed. The app will stay WAIT rather than invent a setup.'));
         }
 
         function renderSingleResult(data) {
@@ -3307,8 +3365,8 @@ HTML = """
             result.innerHTML = `<div style="text-align:center;padding:18px;background:rgba(0,0,0,.25);border:1px solid rgba(255,215,0,.25);border-radius:12px;">
                 <div style="font-size:12px;color:#00d4ff;">${escapeHtml(symbol)} · ${escapeHtml(timeframe)}</div>
                 <div style="font-size:36px;font-weight:800;color:#ffd700;margin:8px 0;">WAIT</div>${priceHtml}
-                <div style="font-size:13px;color:#ddd;line-height:1.6;">Chart upload can identify the symbol and read the highlighted price. Real OHLC candle history is not connected yet, so the app will not invent SMC patterns or a BUY/SELL direction.</div>
-                <div style="font-size:12px;color:#ffcc80;margin-top:10px;">Next step: connect the MT5 candle feed, then validate the scanner with historical tests before enabling trade levels.</div>
+                <div style="font-size:13px;color:#ddd;line-height:1.6;">Chart upload can identify the symbol and read the highlighted price. The app checks the MT5 candle feed before any setup can be considered. Until the bars and strategy are validated, it will not invent SMC patterns or a BUY/SELL direction.</div>
+                <div style="font-size:12px;color:#ffcc80;margin-top:10px;">Next step: confirm fresh closed MT5 bars and validate the scanner with historical tests before enabling trade levels.</div>
                 <button class="new-scan-btn" onclick="resetForm()" style="margin-top:14px;">🔄 Scan Another Chart</button>
             </div>`;
             result.scrollIntoView({behavior:'smooth'});
@@ -3356,13 +3414,8 @@ def home():
 
 @app.route('/api/mt5/quotes', methods=['POST'])
 def api_mt5_quotes():
-    """Receive read-only tick quotes from the user's MT5 bridge EA.
-
-    The EA sends bid/ask only; it never sends the account password and cannot
-    place trades through this endpoint. Configure MT5_BRIDGE_TOKEN in Render
-    and the same token in the EA input.
-    """
-    global MT5_QUOTES, MT5_QUOTES_LAST_UPDATE
+    """Receive read-only ticks and optional closed MT5 OHLC bars from the bridge EA."""
+    global MT5_QUOTES, MT5_QUOTES_LAST_UPDATE, MT5_CANDLES
     if not MT5_BRIDGE_TOKEN:
         return jsonify({'error': 'MT5 bridge is not configured on the server'}), 503
 
@@ -3371,22 +3424,25 @@ def api_mt5_quotes():
         return jsonify({'error': 'Unauthorized bridge token'}), 401
 
     raw_body = request.get_data(cache=False)
-    # Legacy MQL5 StringToCharArray(..., WHOLE_ARRAY, ...) may append a NUL byte.
-    # Strip only trailing NUL padding, then parse JSON explicitly so bad payloads
-    # return 400 instead of a misleading HTTP 200 with accepted:0.
     raw_body = raw_body.rstrip(b'\x00')
     try:
         payload = json.loads(raw_body.decode('utf-8')) if raw_body else None
     except (UnicodeDecodeError, json.JSONDecodeError):
-        return jsonify({'error': 'Invalid JSON quote payload'}), 400
+        return jsonify({'error': 'Invalid JSON quote/candle payload'}), 400
     if not isinstance(payload, dict):
         return jsonify({'error': 'JSON body must be an object'}), 400
+
     quotes = payload.get('quotes', [])
+    series = payload.get('series', [])
     if not isinstance(quotes, list):
         return jsonify({'error': 'quotes must be a list'}), 400
+    if not isinstance(series, list):
+        return jsonify({'error': 'series must be a list'}), 400
+    if not quotes and not series:
+        return jsonify({'error': 'payload must contain quotes or candle series'}), 400
 
-    accepted = 0
     now = time.time()
+    accepted_quotes = 0
     for item in quotes:
         if not isinstance(item, dict):
             continue
@@ -3396,10 +3452,8 @@ def api_mt5_quotes():
         try:
             bid = float(item.get('bid', 0) or 0)
             ask = float(item.get('ask', 0) or 0)
-            price = bid if bid > 0 else ask
-            if bid > 0 and ask > 0:
-                price = (bid + ask) / 2.0
-            if price <= 0:
+            price = (bid + ask) / 2.0 if bid > 0 and ask > 0 else (bid if bid > 0 else ask)
+            if not all(math.isfinite(x) for x in (bid, ask, price)) or price <= 0:
                 continue
         except (TypeError, ValueError):
             continue
@@ -3407,15 +3461,66 @@ def api_mt5_quotes():
             'price': round(price, 5),
             'bid': round(bid, 5),
             'ask': round(ask, 5),
-            'tick_time_msc': item.get('time_msc'),
+            'tick_time_sec': item.get('time_sec'),
             'received_at': now,
             'server': str(payload.get('server', '')),
             'account': str(payload.get('account', '')),
         }
-        accepted += 1
+        accepted_quotes += 1
 
-    MT5_QUOTES_LAST_UPDATE = now if accepted else MT5_QUOTES_LAST_UPDATE
-    return jsonify({'status': 'ok', 'accepted': accepted, 'received_at': now})
+    accepted_series = 0
+    accepted_candles = 0
+    for item in series[:len(SYMBOL_CONFIG) * len(MT5_TIMEFRAMES)]:
+        if not isinstance(item, dict):
+            continue
+        symbol = str(item.get('symbol', ''))
+        timeframe = str(item.get('timeframe', '')).upper()
+        raw_candles = item.get('candles', [])
+        if symbol not in SYMBOL_CONFIG or timeframe not in MT5_TIMEFRAMES or not isinstance(raw_candles, list):
+            continue
+
+        by_time = {}
+        for candle in raw_candles[-MT5_CANDLE_MAX_PER_SERIES:]:
+            if not isinstance(candle, dict):
+                continue
+            try:
+                stamp = int(candle.get('time', 0))
+                o = float(candle.get('open'))
+                h = float(candle.get('high'))
+                low = float(candle.get('low'))
+                close = float(candle.get('close'))
+            except (TypeError, ValueError):
+                continue
+            if stamp <= 0 or not all(math.isfinite(x) for x in (o, h, low, close)):
+                continue
+            if min(o, h, low, close) <= 0 or h < max(o, low, close) or low > min(o, h, close):
+                continue
+            by_time[stamp] = {'time': stamp, 'open': o, 'high': h, 'low': low, 'close': close}
+
+        candles = [by_time[t] for t in sorted(by_time)][-MT5_CANDLE_MAX_PER_SERIES:]
+        if not candles:
+            continue
+        MT5_CANDLES[(symbol, timeframe)] = {
+            'candles': candles,
+            'received_at': now,
+            'server': str(payload.get('server', '')),
+            'account': str(payload.get('account', '')),
+        }
+        accepted_series += 1
+        accepted_candles += len(candles)
+
+    if accepted_quotes:
+        MT5_QUOTES_LAST_UPDATE = now
+    if not accepted_quotes and not accepted_series:
+        return jsonify({'error': 'No valid quote or candle data accepted'}), 422
+
+    return jsonify({
+        'status': 'ok',
+        'accepted': accepted_quotes,
+        'accepted_series': accepted_series,
+        'accepted_candles': accepted_candles,
+        'received_at': now,
+    })
 
 @app.route('/api/mt5/status')
 def api_mt5_status():
@@ -3430,7 +3535,29 @@ def api_mt5_status():
                 'server': quote.get('server', ''),
                 'age_seconds': round(time.time() - quote.get('received_at', time.time()), 1),
             }
-    return jsonify({'configured': bool(MT5_BRIDGE_TOKEN), 'connected': bool(fresh), 'quotes': fresh})
+    candle_status = {symbol: get_mt5_candle_status(symbol) for symbol in SYMBOL_CONFIG}
+    candles_ready = all(info['ready'] for info in candle_status.values())
+    return jsonify({
+        'configured': bool(MT5_BRIDGE_TOKEN),
+        'connected': bool(fresh),
+        'quotes': fresh,
+        'candles_connected': any(any(tf['available'] for tf in item['timeframes'].values()) for item in candle_status.values()),
+        'candles_ready_all_symbols': candles_ready,
+        'candles': candle_status,
+    })
+
+@app.route('/api/mt5/candles/status')
+def api_mt5_candles_status():
+    symbol = request.args.get('symbol')
+    if symbol:
+        if symbol not in SYMBOL_CONFIG:
+            return jsonify({'error': 'Unknown symbol'}), 400
+        return jsonify(get_mt5_candle_status(symbol))
+    return jsonify({
+        'candles': {item: get_mt5_candle_status(item) for item in SYMBOL_CONFIG},
+        'required_timeframes': list(MT5_TIMEFRAMES),
+        'max_age_seconds': MT5_CANDLE_MAX_AGE_SECONDS,
+    })
 
 @app.route('/api/prices')
 def api_prices():
@@ -3556,14 +3683,14 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.0.0',
-        'features': ['read_only_mt5_bridge', 'exact_prices_only', 'conditional_news_scenarios', 'safe_wait_until_real_candles',
+        'version': '9.1.0',
+        'features': ['read_only_mt5_bridge', 'exact_prices_only', 'conditional_news_scenarios', 'read_only_mt5_ohlc_candles',
                      'lot_size_calculator', 'signal_history', 'session_countdown',
                      'economic_calendar_live_attributed', 'manual_risk_tracker_not_mt5_synced',
-                     'exact_mt5_prices_only', 'conditional_news_scenarios', 'safe_wait_until_ohlc',
+                     'exact_mt5_prices_only', 'conditional_news_scenarios', 'ohlc_candle_feed_diagnostics',
                      'editable_balance', 'editable_risk_pct', 'editable_min_confidence',
                      'manual_chart_v8_2_safe'],
-        'new_in_v9_0': ['removed_manual_price_input', 'highlighted_mt5_price_ocr', 'auto_live_price_preview', 'live_price_preview_on_scan_tab', 'confidence_gate_matches_settings', 'removed_yahoo_proxy_and_static_prices', 'mt5_read_only_quote_bridge', 'random_signals_disabled_until_real_candles'],
+        'new_in_v9_1': ['mt5_closed_ohlc_candle_transport', 'candle_feed_status_per_symbol_timeframe', 'removed_manual_price_input', 'highlighted_mt5_price_ocr', 'auto_live_price_preview', 'live_price_preview_on_scan_tab', 'confidence_gate_matches_settings', 'removed_yahoo_proxy_and_static_prices', 'mt5_read_only_quote_bridge', 'm15_h1_h4_d1_ohlc_feed_pending_strategy_validation'],
         'new_in_v8_4': ['iphone_upload_two_buttons', 'camera_gallery_split',
                         'best_action_hidden_when_wait', 'best_action_color_dynamic'],
         'new_in_v8_3': ['tesseract_ocr_engine', 'auto_price_from_photo',

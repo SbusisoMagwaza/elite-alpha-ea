@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.4.0 — cleaner mobile scan, real timeframes, 20 factor states.
+Elite Alpha EA v9.5.0 — live-timeframe SMC factors + historical replay diagnostics.
 
 Safety changes:
 - No public proxy prices or static quote estimates are presented or scanned.
@@ -57,6 +57,7 @@ MT5_QUOTES = {}
 MT5_QUOTES_LAST_UPDATE = None
 # Keyed by (symbol, timeframe); each record stores closed OHLC bars only.
 MT5_CANDLES = {}
+STRATEGY_BACKTEST_CACHE = {}
 MT5_CANDLE_MAX_AGE_SECONDS = 180
 MT5_TIMEFRAMES = ('M15', 'H1', 'H4', 'D1')
 MT5_CANDLE_MIN_COUNTS = {'M15': 40, 'H1': 40, 'H4': 30, 'D1': 30}
@@ -933,6 +934,111 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
         'signal_reason': reason,
         'timestamp': johannesburg_now().strftime('%Y-%m-%d %H:%M:%S %Z'),
     }
+
+def run_smc_backtest(symbol, timeframe='M15', min_bars=500, max_hold_bars=32):
+    """Walk-forward replay of the same closed-bar SMC candidate rule.
+
+    This reports research metrics only. It never sets the strategy to validated:
+    historical news archives/commission schedules are not available here.
+    """
+    if symbol not in SYMBOL_CONFIG:
+        return {'status':'ERROR','error':'Unknown symbol','validated':False}
+    timeframe=str(timeframe or 'M15').upper()
+    if timeframe not in MT5_TIMEFRAMES:
+        return {'status':'ERROR','error':'Timeframe must be M15/H1/H4/D1','validated':False}
+    bars_by_tf={tf:MT5_CANDLES.get((symbol,tf),{}).get('candles',[]) for tf in MT5_TIMEFRAMES}
+    trigger=bars_by_tf[timeframe]
+    result_base={'symbol':symbol,'timeframe':timeframe,'bars_available':len(trigger),
+                 'required_bars':min_bars,'trades':0,'validated':False,
+                 'costs_model':'Historical spread from MT5 candles when available; commission is not included.'}
+    if len(trigger)<min_bars:
+        return {**result_base,'status':'INSUFFICIENT_HISTORY','reason':f'Need at least {min_bars} closed {timeframe} bars; received {len(trigger)}.'}
+    if any(not b.get('time_utc') for b in trigger):
+        return {**result_base,'status':'MISSING_TIME_METADATA','reason':'Bridge v1.06 UTC-offset metadata is required for look-ahead-safe replay.'}
+
+    seconds={'M15':900,'H1':3600,'H4':14400,'D1':86400}
+    period_seconds=seconds[timeframe]
+    cutoff=int(len(trigger)*0.7)
+    trades=[]
+    i=max(40, min_bars//10)
+    while i < len(trigger)-2:
+        signal_bar=trigger[i]
+        decision_close=int(signal_bar['time_utc'])+period_seconds
+        hist={}
+        enough=True
+        for tf in MT5_TIMEFRAMES:
+            frame=bars_by_tf[tf]
+            frame_seconds=seconds[tf]
+            closed=[b for b in frame if b.get('time_utc') and int(b['time_utc'])+frame_seconds<=decision_close]
+            hist[tf]=closed
+        if len(hist['M15'])<32 or len(hist['H1'])<50 or len(hist['H4'])<50 or len(hist['D1'])<50:
+            i+=1
+            continue
+        entry_bar=trigger[i+1]
+        entry=float(entry_bar['open'])
+        local_dt=datetime.fromtimestamp(decision_close,timezone.utc).astimezone(JOHANNESBURG_TZ or timezone.utc)
+        analysis=evaluate_smc_factors(symbol,entry,hist,[], 'historical',local_dt,trigger_timeframe=timeframe,historical=True)
+        if not analysis.get('candidate') or not analysis.get('pattern'):
+            i+=1
+            continue
+        pattern=analysis['pattern']; direction=pattern['direction']; atr_value=float(analysis.get('atr') or 0)
+        if atr_value<=0:
+            i+=1
+            continue
+        buffer=atr_value*.15
+        stop=float(pattern['extreme'])-buffer if direction=='BUY' else float(pattern['extreme'])+buffer
+        risk=(entry-stop) if direction=='BUY' else (stop-entry)
+        if risk<=0 or risk>6*atr_value:
+            i+=1
+            continue
+        target=entry+2*risk if direction=='BUY' else entry-2*risk
+        exit_i=min(len(trigger)-1,i+max_hold_bars)
+        gross_r=None; outcome='TIME_EXIT'
+        for j in range(i+1,exit_i+1):
+            bar=trigger[j]
+            if direction=='BUY':
+                stop_hit=bar['low']<=stop; target_hit=bar['high']>=target
+            else:
+                stop_hit=bar['high']>=stop; target_hit=bar['low']<=target
+            if stop_hit and target_hit:
+                gross_r=-1.0; exit_i=j; outcome='AMBIGUOUS_STOP_FIRST'; break
+            if stop_hit:
+                gross_r=-1.0; exit_i=j; outcome='STOP'; break
+            if target_hit:
+                gross_r=2.0; exit_i=j; outcome='TARGET'; break
+        if gross_r is None:
+            exit_price=float(trigger[exit_i]['close'])
+            gross_r=((exit_price-entry)/risk) if direction=='BUY' else ((entry-exit_price)/risk)
+        point=MT5_CANDLES.get((symbol,timeframe),{}).get('point')
+        spread_points=entry_bar.get('spread_points')
+        spread_cost=(float(point)*float(spread_points)) if point and spread_points is not None and float(spread_points)>=0 else None
+        spread_cost_applied = spread_cost is not None
+        net_r=gross_r-(spread_cost/risk if spread_cost_applied and risk>0 else 0.0)
+        trades.append({'entry_time':int(entry_bar['time_utc']),'direction':direction,'gross_r':round(gross_r,3),'net_r':round(net_r,3),'spread_cost_applied':spread_cost_applied,'outcome':outcome,'sample':'out_of_sample' if i>=cutoff else 'in_sample'})
+        i=max(i+1,exit_i+1)
+
+    def metrics(items):
+        vals=[float(t['net_r']) for t in items]
+        if not vals:
+            return {'trades':0,'win_rate_pct':None,'expectancy_r':None,'net_r':0.0,'max_drawdown_r':0.0}
+        equity=peak=drawdown=0.0
+        for v in vals:
+            equity+=v; peak=max(peak,equity); drawdown=max(drawdown,peak-equity)
+        wins=sum(v>0 for v in vals)
+        return {'trades':len(vals),'win_rate_pct':round(100*wins/len(vals),1),'expectancy_r':round(sum(vals)/len(vals),3),'net_r':round(sum(vals),2),'max_drawdown_r':round(drawdown,2)}
+
+    ins=metrics([t for t in trades if t['sample']=='in_sample'])
+    oos=metrics([t for t in trades if t['sample']=='out_of_sample'])
+    spread_available=bool(trades) and all(t.get('spread_cost_applied',False) for t in trades)
+    if len(trades)<30 or oos['trades']<10:
+        status='INSUFFICIENT_SAMPLE'
+        reason='Replay completed, but fewer than 30 total trades or 10 out-of-sample trades; performance is not statistically established.'
+    else:
+        status='PRELIMINARY_RESULTS'
+        reason='Replay completed. Review out-of-sample expectancy, drawdown, and costs; this is not a live-validation pass.'
+    return {**result_base,'status':status,'reason':reason,'trades':len(trades),'in_sample':ins,'out_of_sample':oos,
+            'spread_costs_available':spread_available,'commission_included':False,'historical_news_filter_included':False,
+            'validated':False,'sample_trades':trades[-100:]}
 
 # Keep old function for backward-compat
 def auto_scan_btc():
@@ -2078,7 +2184,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.4.0</div>
+            <div class="scanner-name">Precision Scanner v9.5.0</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2547,7 +2653,7 @@ HTML = """
         <!-- App Info (simplified) -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.4.0</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.5.0</span></div>
             <div class="info-row"><span class="label">Account:</span><span class="value">Sbusiso</span></div>
             <div class="info-row"><span class="label">Broker:</span><span class="value">Exness</span></div>
             <div class="info-row"><span class="label">Account #:</span><span class="value">134644333</span></div>
@@ -3111,8 +3217,25 @@ HTML = """
                 <div style="font-size:11px;color:#ffd700;margin:5px 0;">Setup checklist: ${score} · not a probability</div>
                 <div style="font-size:12px;color:#ddd;line-height:1.5;margin:7px 0;">${escapeHtml(data.signal_reason || '')}</div>
                 ${levels}
-                ${factorRows ? `<details style="margin-top:9px;"><summary style="color:#8fc7bb;font-size:11px;cursor:pointer;">Show actual candle checks</summary><div style="margin-top:6px;">${factorRows}</div></details>` : ''}
+                ${factorRows ? `<details style="margin-top:9px;"><summary style="color:#8fc7bb;font-size:11px;cursor:pointer;">Show all 20 candle checks</summary><div style="margin-top:6px;">${factorRows}</div></details>` : ''}
+                <button type="button" onclick="runSMCBacktest('${String(data.symbol||'').replace(/[^A-Z0-9]/g,'')}')" style="margin-top:10px;padding:8px;width:100%;background:rgba(0,150,255,.12);border:1px solid rgba(0,150,255,.35);color:#7fc7ff;border-radius:7px;font-size:11px;font-weight:700;">Run historical test (M15)</button>
+                <div id="smcBacktest${String(data.symbol||'').replace(/[^A-Z0-9]/g,'')}" style="margin-top:7px;font-size:11px;color:#bbb;"></div>
             </div>`;
+        }
+
+        function runSMCBacktest(symbol) {
+            const box = document.getElementById('smcBacktest' + String(symbol).replace(/[^A-Z0-9]/g,''));
+            if (box) box.textContent = 'Replaying closed MT5 candles…';
+            fetch('/api/strategy/backtest?symbol=' + encodeURIComponent(symbol) + '&timeframe=M15')
+                .then(r => r.json())
+                .then(data => {
+                    if (!box) return;
+                    if (data.error) { box.textContent = data.error; return; }
+                    const out = data.out_of_sample || {};
+                    const ins = data.in_sample || {};
+                    box.innerHTML = `<div style="padding:8px;background:rgba(0,0,0,.25);border-radius:7px;"><strong style="color:#ffd700;">${escapeHtml(data.status || 'UNKNOWN')}</strong><div style="margin-top:4px;">Bars: ${escapeHtml(data.bars_available ?? '—')} · Trades: ${escapeHtml(data.trades ?? 0)}</div><div>Out-of-sample: ${escapeHtml(out.trades ?? 0)} trades · expectancy ${escapeHtml(out.expectancy_r ?? '—')} R · max DD ${escapeHtml(out.max_drawdown_r ?? '—')} R</div><div style="color:#999;margin-top:4px;">${escapeHtml(data.reason || '')}</div><div style="color:#ffcc80;margin-top:4px;">Costs/commission and sample limitations are disclosed below; this is not a live approval.</div></div>`;
+                })
+                .catch(() => { if (box) box.textContent = 'Backtest request failed; no validation result was produced.'; });
         }
 
         function runAutoScan() {
@@ -3552,6 +3675,12 @@ def api_mt5_quotes():
         symbol = str(item.get('symbol', ''))
         timeframe = str(item.get('timeframe', '')).upper()
         raw_candles = item.get('candles', [])
+        try:
+            point_size = float(item.get('point')) if item.get('point') is not None else None
+        except (TypeError, ValueError):
+            point_size = None
+        if point_size is not None and (not math.isfinite(point_size) or point_size <= 0):
+            point_size = None
         if symbol not in SYMBOL_CONFIG or timeframe not in MT5_TIMEFRAMES or not isinstance(raw_candles, list):
             continue
 
@@ -3592,6 +3721,7 @@ def api_mt5_quotes():
             'server': str(payload.get('server', '')),
             'account': str(payload.get('account', '')),
             'broker_utc_offset_min': broker_offset_min if offset_known else None,
+            'point': point_size,
         }
         accepted_series += 1
         accepted_candles += len(candles)
@@ -3700,6 +3830,16 @@ def api_news_scenario():
     result['calendar_status'] = calendar_data.get('status')
     return jsonify(result)
 
+@app.route('/api/strategy/backtest')
+def api_strategy_backtest():
+    symbol = request.args.get('symbol', 'US30m')
+    timeframe = request.args.get('timeframe', 'M15').upper()
+    if symbol not in SYMBOL_CONFIG or timeframe not in MT5_TIMEFRAMES:
+        return jsonify({'error': 'Unknown symbol or timeframe'}), 400
+    result = run_smc_backtest(symbol, timeframe=timeframe)
+    STRATEGY_BACKTEST_CACHE[(symbol, timeframe)] = result
+    return jsonify(result)
+
 @app.route('/api/strategy/status')
 def api_strategy_status():
     symbol = request.args.get('symbol', 'US30m')
@@ -3717,6 +3857,7 @@ def api_strategy_status():
     candle_data = {tf: MT5_CANDLES.get((symbol, tf), {}).get('candles', []) for tf in MT5_TIMEFRAMES}
     factor_state = evaluate_smc_factors(symbol, quote['price'] if quote else 0, candle_data, events, calendar.get('status','unavailable'), johannesburg_now())
     checks = list(factor_state.get('factors', {}).keys())
+    backtest = STRATEGY_BACKTEST_CACHE.get((symbol, 'M15'))
     return jsonify({
         'symbol': symbol,
         'strategy': 'SMC Factor Engine v1.1 (timeframe-selectable)',
@@ -3727,7 +3868,8 @@ def api_strategy_status():
         'candle_feed_ready': candles['ready'],
         'm15_bars_available': m15_count,
         'minimum_m15_bars_for_initial_backtest': 500,
-        'backtest_status': 'NOT RUN',
+        'backtest_status': backtest.get('status') if backtest else 'NOT RUN',
+        'backtest': backtest,
         'validated_for_live_trading': False,
         'reason': 'Factor checks use real MT5 candles; any BUY/SELL is an unvalidated candidate until historical testing includes spread/slippage and out-of-sample checks. No win probability is claimed.',
     })
@@ -3798,7 +3940,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.4.0',
+        'version': '9.5.0',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',

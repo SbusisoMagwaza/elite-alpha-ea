@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.2.0 — read-only MT5 OHLC + demo-only deterministic SMC core.
+Elite Alpha EA v9.3.0 — read-only MT5 OHLC + 20-factor SMC checks.
 
 Safety changes:
 - No public proxy prices or static quote estimates are presented or scanned.
@@ -31,6 +31,7 @@ def johannesburg_now():
 
 import urllib.request
 import urllib.parse
+from smc_factors import evaluate_smc_factors
 
 app = Flask(__name__)
 
@@ -802,146 +803,105 @@ def _has_fvg(candles, start_index, end_index, direction):
 
 
 def auto_scan_symbol(symbol, custom_price=None, min_confidence=None):
-    """Deterministic SMC-core demo candidate using real closed MT5 OHLC bars.
-
-    This is an unvalidated research rule, not a probability or live recommendation.
-    It only reports a candidate when H1/H4 EMA trend, D1 context, M15 liquidity
-    sweep, subsequent BOS/CHoCH and displacement all align. FVG is an extra check.
-    """
+    """Evaluate 20 explicit candle-derived factors; emit only unvalidated candidates."""
     if symbol not in SYMBOL_CONFIG:
         return None
     candle_status = get_mt5_candle_status(symbol)
     quote = get_mt5_quote(symbol)
     if quote and float(quote.get('price', 0) or 0) > 0:
-        current_price = float(quote['price'])
+        price = float(quote['price'])
         price_source = 'MT5 live bridge'
     else:
         try:
-            current_price = float(custom_price) if custom_price is not None else None
+            screenshot = float(custom_price) if custom_price is not None else None
         except (TypeError, ValueError):
-            current_price = None
-        if current_price is not None and current_price > 0:
-            price_source = 'MT5 screenshot'
-        else:
-            current_price, price_source = None, 'unavailable'
+            screenshot = None
+        price = screenshot if screenshot and screenshot > 0 else None
+        price_source = 'MT5 screenshot' if price is not None else 'unavailable'
 
-    factors = {
-        'H1/H4 trend alignment': {'pass': False, 'detail': 'Waiting for closed bars'},
-        'D1 context not opposing': {'pass': False, 'detail': 'Waiting for closed bars'},
-        'M15 liquidity sweep': {'pass': False, 'detail': 'No sweep of the prior range detected'},
-        'BOS/CHoCH after sweep': {'pass': False, 'detail': 'No later closed-bar break detected'},
-        'Displacement candle': {'pass': False, 'detail': 'No confirmed displacement'},
-        'Fair Value Gap': {'pass': False, 'detail': 'Optional confluence not detected'},
-    }
-    result = {
+    candles = {tf: (MT5_CANDLES.get((symbol, tf), {}).get('candles', [])) for tf in MT5_TIMEFRAMES}
+    calendar = get_economic_calendar_data()
+    events = []
+    for event in calendar.get('events', []):
+        copy = dict(event)
+        copy['_dt_utc'] = _calendar_datetime_utc(event.get('release_at_utc'))
+        events.append(copy)
+
+    analysis = evaluate_smc_factors(
+        symbol=symbol,
+        price=price or 0,
+        candles=candles,
+        calendar=events,
+        calendar_status=calendar.get('status', 'unavailable'),
+        now_sast=johannesburg_now(),
+    )
+    factors = analysis.get('factors', {})
+    available = sum(1 for item in factors.values() if item.get('available'))
+    passed = sum(1 for item in factors.values() if item.get('available') and item.get('pass'))
+    pattern = analysis.get('pattern')
+    direction = pattern.get('direction') if analysis.get('candidate') and pattern else 'WAIT'
+
+    if price is None:
+        reason = 'WAIT: no fresh exact Exness quote. Connect the MT5 bridge.'
+        direction = 'WAIT'
+    elif not candle_status['ready']:
+        missing = [tf for tf,item in candle_status['timeframes'].items() if not item['ready']]
+        reason = 'WAIT: waiting for fresh closed candles on ' + ', '.join(missing) + '.'
+        direction = 'WAIT'
+    elif not quote:
+        reason = 'WAIT: screenshot price is reference-only; a fresh MT5 quote is required for a candidate.'
+        direction = 'WAIT'
+    elif direction == 'WAIT':
+        reason = f'WAIT: {passed}/{available} available SMC checks pass; the live candle conditions do not form a candidate.'
+    else:
+        reason = f'UNVALIDATED CANDIDATE: {passed}/{available} available SMC checks pass. This uses live MT5 data, but the rule has not passed historical/backtest validation.'
+
+    entry = sl = tp = None
+    if direction in ('BUY','SELL') and price is not None and pattern:
+        atr_value = analysis.get('atr') or 0
+        buffer = atr_value * 0.15
+        stop = pattern['extreme'] - buffer if direction == 'BUY' else pattern['extreme'] + buffer
+        risk = price - stop if direction == 'BUY' else stop - price
+        if risk <= 0 or (atr_value and risk > 6 * atr_value):
+            direction = 'WAIT'
+            reason = 'WAIT: live quote is too far from the sweep invalidation level.'
+        else:
+            entry = round(price, 5)
+            sl = round(stop, 5)
+            tp = round(price + 2*risk if direction == 'BUY' else price - 2*risk, 5)
+
+    return {
         'symbol': symbol,
         'timeframe': 'M15 trigger · H1/H4/D1 context',
-        'price': round(current_price, 5) if current_price is not None else None,
+        'price': round(price,5) if price is not None else None,
         'price_source': price_source,
-        'direction': 'WAIT',
+        'direction': direction,
         'confidence': None,
-        'setup_score': 0,
-        'setup_total': len(factors),
+        'setup_score': passed,
+        'setup_total': 20,
+        'available_factor_count': available,
         'grade': '—',
-        'strategy': 'SMC Core v1 · demo-only, unvalidated',
-        'signal_mode': 'WAIT',
-        'entry': None, 'sl': None, 'tp': None,
-        'tp1': None, 'tp2': None, 'tp3': None,
-        'rr': '—',
-        'structure': 'UNAVAILABLE',
+        'strategy': 'SMC Factor Engine v1 · unvalidated',
+        'signal_mode': 'UNVALIDATED_CANDIDATE_REAL_MT5' if direction in ('BUY','SELL') else 'WAIT',
+        'entry': entry,
+        'sl': sl,
+        'tp': tp,
+        'tp1': None,
+        'tp2': None,
+        'tp3': None,
+        'rr': '1:2' if entry is not None else '—',
+        'structure': analysis.get('direction','neutral'),
         'factors': factors,
         'factors_grouped': {},
-        'passed_count': 0,
-        'total_count': len(factors),
+        'passed_count': passed,
+        'total_count': 20,
         'lot_info': None,
-        'signal_available': False,
+        'signal_available': direction in ('BUY','SELL'),
         'candle_status': candle_status,
+        'validation_status': 'UNVALIDATED_REAL_MT5_DATA',
+        'signal_reason': reason,
         'timestamp': johannesburg_now().strftime('%Y-%m-%d %H:%M:%S %Z'),
-        'validation_status': 'UNVALIDATED_DEMO_ONLY',
     }
-
-    if current_price is None:
-        result['signal_reason'] = 'WAIT: no fresh exact Exness quote. Connect the MT5 bridge.'
-        return result
-    if not candle_status['ready']:
-        missing = [tf for tf, item in candle_status['timeframes'].items() if not item['ready']]
-        result['signal_reason'] = 'WAIT: waiting for enough fresh closed bars on ' + ', '.join(missing) + '.'
-        return result
-    if not quote:
-        result['signal_reason'] = 'WAIT: screenshot price is for reference only; a fresh live MT5 quote is required for a candidate.'
-        return result
-
-    candles = {tf: MT5_CANDLES[(symbol, tf)]['candles'] for tf in MT5_TIMEFRAMES}
-    m15, h1, h4, d1 = candles['M15'], candles['H1'], candles['H4'], candles['D1']
-    if len(m15) < 32:
-        result['signal_reason'] = 'WAIT: not enough M15 bars to test the core SMC rule.'
-        return result
-
-    h1_bias, h4_bias, d1_bias = _ema_trend(h1), _ema_trend(h4), _ema_trend(d1)
-    trend_bias = h1_bias if h1_bias in ('bullish', 'bearish') and h1_bias == h4_bias else None
-    direction = {'bullish': 'BUY', 'bearish': 'SELL'}.get(trend_bias)
-    factors['H1/H4 trend alignment'] = {'pass': direction is not None, 'detail': f'H1={h1_bias}; H4={h4_bias}'}
-    d1_ok = direction is not None and d1_bias in (trend_bias, 'neutral')
-    factors['D1 context not opposing'] = {'pass': d1_ok, 'detail': f'D1={d1_bias}; must agree or be neutral'}
-
-    pattern = _find_sweep_and_bos(m15)
-    atr = _atr_last(m15, 14)
-    if pattern:
-        pattern_direction = pattern['direction']
-        aligned = direction == pattern_direction
-        factors['M15 liquidity sweep'] = {'pass': aligned, 'detail': f'{pattern_direction} sweep; trend-aligned={aligned}'}
-        confirm = m15[pattern['confirm_index']]
-        body = abs(confirm['close'] - confirm['open'])
-        displacement = bool(atr and atr > 0 and body >= 0.6 * atr and
-                            ((pattern_direction == 'BUY' and confirm['close'] > confirm['open']) or
-                             (pattern_direction == 'SELL' and confirm['close'] < confirm['open'])))
-        factors['BOS/CHoCH after sweep'] = {'pass': aligned, 'detail': f'Closed M15 break at {pattern["break_level"]:.5f}' if aligned else 'Break conflicts with H1/H4 trend'}
-        factors['Displacement candle'] = {'pass': displacement, 'detail': f'Body/ATR={body / atr:.2f} (min 0.60)' if atr and atr > 0 else 'ATR unavailable'}
-        fvg = _has_fvg(m15, pattern['confirm_index'] - 2, len(m15) - 1, pattern_direction)
-        factors['Fair Value Gap'] = {'pass': fvg, 'detail': 'Three-candle gap detected' if fvg else 'No recent gap'}
-    else:
-        pattern_direction = None
-        displacement = False
-        factors['M15 liquidity sweep'] = {'pass': False, 'detail': 'No sweep of the prior 20-bar range'}
-        factors['BOS/CHoCH after sweep'] = {'pass': False, 'detail': 'No later close beyond local structure'}
-        factors['Displacement candle'] = {'pass': False, 'detail': 'No displacement after a sweep'}
-        factors['Fair Value Gap'] = {'pass': False, 'detail': 'No validated sweep/BOS sequence'}
-
-    passed = sum(1 for value in factors.values() if value['pass'])
-    result['factors'] = factors
-    result['passed_count'] = passed
-    result['setup_score'] = passed
-    result['structure'] = direction or 'neutral / conflicting'
-
-    core_pass = bool(pattern and direction == pattern_direction and d1_ok and displacement)
-    if not core_pass:
-        result['signal_reason'] = f'WAIT: {passed}/6 objective candle checks pass; trend, sweep, break and displacement must align.'
-        return result
-
-    buffer = (atr or 0) * 0.15
-    if pattern_direction == 'BUY':
-        stop = pattern['sweep_extreme'] - buffer
-        risk_distance = current_price - stop
-        target = current_price + 2.0 * risk_distance
-    else:
-        stop = pattern['sweep_extreme'] + buffer
-        risk_distance = stop - current_price
-        target = current_price - 2.0 * risk_distance
-    if risk_distance <= 0 or (atr and risk_distance > 6.0 * atr):
-        result['signal_reason'] = 'WAIT: the live quote is too far from the sweep invalidation level.'
-        return result
-
-    result.update({
-        'direction': pattern_direction,
-        'signal_mode': 'DEMO_CANDIDATE_UNVALIDATED',
-        'signal_available': True,
-        'entry': round(current_price, 5),
-        'sl': round(stop, 5),
-        'tp': round(target, 5),
-        'rr': '1:2',
-        'signal_reason': f'DEMO CANDIDATE only: trend, liquidity sweep, BOS/CHoCH and displacement align ({passed}/6 checks). This rule has not passed a historical backtest; do not use as a live recommendation.',
-    })
-    return result
 
 # Keep old function for backward-compat
 def auto_scan_btc():
@@ -2087,7 +2047,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.2.0</div>
+            <div class="scanner-name">Precision Scanner v9.3.0</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2162,7 +2122,7 @@ HTML = """
         <div class="auto-scan-banner">
             <div class="auto-scan-icon">🎯</div>
             <div class="auto-scan-text">PRECISION SCAN</div>
-            <div class="auto-scan-sub">Closed MT5 candles feed a demo-only SMC candidate rule; no calibrated probability is shown.</div>
+            <div class="auto-scan-sub">Closed MT5 candles feed the SMC factor checks; candidates remain unvalidated until backtested.</div>
 
             <!-- v9.0: verified MT5 price banner; no public proxy -->
             <div id="livePricePreview" style="background: rgba(0, 212, 170, 0.1); border: 1px solid rgba(0, 212, 170, 0.4); border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: center;">
@@ -2550,7 +2510,7 @@ HTML = """
         <!-- App Info (simplified) -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.2.0</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.3.0</span></div>
             <div class="info-row"><span class="label">Account:</span><span class="value">Sbusiso</span></div>
             <div class="info-row"><span class="label">Broker:</span><span class="value">Exness</span></div>
             <div class="info-row"><span class="label">Account #:</span><span class="value">134644333</span></div>
@@ -3086,17 +3046,21 @@ HTML = """
             const priceLine = Number(data.price) > 0
                 ? `<div style="margin:7px 0;color:#00d4aa;">Verified price: ${formatPriceForSymbol(data.symbol, data.price)} · ${escapeHtml(data.price_source || '')}</div>`
                 : '<div style="margin:7px 0;color:#ff6b6b;">No fresh exact Exness price</div>';
-            const score = `${Number(data.setup_score || 0)}/${Number(data.setup_total || 6)} checks`;
-            const factorRows = Object.entries(data.factors || {}).map(([name, info]) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,.04);"><span style="color:${info.pass ? '#00d4aa' : '#888'};">${info.pass ? '✓' : '·'} ${escapeHtml(name)}</span><span style="color:#999;text-align:right;">${escapeHtml(info.detail || '')}</span></div>`).join('');
+            const score = `${Number(data.setup_score || 0)} pass · ${Number(data.available_factor_count || 0)}/${Number(data.setup_total || 20)} factors available`;
+            const factorRows = Object.entries(data.factors || {}).map(([name, info]) => {
+                const state = info.available === false ? 'N/A' : info.pass ? 'PASS' : 'NO';
+                const stateColor = info.available === false ? '#777' : info.pass ? '#00d4aa' : '#ffcc80';
+                return `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,.04);"><span style="color:${stateColor};">${state} · ${escapeHtml(name)}</span><span style="color:#999;text-align:right;">${escapeHtml(info.detail || '')}</span></div>`;
+            }).join('');
             const levels = candidate ? `<div style="margin-top:10px;padding:10px;background:rgba(0,0,0,.25);border-radius:8px;text-align:left;font-size:12px;">
                 <div style="padding:4px 0;">Entry: <strong>${formatPriceForSymbol(data.symbol, data.entry)}</strong></div>
                 <div style="padding:4px 0;">Stop: <strong style="color:#ff6b6b;">${formatPriceForSymbol(data.symbol, data.sl)}</strong></div>
                 <div style="padding:4px 0;">Target: <strong style="color:#00d4aa;">${formatPriceForSymbol(data.symbol, data.tp)}</strong> · ${escapeHtml(data.rr || '')}</div>
-            </div><div style="margin-top:9px;padding:9px;color:#ffcc80;background:rgba(255,204,128,.08);border-radius:7px;font-size:11px;">DEMO CANDIDATE ONLY — this rule has not been validated on long historical data. Do not treat it as a live recommendation; no win probability is claimed.</div>` : '';
+            </div><div style="margin-top:9px;padding:9px;color:#ffcc80;background:rgba(255,204,128,.08);border-radius:7px;font-size:11px;">UNVALIDATED CANDIDATE — real MT5 data; this rule has not been backtested on long historical data. Do not treat it as a live recommendation; no win probability is claimed.</div>` : '';
             return `<div style="padding:14px;background:rgba(0,0,0,.28);border-radius:10px;margin-bottom:9px;">
                 <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
                     <strong style="color:#00d4ff;">${escapeHtml(data.symbol)} · ${escapeHtml(data.timeframe || '')}</strong>
-                    <strong style="font-size:24px;color:${color};">${candidate ? 'DEMO ' : ''}${escapeHtml(data.direction || 'WAIT')}</strong>
+                    <strong style="font-size:24px;color:${color};">${candidate ? 'UNVALIDATED ' : ''}${escapeHtml(data.direction || 'WAIT')}</strong>
                 </div>
                 ${priceLine}
                 <div style="font-size:11px;color:#ffd700;margin:5px 0;">Setup checklist: ${score} · not a probability</div>
@@ -3115,7 +3079,7 @@ HTML = """
                     .then(r => r.json())
                     .then(data => {
                         if (!Array.isArray(data.results)) throw new Error('No scan results');
-                        resultDiv.innerHTML = '<div style="font-size:11px;color:#ffcc80;margin-bottom:9px;">Experimental SMC core · demo candidates only · no calibrated win probability</div>' + data.results.map(renderRuleScanCard).join('');
+                        resultDiv.innerHTML = '<div style="font-size:11px;color:#ffcc80;margin-bottom:9px;">SMC factor scan · real MT5 data · unvalidated candidates only</div>' + data.results.map(renderRuleScanCard).join('');
                     })
                     .catch(() => { resultDiv.innerHTML = '<div style="color:#ff6b6b;text-align:center;padding:14px;">Scan status unavailable. Refresh and try again.</div>'; });
                 return;
@@ -3525,6 +3489,13 @@ def api_mt5_quotes():
         }
         accepted_quotes += 1
 
+    try:
+        broker_offset_min = int(payload.get('broker_utc_offset_min'))
+        offset_known = True
+    except (TypeError, ValueError):
+        broker_offset_min = 0
+        offset_known = False
+
     accepted_series = 0
     accepted_candles = 0
     for item in series[:len(SYMBOL_CONFIG) * len(MT5_TIMEFRAMES)]:
@@ -3546,13 +3517,23 @@ def api_mt5_quotes():
                 h = float(candle.get('high'))
                 low = float(candle.get('low'))
                 close = float(candle.get('close'))
+                volume_raw = candle.get('tick_volume')
+                tick_volume = int(float(volume_raw)) if volume_raw is not None else None
+                spread_raw = candle.get('spread_points')
+                spread_points = int(float(spread_raw)) if spread_raw is not None else None
             except (TypeError, ValueError):
                 continue
             if stamp <= 0 or not all(math.isfinite(x) for x in (o, h, low, close)):
                 continue
             if min(o, h, low, close) <= 0 or h < max(o, low, close) or low > min(o, h, close):
                 continue
-            by_time[stamp] = {'time': stamp, 'open': o, 'high': h, 'low': low, 'close': close}
+            by_time[stamp] = {
+                'time': stamp,
+                'time_utc': stamp - broker_offset_min * 60 if offset_known else None,
+                'open': o, 'high': h, 'low': low, 'close': close,
+                'tick_volume': tick_volume,
+                'spread_points': spread_points,
+            }
 
         candles = [by_time[t] for t in sorted(by_time)][-MT5_CANDLE_MAX_PER_SERIES:]
         if not candles:
@@ -3562,6 +3543,7 @@ def api_mt5_quotes():
             'received_at': now,
             'server': str(payload.get('server', '')),
             'account': str(payload.get('account', '')),
+            'broker_utc_offset_min': broker_offset_min if offset_known else None,
         }
         accepted_series += 1
         accepted_candles += len(candles)
@@ -3677,18 +3659,29 @@ def api_strategy_status():
         return jsonify({'error': 'Unknown symbol'}), 400
     candles = get_mt5_candle_status(symbol)
     m15_count = candles['timeframes']['M15']['bars']
+    quote = get_mt5_quote(symbol)
+    calendar = get_economic_calendar_data()
+    events = []
+    for event in calendar.get('events', []):
+        event_copy = dict(event)
+        event_copy['_dt_utc'] = _calendar_datetime_utc(event.get('release_at_utc'))
+        events.append(event_copy)
+    candle_data = {tf: MT5_CANDLES.get((symbol, tf), {}).get('candles', []) for tf in MT5_TIMEFRAMES}
+    factor_state = evaluate_smc_factors(symbol, quote['price'] if quote else 0, candle_data, events, calendar.get('status','unavailable'), johannesburg_now())
+    checks = list(factor_state.get('factors', {}).keys())
     return jsonify({
         'symbol': symbol,
-        'strategy': 'SMC Core v1',
-        'mode': 'DEMO_CANDIDATE_UNVALIDATED',
-        'implemented_checks': ['H1/H4 EMA trend alignment', 'D1 context', 'M15 liquidity sweep', 'BOS/CHoCH close', 'displacement', 'FVG'],
-        'not_implemented_or_not_used': ['breaker/mitigation blocks', 'equal highs/lows', 'PO3/Judas', 'OTE', 'volume confirmation'],
+        'strategy': 'SMC Factor Engine v1',
+        'mode': 'UNVALIDATED_REAL_MT5_DATA',
+        'implemented_checks': checks,
+        'factor_states': factor_state.get('factors', {}),
+        'factor_available_count': factor_state.get('available', 0),
         'candle_feed_ready': candles['ready'],
         'm15_bars_available': m15_count,
-        'backtest_status': 'NOT RUN',
         'minimum_m15_bars_for_initial_backtest': 500,
+        'backtest_status': 'NOT RUN',
         'validated_for_live_trading': False,
-        'reason': 'The rule is a demo candidate only. A backtest including spread/slippage and out-of-sample checks has not been completed; no win probability is claimed.',
+        'reason': 'Factor checks use real MT5 candles; any BUY/SELL is an unvalidated candidate until historical testing includes spread/slippage and out-of-sample checks. No win probability is claimed.',
     })
 
 @app.route('/api/htf-bias')
@@ -3754,14 +3747,14 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.2.0',
+        'version': '9.3.0',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
-            'deterministic_smc_core_demo_candidate', 'no_uncalibrated_confidence_percent',
+            'deterministic_20_factor_engine_unvalidated', 'no_uncalibrated_confidence_percent',
             'strategy_validation_status_endpoint', 'screenshot_symbol_price_ocr',
         ],
-        'strategy_validation': 'DEMO_ONLY_UNVALIDATED',
+        'strategy_validation': 'UNVALIDATED_REAL_MT5_DATA',
     })
 
 if __name__ == '__main__':

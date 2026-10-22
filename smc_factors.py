@@ -89,18 +89,20 @@ def sweep_bos(m15):
     return max(found,key=lambda x:x['confirm']) if found else None
 
 
-def evaluate_smc_factors(symbol, price, candles, calendar, calendar_status, now_sast):
-    m15=candles.get('M15',[]); h1=candles.get('H1',[]); h4=candles.get('H4',[]); d1=candles.get('D1',[])
+def evaluate_smc_factors(symbol, price, candles, calendar, calendar_status, now_sast, trigger_timeframe='M15'):
+    m15=candles.get('M15',[]); trigger_timeframe=str(trigger_timeframe or 'M15').upper()
+    if trigger_timeframe not in ('M15','H1','H4','D1'): trigger_timeframe='M15'
+    trigger=candles.get(trigger_timeframe,[]); h1=candles.get('H1',[]); h4=candles.get('H4',[]); d1=candles.get('D1',[])
     f={name:factor(False,detail='Required closed-bar input unavailable') for name in [
         'Market Structure','BOS','CHoCH','Breaker Block','Mitigation Block','Liquidity Sweep',
         'Equal Highs/Lows','Order Block','Fair Value Gap','Displacement','Premium/Discount',
         'PO3','Judas Swing','OTE','Session Quality','News Clear','HTF Alignment',
         'Volume Confirmation','Asian Range Position','PDH/PDL Distance']}
-    if len(m15)<32:
-        return {'factors':f,'bias':'neutral','pattern':None,'atr':None,'candidate':False,'score':0,'available':0,'reason':'Need at least 32 closed M15 bars.'}
+    if len(trigger)<32:
+        return {'factors':f,'bias':'neutral','pattern':None,'atr':None,'candidate':False,'score':0,'available':0,'reason':f'Need at least 32 closed {trigger_timeframe} bars.'}
 
-    bias_m15,sh,sl=swing_bias(m15)
-    f['Market Structure']=factor(bias_m15!='unavailable',bias_m15 in ('bullish','bearish'),f'M15 swing structure: {bias_m15}')
+    bias_m15,sh,sl=swing_bias(trigger)
+    f['Market Structure']=factor(bias_m15!='unavailable',bias_m15 in ('bullish','bearish'),f'{trigger_timeframe} swing structure: {bias_m15}')
     h1e=ema([x['close'] for x in h1],20); h1s=ema([x['close'] for x in h1],50)
     h4e=ema([x['close'] for x in h4],20); h4s=ema([x['close'] for x in h4],50)
     d1e=ema([x['close'] for x in d1],20); d1s=ema([x['close'] for x in d1],50)
@@ -112,19 +114,18 @@ def evaluate_smc_factors(symbol, price, candles, calendar, calendar_status, now_
     f['HTF Alignment']=factor(htf_avail,htf_pass,f'H1/H4={hb}; D1={db}')
     direction=hb if htf_pass else None
 
-    pattern=sweep_bos(m15)
+    pattern=sweep_bos(trigger)
     aligned=bool(pattern and direction and pattern['direction']==('BUY' if direction=='bullish' else 'SELL'))
     f['Liquidity Sweep']=factor(True,aligned,f'{pattern["direction"]} wick sweep aligned to HTF' if aligned else 'No aligned sweep of the prior 20-bar range')
     f['BOS']=factor(True,aligned,'Closed M15 bar broke local structure after sweep' if aligned else 'No aligned close beyond local structure')
     f['CHoCH']=factor(bias_m15!='unavailable',bool(aligned and bias_m15 not in (direction,'neutral')),'Counter-trend structure shift after sweep' if aligned else 'No counter-trend shift confirmed')
 
-    pattern=sweep_bos(m15)
-    disp_index=pattern['confirm'] if pattern else len(m15)-1
-    disp_bars=m15[:disp_index+1]
-    a=atr(disp_bars,14); last=m15[disp_index]; body=abs(last['close']-last['open'])
+    disp_index=pattern['confirm'] if pattern else len(trigger)-1
+    disp_bars=trigger[:disp_index+1]
+    a=atr(disp_bars,14); last=trigger[disp_index]; body=abs(last['close']-last['open'])
     displacement=bool(a and a>0 and body>=.6*a)
     f['Displacement']=factor(a is not None,displacement,f'Break candle body/ATR={body/a:.2f}; required >=0.60' if a else 'ATR unavailable')
-    fvg=any(m15[i]['low']>m15[i-2]['high'] or m15[i]['high']<m15[i-2]['low'] for i in range(max(2,len(m15)-8),len(m15)))
+    fvg=any(trigger[i]['low']>trigger[i-2]['high'] or trigger[i]['high']<trigger[i-2]['low'] for i in range(max(2,len(trigger)-8),len(trigger)))
     f['Fair Value Gap']=factor(True,fvg,'Recent three-candle gap found' if fvg else 'No recent three-candle gap')
 
     # Equal highs/lows: two confirmed swing levels within 0.15 ATR.
@@ -137,11 +138,11 @@ def evaluate_smc_factors(symbol, price, candles, calendar, calendar_status, now_
     ob=None
     if pattern:
         for i in range(pattern['sweep']-1,max(-1,pattern['sweep']-21),-1):
-            b=m15[i]
+            b=trigger[i]
             if (pattern['direction']=='BUY' and b['close']<b['open']) or (pattern['direction']=='SELL' and b['close']>b['open']): ob=b; break
     f['Order Block']=factor(pattern is not None,ob is not None,'Last opposing candle before sweep/BOS found' if ob else 'No qualifying opposing candle')
     if ob and pattern:
-        post=m15[pattern['confirm']+1:]
+        post=trigger[pattern['confirm']+1:]
         retest=any(x['high']>=ob['low'] and x['low']<=ob['high'] for x in post)
         broken=(pattern['direction']=='BUY' and any(x['close']<ob['low'] for x in post)) or (pattern['direction']=='SELL' and any(x['close']>ob['high'] for x in post))
         f['Mitigation Block']=factor(True,retest,'Price revisited the order-block zone' if retest else 'No retest of the order-block zone')
@@ -150,11 +151,11 @@ def evaluate_smc_factors(symbol, price, candles, calendar, calendar_status, now_
         f['Mitigation Block']=factor(False,detail='No order block to assess')
         f['Breaker Block']=factor(False,detail='No order block to assess')
 
-    prior=m15[-51:-1] if len(m15)>=51 else m15[:-1]
+    prior=trigger[-51:-1] if len(trigger)>=51 else trigger[:-1]
     if prior and direction:
         hi=max(x['high'] for x in prior); lo=min(x['low'] for x in prior); mid=(hi+lo)/2
-        f['Premium/Discount']=factor(True,(price<mid if direction=='bullish' else price>mid),f'Price vs dealing-range midpoint {mid:.5f}')
-    else: f['Premium/Discount']=factor(False,detail='Need a directional bias and recent range')
+        f['Premium/Discount']=factor(True,(price<mid if direction=='bullish' else price>mid),f'Price vs {trigger_timeframe} dealing-range midpoint {mid:.5f}')
+    else: f['Premium/Discount']=factor(False,detail='Need a directional bias and recent trigger-timeframe range')
 
     # OTE zone, measured on the most recent impulse swing.
     if direction and sh and sl:
@@ -170,7 +171,7 @@ def evaluate_smc_factors(symbol, price, candles, calendar, calendar_status, now_
     else: f['PDH/PDL Distance']=factor(False,detail='Need D1 bars and M15 ATR')
 
     # Tick-volume confirmation requires bridge v1.06.
-    vols=[x.get('tick_volume') for x in m15[-21:]]
+    vols=[x.get('tick_volume') for x in trigger[-21:]]
     if len(vols)==21 and all(v is not None for v in vols):
         avg=sum(float(v) for v in vols[:-1])/20; ratio=float(vols[-1])/avg if avg else 0
         f['Volume Confirmation']=factor(avg>0,ratio>=1.2,f'Latest volume / prior-20 average={ratio:.2f}x; threshold 1.20x')
@@ -208,4 +209,4 @@ def evaluate_smc_factors(symbol, price, candles, calendar, calendar_status, now_
     else: f['News Clear']=factor(False,detail='Live calendar unavailable')
 
     available=sum(1 for x in f.values() if x['available']); passed=sum(1 for x in f.values() if x['available'] and x['pass'])
-    return {'factors':f,'direction':direction,'pattern':pattern,'atr':a,'candidate':bool(direction and d1_ok and pattern and pattern['direction']==('BUY' if direction=='bullish' else 'SELL') and f['Displacement']['pass'] and f['News Clear']['pass']), 'score':passed,'available':available}
+    return {'factors':f,'direction':direction,'pattern':pattern,'atr':a,'trigger_timeframe':trigger_timeframe,'candidate':bool(direction and d1_ok and pattern and pattern['direction']==('BUY' if direction=='bullish' else 'SELL') and f['Displacement']['pass'] and f['News Clear']['pass']), 'score':passed,'available':available}

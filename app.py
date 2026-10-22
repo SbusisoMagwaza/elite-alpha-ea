@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.5.1 — backtest button symbol fix.
+Elite Alpha EA v9.5.2 — compact scan cards and readable factor layout.
 
 Safety changes:
 - No public proxy prices or static quote estimates are presented or scanned.
@@ -2184,7 +2184,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.5.1</div>
+            <div class="scanner-name">Precision Scanner v9.5.2</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2653,7 +2653,7 @@ HTML = """
         <!-- App Info (simplified) -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.5.1</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.5.2</span></div>
             <div class="info-row"><span class="label">Account:</span><span class="value">Sbusiso</span></div>
             <div class="info-row"><span class="label">Broker:</span><span class="value">Exness</span></div>
             <div class="info-row"><span class="label">Account #:</span><span class="value">134644333</span></div>
@@ -3193,33 +3193,50 @@ HTML = """
 
         function renderRuleScanCard(data) {
             const candidate = data.signal_available === true && ['BUY','SELL'].includes(data.direction);
-            const color = data.direction === 'BUY' ? '#00d4aa' : data.direction === 'SELL' ? '#ff6b6b' : '#ffd700';
-            const priceLine = Number(data.price) > 0
-                ? `<div style="margin:7px 0;color:#00d4aa;">Verified price: ${formatPriceForSymbol(data.symbol, data.price)} · ${escapeHtml(data.price_source || '')}</div>`
-                : '<div style="margin:7px 0;color:#ff6b6b;">No fresh exact Exness price</div>';
-            const score = `${Number(data.setup_score || 0)} pass · ${Number(data.available_factor_count || 0)}/${Number(data.setup_total || 20)} factors available`;
-            const factorRows = Object.entries(data.factors || {}).map(([name, info]) => {
-                const state = info.available === false ? 'N/A' : info.pass ? 'PASS' : 'NO';
-                const stateColor = info.available === false ? '#777' : info.pass ? '#00d4aa' : '#ffcc80';
-                return `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,.04);"><span style="color:${stateColor};">${state} · ${escapeHtml(name)}</span><span style="color:#999;text-align:right;">${escapeHtml(info.detail || '')}</span></div>`;
+            const color = data.direction === 'BUY' ? '#00d4aa' : data.direction === 'SELL' ? '#ff6b6b' : '#ffd84d';
+            const symbol = String(data.symbol || '');
+            const symbolKey = symbol.replace(/[^A-Za-z0-9]/g, '');
+            const price = Number(data.price) > 0 ? formatPriceForSymbol(symbol, data.price) : '—';
+            const source = data.price_source === 'MT5 live bridge' ? '🟢 Live Exness quote' : data.price_source === 'MT5 screenshot' ? '📷 MT5 screenshot' : 'Exact quote unavailable';
+            const passed = Number(data.setup_score || 0);
+            const total = Number(data.setup_total || 20);
+            const available = Number(data.available_factor_count || 0);
+            const factors = data.factors || {};
+            const coreNames = ['HTF Alignment','Liquidity Sweep','BOS','Displacement'];
+            const coreHtml = coreNames.map(name => {
+                const f = factors[name] || {available:false,pass:null,detail:'Not calculated'};
+                const state = f.available === false ? 'N/A' : f.pass ? 'PASS' : 'WAIT';
+                const stateColor = f.available === false ? '#8c9299' : f.pass ? '#00d4aa' : '#ffcc80';
+                return `<div style="padding:9px;background:rgba(255,255,255,.035);border-radius:8px;min-height:58px;"><div style="display:flex;justify-content:space-between;gap:5px;"><strong style="font-size:11px;color:#ddd;">${escapeHtml(name)}</strong><b style="font-size:10px;color:${stateColor};">${state}</b></div><div style="font-size:10px;color:#858c96;margin-top:4px;line-height:1.3;">${escapeHtml(f.detail || '')}</div></div>`;
             }).join('');
-            const levels = candidate ? `<div style="margin-top:10px;padding:10px;background:rgba(0,0,0,.25);border-radius:8px;text-align:left;font-size:12px;">
-                <div style="padding:4px 0;">Entry: <strong>${formatPriceForSymbol(data.symbol, data.entry)}</strong></div>
-                <div style="padding:4px 0;">Stop: <strong style="color:#ff6b6b;">${formatPriceForSymbol(data.symbol, data.sl)}</strong></div>
-                <div style="padding:4px 0;">Target: <strong style="color:#00d4aa;">${formatPriceForSymbol(data.symbol, data.tp)}</strong> · ${escapeHtml(data.rr || '')}</div>
-            </div><div style="margin-top:9px;padding:9px;color:#ffcc80;background:rgba(255,204,128,.08);border-radius:7px;font-size:11px;">UNVALIDATED CANDIDATE — real MT5 data; this rule has not been backtested on long historical data. Do not treat it as a live recommendation; no win probability is claimed.</div>` : '';
-            return `<div style="padding:14px;background:rgba(0,0,0,.28);border-radius:10px;margin-bottom:9px;">
-                <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
-                    <strong style="color:#00d4ff;">${escapeHtml(data.symbol)} · ${escapeHtml(data.timeframe || '')}</strong>
-                    <strong style="font-size:24px;color:${color};">${candidate ? 'UNVALIDATED ' : ''}${escapeHtml(data.direction || 'WAIT')}</strong>
+            const factorRows = Object.entries(factors).map(([name, f]) => {
+                const state = f.available === false ? 'N/A' : f.pass ? 'PASS' : 'NO';
+                const stateColor = f.available === false ? '#8c9299' : f.pass ? '#00d4aa' : '#ffcc80';
+                return `<div style="display:grid;grid-template-columns: minmax(120px, .8fr) 42px minmax(0, 1.5fr);gap:6px;padding:7px 2px;border-bottom:1px solid rgba(255,255,255,.045);align-items:start;font-size:11px;"><span style="color:#ddd;">${escapeHtml(name)}</span><b style="color:${stateColor};">${state}</b><span style="color:#9299a2;line-height:1.35;">${escapeHtml(f.detail || '')}</span></div>`;
+            }).join('');
+            const plan = candidate ? `<div style="margin-top:12px;">
+                <div style="color:#ffcc80;font-weight:800;font-size:11px;letter-spacing:.7px;margin-bottom:7px;">UNVALIDATED CANDIDATE · REAL MT5 DATA · DEMO/TEST ONLY</div>
+                <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;">
+                    <div style="padding:9px 5px;text-align:center;background:rgba(255,255,255,.04);border-radius:8px;"><small style="color:#8c9299;">ENTRY</small><div style="color:#fff;font-weight:800;margin-top:4px;font-size:13px;">${formatPriceForSymbol(symbol,data.entry)}</div></div>
+                    <div style="padding:9px 5px;text-align:center;background:rgba(255,107,107,.07);border-radius:8px;"><small style="color:#ff8d8d;">STOP</small><div style="color:#fff;font-weight:800;margin-top:4px;font-size:13px;">${formatPriceForSymbol(symbol,data.sl)}</div></div>
+                    <div style="padding:9px 5px;text-align:center;background:rgba(0,212,170,.07);border-radius:8px;"><small style="color:#00d4aa;">TARGET</small><div style="color:#fff;font-weight:800;margin-top:4px;font-size:13px;">${formatPriceForSymbol(symbol,data.tp)}</div></div>
+                </div><div style="text-align:right;color:#8c9299;font-size:10px;margin-top:5px;">Rule target ${escapeHtml(data.rr || '—')} · no calibrated win probability</div>
+            </div>` : `<div style="margin-top:10px;padding:10px;border-left:3px solid #ffcc80;background:rgba(255,204,128,.055);border-radius:6px;color:#e8d6ad;font-size:12px;line-height:1.45;">No trade plan: the rule’s required conditions do not align. Entry, stop and target are intentionally omitted.</div>`;
+            return `<div style="padding:14px;background:rgba(0,0,0,.30);border:1px solid rgba(60,140,180,.28);border-radius:12px;margin-bottom:10px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                    <div><div style="font-size:12px;color:#6fc7ef;font-weight:800;">${escapeHtml(symbol)} · ${escapeHtml(data.timeframe || '')}</div><div style="font-size:10px;color:#8b9199;margin-top:3px;">${escapeHtml(source)} · ${price}</div></div>
+                    <div style="font-size:22px;font-weight:900;color:${color};">${candidate ? 'UNVALIDATED ' : ''}${escapeHtml(data.direction || 'WAIT')}</div>
                 </div>
-                ${priceLine}
-                <div style="font-size:11px;color:#ffd700;margin:5px 0;">Setup checklist: ${score} · not a probability</div>
-                <div style="font-size:12px;color:#ddd;line-height:1.5;margin:7px 0;">${escapeHtml(data.signal_reason || '')}</div>
-                ${levels}
-                ${factorRows ? `<details style="margin-top:9px;"><summary style="color:#8fc7bb;font-size:11px;cursor:pointer;">Show all 20 candle checks</summary><div style="margin-top:6px;">${factorRows}</div></details>` : ''}
-                <button type="button" onclick="runSMCBacktest('${String(data.symbol||'').replace(/[^A-Za-z0-9]/g,'')}')" style="margin-top:10px;padding:8px;width:100%;background:rgba(0,150,255,.12);border:1px solid rgba(0,150,255,.35);color:#7fc7ff;border-radius:7px;font-size:11px;font-weight:700;">Run historical test (M15)</button>
-                <div id="smcBacktest${String(data.symbol||'').replace(/[^A-Za-z0-9]/g,'')}" style="margin-top:7px;font-size:11px;color:#bbb;"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:11px;">
+                    <div style="padding:8px;background:rgba(255,255,255,.035);border-radius:7px;"><small style="color:#8c9299;">FACTOR CHECKLIST</small><div style="color:#ffd84d;font-weight:800;margin-top:3px;">${passed} pass · ${available}/${total} available</div></div>
+                    <div style="padding:8px;background:rgba(255,255,255,.035);border-radius:7px;"><small style="color:#8c9299;">RULE STATE</small><div style="color:#ffcc80;font-weight:800;margin-top:3px;">${candidate ? 'UNVALIDATED' : 'WAIT'}</div></div>
+                </div>
+                <div style="font-size:12px;color:#d0d5db;line-height:1.45;margin-top:9px;">${escapeHtml(data.signal_reason || '')}</div>
+                <div style="margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;">${coreHtml}</div>
+                ${plan}
+                <details style="margin-top:11px;"><summary style="color:#74c9ea;font-size:11px;font-weight:700;cursor:pointer;padding:5px 0;">All 20 SMC factor states · ${available} currently available</summary><div style="margin-top:6px;">${factorRows}</div></details>
+                <button type="button" onclick="runSMCBacktest('${symbolKey}')" style="margin-top:11px;padding:10px;width:100%;background:rgba(0,150,255,.10);border:1px solid rgba(0,150,255,.30);color:#91d7ff;border-radius:8px;font-size:11px;font-weight:700;">Run historical test (${escapeHtml(data.timeframe || 'M15')})</button>
+                <div id="smcBacktest${symbolKey}" style="margin-top:7px;font-size:11px;color:#bbb;"></div>
             </div>`;
         }
 
@@ -3942,7 +3959,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.5.1',
+        'version': '9.5.2',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',

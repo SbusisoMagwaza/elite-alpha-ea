@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.5.0 — live-timeframe SMC factors + historical replay diagnostics.
+Elite Alpha EA v9.5.1 — backtest button symbol fix.
 
 Safety changes:
 - No public proxy prices or static quote estimates are presented or scanned.
@@ -2184,7 +2184,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.5.0</div>
+            <div class="scanner-name">Precision Scanner v9.5.1</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2653,7 +2653,7 @@ HTML = """
         <!-- App Info (simplified) -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.5.0</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.5.1</span></div>
             <div class="info-row"><span class="label">Account:</span><span class="value">Sbusiso</span></div>
             <div class="info-row"><span class="label">Broker:</span><span class="value">Exness</span></div>
             <div class="info-row"><span class="label">Account #:</span><span class="value">134644333</span></div>
@@ -3218,13 +3218,13 @@ HTML = """
                 <div style="font-size:12px;color:#ddd;line-height:1.5;margin:7px 0;">${escapeHtml(data.signal_reason || '')}</div>
                 ${levels}
                 ${factorRows ? `<details style="margin-top:9px;"><summary style="color:#8fc7bb;font-size:11px;cursor:pointer;">Show all 20 candle checks</summary><div style="margin-top:6px;">${factorRows}</div></details>` : ''}
-                <button type="button" onclick="runSMCBacktest('${String(data.symbol||'').replace(/[^A-Z0-9]/g,'')}')" style="margin-top:10px;padding:8px;width:100%;background:rgba(0,150,255,.12);border:1px solid rgba(0,150,255,.35);color:#7fc7ff;border-radius:7px;font-size:11px;font-weight:700;">Run historical test (M15)</button>
-                <div id="smcBacktest${String(data.symbol||'').replace(/[^A-Z0-9]/g,'')}" style="margin-top:7px;font-size:11px;color:#bbb;"></div>
+                <button type="button" onclick="runSMCBacktest('${String(data.symbol||'').replace(/[^A-Za-z0-9]/g,'')}')" style="margin-top:10px;padding:8px;width:100%;background:rgba(0,150,255,.12);border:1px solid rgba(0,150,255,.35);color:#7fc7ff;border-radius:7px;font-size:11px;font-weight:700;">Run historical test (M15)</button>
+                <div id="smcBacktest${String(data.symbol||'').replace(/[^A-Za-z0-9]/g,'')}" style="margin-top:7px;font-size:11px;color:#bbb;"></div>
             </div>`;
         }
 
         function runSMCBacktest(symbol) {
-            const box = document.getElementById('smcBacktest' + String(symbol).replace(/[^A-Z0-9]/g,''));
+            const box = document.getElementById('smcBacktest' + String(symbol).replace(/[^A-Za-z0-9]/g,''));
             if (box) box.textContent = 'Replaying closed MT5 candles…';
             fetch('/api/strategy/backtest?symbol=' + encodeURIComponent(symbol) + '&timeframe=M15')
                 .then(r => r.json())
@@ -3832,10 +3832,12 @@ def api_news_scenario():
 
 @app.route('/api/strategy/backtest')
 def api_strategy_backtest():
-    symbol = request.args.get('symbol', 'US30m')
+    raw_symbol = request.args.get('symbol', 'US30m')
+    aliases = {'us30':'US30m','nas':'USTECm','nas100':'USTECm','xau':'XAUUSDm','gold':'XAUUSDm','btc':'BTCUSDm','eur':'EURUSDm','gbp':'GBPUSDm','jpy':'USDJPYm'}
+    symbol = aliases.get(str(raw_symbol).lower(), raw_symbol)
     timeframe = request.args.get('timeframe', 'M15').upper()
     if symbol not in SYMBOL_CONFIG or timeframe not in MT5_TIMEFRAMES:
-        return jsonify({'error': 'Unknown symbol or timeframe'}), 400
+        return jsonify({'error': 'Unknown symbol or timeframe', 'received_symbol': raw_symbol, 'received_timeframe': timeframe}), 400
     result = run_smc_backtest(symbol, timeframe=timeframe)
     STRATEGY_BACKTEST_CACHE[(symbol, timeframe)] = result
     return jsonify(result)
@@ -3940,7 +3942,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.5.0',
+        'version': '9.5.1',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',

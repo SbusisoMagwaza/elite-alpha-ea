@@ -107,17 +107,18 @@ FINANCE_CALENDAR_API = 'https://www.financecalendar.com/wp-json/fc/v1/calendar'
 FINANCE_CALENDAR_ATTRIBUTION = 'https://www.financecalendar.com'
 ECONOMIC_CALENDAR_CACHE = {'events': [], 'fetched_at': 0.0, 'status': 'empty'}
 ECONOMIC_CALENDAR_TTL_SECONDS = 300
-ECONOMIC_CALENDAR_COUNTRIES = 'US,GB,EU,JP,CN'
+ECONOMIC_CALENDAR_COUNTRIES = 'US'
 
 
 def _is_trading_relevant_event(item):
+    """Keep only the four U.S. releases the partner asked to follow."""
+    country = str(item.get('country') or '').strip().upper()
+    currency = str(item.get('currency') or '').strip().upper()
+    if country not in ('US', 'UNITED STATES') and currency != 'USD':
+        return False
     text = (str(item.get('title') or item.get('name') or item.get('event') or '') + ' ' + str(item.get('category') or '')).lower()
-    # Remove routine auctions/energy reports that clutter the mobile calendar.
-    if any(term in text for term in ('treasury bill auction', '4-week bill', '8-week bill', '10-day cmb', 'eia weekly natural gas', 'gas storage')):
-        return False
-    if 'auction' in text and not any(term in text for term in ('10-year note', '30-year bond', '10-year bond')):
-        return False
-    return bool(re.search(r'cpi|ppi|pce|inflation|payroll|employment|unemployment|jobless|claims|wage|labor market|labour market|nonfarm|non-farm|gdp|retail sales|pmi|ism|fomc|rate decision|interest rate|monetary policy|central bank|fed |ecb|boe|boj|bank of england|bank of japan|consumer confidence|michigan sentiment|housing starts|new home sales|industrial production|durable goods|trade balance|press conference|ppi|producer price', text))
+    # Limit the phone calendar to U.S. CPI, PPI, NFP/payrolls, and FOMC events.
+    return bool(re.search(r'\bcpi\b|consumer price index|\bppi\b|producer price index|producer prices|non.?farm|non farm payroll|payrolls|employment situation|fomc|federal open market|fed funds rate|fed rate decision|federal reserve rate', text))
 
 
 def _calendar_datetime_utc(value):
@@ -2313,7 +2314,7 @@ HTML = """
 
         <!-- LIVE ECONOMIC CALENDAR + CONDITIONAL SCENARIOS -->
         <div class="news-panel">
-            <div class="news-title">📰 Live Economic Calendar · SAST</div>
+            <div class="news-title">📰 Key U.S. Releases · SAST</div>
             <div id="newsStatus" style="font-size:11px;color:#aaa;margin:0 0 8px;">Loading live calendar…</div>
             <div id="newsList"></div>
             <div style="font-size:10px;color:#777;margin-top:8px;">Calendar source: <a href="https://www.financecalendar.com" target="_blank" rel="noopener" style="color:#00d4aa;">FinanceCalendar.com</a></div>
@@ -3197,13 +3198,13 @@ HTML = """
             const symbol = String(data.symbol || '');
             const symbolKey = symbol.replace(/[^A-Za-z0-9]/g, '');
             const price = Number(data.price) > 0 ? formatPriceForSymbol(symbol, data.price) : '—';
-            const source = data.price_source === 'MT5 live bridge' ? '🟢 Live Exness quote' : data.price_source === 'MT5 screenshot' ? '📷 MT5 screenshot' : 'Exact quote unavailable';
+            const source = data.price_source === 'MT5 live bridge' ? '🟢 Exness live' : data.price_source === 'MT5 screenshot' ? '📷 MT5 screenshot' : 'Quote unavailable';
             const passed = Number(data.setup_score || 0);
             const total = Number(data.setup_total || 20);
             const available = Number(data.available_factor_count || 0);
             const factors = data.factors || {};
-            const coreNames = ['HTF Alignment','Liquidity Sweep','BOS','Displacement'];
-            const coreHtml = coreNames.map(name => {
+            const keyFactors = ['HTF Alignment','Liquidity Sweep','BOS','Displacement'];
+            const keyHtml = keyFactors.map(name => {
                 const f = factors[name] || {available:false,pass:null,detail:'Not calculated'};
                 const state = f.available === false ? 'N/A' : f.pass ? 'PASS' : 'WAIT';
                 const stateColor = f.available === false ? '#8c9299' : f.pass ? '#00d4aa' : '#ffcc80';
@@ -3212,29 +3213,32 @@ HTML = """
             const factorRows = Object.entries(factors).map(([name, f]) => {
                 const state = f.available === false ? 'N/A' : f.pass ? 'PASS' : 'NO';
                 const stateColor = f.available === false ? '#8c9299' : f.pass ? '#00d4aa' : '#ffcc80';
-                return `<div style="display:grid;grid-template-columns: minmax(120px, .8fr) 42px minmax(0, 1.5fr);gap:6px;padding:7px 2px;border-bottom:1px solid rgba(255,255,255,.045);align-items:start;font-size:11px;"><span style="color:#ddd;">${escapeHtml(name)}</span><b style="color:${stateColor};">${state}</b><span style="color:#9299a2;line-height:1.35;">${escapeHtml(f.detail || '')}</span></div>`;
+                return `<div style="display:grid;grid-template-columns:minmax(118px,.8fr) 38px minmax(0,1.5fr);gap:6px;padding:7px 2px;border-bottom:1px solid rgba(255,255,255,.045);align-items:start;font-size:11px;"><span style="color:#ddd;">${escapeHtml(name)}</span><b style="color:${stateColor};">${state}</b><span style="color:#9299a2;line-height:1.35;">${escapeHtml(f.detail || '')}</span></div>`;
             }).join('');
+            const setupType = candidate
+                ? 'Liquidity sweep → BOS/CHoCH → displacement' + (factors['Fair Value Gap']?.pass ? ' + FVG' : '')
+                : 'No complete setup confirmed';
             const plan = candidate ? `<div style="margin-top:12px;">
-                <div style="color:#ffcc80;font-weight:800;font-size:11px;letter-spacing:.7px;margin-bottom:7px;">UNVALIDATED CANDIDATE · REAL MT5 DATA · DEMO/TEST ONLY</div>
+                <div style="color:#ffcc80;font-weight:800;font-size:11px;letter-spacing:.7px;margin-bottom:7px;">UNVALIDATED CANDIDATE · REAL MT5 DATA</div>
                 <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;">
                     <div style="padding:9px 5px;text-align:center;background:rgba(255,255,255,.04);border-radius:8px;"><small style="color:#8c9299;">ENTRY</small><div style="color:#fff;font-weight:800;margin-top:4px;font-size:13px;">${formatPriceForSymbol(symbol,data.entry)}</div></div>
                     <div style="padding:9px 5px;text-align:center;background:rgba(255,107,107,.07);border-radius:8px;"><small style="color:#ff8d8d;">STOP</small><div style="color:#fff;font-weight:800;margin-top:4px;font-size:13px;">${formatPriceForSymbol(symbol,data.sl)}</div></div>
                     <div style="padding:9px 5px;text-align:center;background:rgba(0,212,170,.07);border-radius:8px;"><small style="color:#00d4aa;">TARGET</small><div style="color:#fff;font-weight:800;margin-top:4px;font-size:13px;">${formatPriceForSymbol(symbol,data.tp)}</div></div>
-                </div><div style="text-align:right;color:#8c9299;font-size:10px;margin-top:5px;">Rule target ${escapeHtml(data.rr || '—')} · no calibrated win probability</div>
-            </div>` : `<div style="margin-top:10px;padding:10px;border-left:3px solid #ffcc80;background:rgba(255,204,128,.055);border-radius:6px;color:#e8d6ad;font-size:12px;line-height:1.45;">No trade plan: the rule’s required conditions do not align. Entry, stop and target are intentionally omitted.</div>`;
+                </div><div style="text-align:right;color:#8c9299;font-size:10px;margin-top:5px;">Rule target ${escapeHtml(data.rr || '—')} · no win probability</div>
+            </div>` : `<div style="margin-top:10px;padding:10px;border-left:3px solid #ffcc80;background:rgba(255,204,128,.055);border-radius:6px;color:#e8d6ad;font-size:12px;line-height:1.45;">No trade plan: the core SMC conditions did not align. Entry, stop and target are intentionally omitted.</div>`;
             return `<div style="padding:14px;background:rgba(0,0,0,.30);border:1px solid rgba(60,140,180,.28);border-radius:12px;margin-bottom:10px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
                     <div><div style="font-size:12px;color:#6fc7ef;font-weight:800;">${escapeHtml(symbol)} · ${escapeHtml(data.timeframe || '')}</div><div style="font-size:10px;color:#8b9199;margin-top:3px;">${escapeHtml(source)} · ${price}</div></div>
                     <div style="font-size:22px;font-weight:900;color:${color};">${candidate ? 'UNVALIDATED ' : ''}${escapeHtml(data.direction || 'WAIT')}</div>
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:11px;">
-                    <div style="padding:8px;background:rgba(255,255,255,.035);border-radius:7px;"><small style="color:#8c9299;">FACTOR CHECKLIST</small><div style="color:#ffd84d;font-weight:800;margin-top:3px;">${passed} pass · ${available}/${total} available</div></div>
-                    <div style="padding:8px;background:rgba(255,255,255,.035);border-radius:7px;"><small style="color:#8c9299;">RULE STATE</small><div style="color:#ffcc80;font-weight:800;margin-top:3px;">${candidate ? 'UNVALIDATED' : 'WAIT'}</div></div>
+                    <div style="padding:8px;background:rgba(255,255,255,.035);border-radius:7px;"><small style="color:#8c9299;">SMC TYPE</small><div style="color:#ddd;font-weight:700;margin-top:3px;font-size:11px;">${escapeHtml(setupType)}</div></div>
+                    <div style="padding:8px;background:rgba(255,255,255,.035);border-radius:7px;"><small style="color:#8c9299;">CHECKLIST</small><div style="color:#ffd84d;font-weight:800;margin-top:3px;">${passed} pass · ${available}/${total} available</div></div>
                 </div>
                 <div style="font-size:12px;color:#d0d5db;line-height:1.45;margin-top:9px;">${escapeHtml(data.signal_reason || '')}</div>
-                <div style="margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;">${coreHtml}</div>
+                <div style="margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;">${keyHtml}</div>
                 ${plan}
-                <details style="margin-top:11px;"><summary style="color:#74c9ea;font-size:11px;font-weight:700;cursor:pointer;padding:5px 0;">All 20 SMC factor states · ${available} currently available</summary><div style="margin-top:6px;">${factorRows}</div></details>
+                <details style="margin-top:11px;"><summary style="color:#74c9ea;font-size:11px;font-weight:700;cursor:pointer;padding:5px 0;">All 20 factor states · ${available} available</summary><div style="margin-top:6px;">${factorRows}</div></details>
                 <button type="button" onclick="runSMCBacktest('${symbolKey}')" style="margin-top:11px;padding:10px;width:100%;background:rgba(0,150,255,.10);border:1px solid rgba(0,150,255,.30);color:#91d7ff;border-radius:8px;font-size:11px;font-weight:700;">Run historical test (${escapeHtml(data.timeframe || 'M15')})</button>
                 <div id="smcBacktest${symbolKey}" style="margin-top:7px;font-size:11px;color:#bbb;"></div>
             </div>`;

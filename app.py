@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.1.0 — exact Exness quotes + read-only MT5 OHLC transport.
+Elite Alpha EA v9.2.0 — read-only MT5 OHLC + demo-only deterministic SMC core.
 
 Safety changes:
 - No public proxy prices or static quote estimates are presented or scanned.
@@ -59,7 +59,7 @@ MT5_CANDLES = {}
 MT5_CANDLE_MAX_AGE_SECONDS = 180
 MT5_TIMEFRAMES = ('M15', 'H1', 'H4', 'D1')
 MT5_CANDLE_MIN_COUNTS = {'M15': 40, 'H1': 40, 'H4': 30, 'D1': 30}
-MT5_CANDLE_MAX_PER_SERIES = 120
+MT5_CANDLE_MAX_PER_SERIES = 600
 
 def get_mt5_quote(symbol, max_age_seconds=10):
     """Return a fresh quote pushed by the user's MT5 terminal, if available."""
@@ -377,15 +377,10 @@ def build_news_scenario(event, symbol):
 
 ACCOUNT_CONFIG = {
     'balance': 369.19,        # R-amount, used for risk calc
-    'risk_pct': 1.0,          # 1% per trade
-    'min_confidence': 75,     # Minimum signal confidence for a directional result
+    'risk_pct': 1.0,          # Editable risk setting; no live lot sizing until contract specs are verified
 }
 
-# v8.9 FIX: This used to be hard-coded to 80 inside auto_scan_symbol(), while
-# Settings showed 75%. A scan showing 77% therefore always became WAIT. Keep
-# one clear gate so the displayed setting and the actual scanner agree.
-SIGNAL_MIN_CONFIDENCE = ACCOUNT_CONFIG['min_confidence']
-
+# No signal confidence percentage is presented until statistically calibrated.
 # ============================================
 # IN-MEMORY SIGNAL HISTORY (resets on server restart)
 # Partner will mark each signal WIN/LOSS manually from app
@@ -399,17 +394,22 @@ SIGNAL_HISTORY = []  # Each: {id, symbol, direction, entry, sl, tp, outcome, tim
 # ============================================
 
 def get_htf_bias(symbol):
-    """HTF bias is unavailable until real MT5 candle bars are connected."""
+    """Data-derived D1/H4 EMA trend status from the live MT5 candle feed."""
     if symbol not in SYMBOL_CONFIG:
         return None
-    return {
-        'symbol': symbol,
-        'daily': 'UNAVAILABLE',
-        'h4': 'UNAVAILABLE',
-        'alignment': 'Waiting for MT5 candle history',
-        'alignment_color': '#888888',
-        'available': False,
-    }
+    status = get_mt5_candle_status(symbol)
+    if not status['timeframes']['D1']['ready'] or not status['timeframes']['H4']['ready']:
+        return {'symbol':symbol,'daily':'UNAVAILABLE','h4':'UNAVAILABLE','alignment':'Waiting for MT5 D1/H4 bars','alignment_color':'#888888','available':False}
+    daily = _ema_trend(MT5_CANDLES[(symbol,'D1')]['candles'])
+    h4 = _ema_trend(MT5_CANDLES[(symbol,'H4')]['candles'])
+    if daily == h4 and daily in ('bullish','bearish'):
+        alignment = 'STRONG BUY BIAS' if daily == 'bullish' else 'STRONG SELL BIAS'
+        color = '#00d4aa' if daily == 'bullish' else '#ff6b6b'
+    elif daily == 'neutral' or h4 == 'neutral':
+        alignment, color = 'NEUTRAL — WAIT', '#ffd700'
+    else:
+        alignment, color = 'CONFLICTING — CAUTION', '#ff6b6b'
+    return {'symbol':symbol,'daily':daily.upper(),'h4':h4.upper(),'alignment':alignment,'alignment_color':color,'available':True}
 
 # ============================================
 # v8.0 NEW: SESSION COUNTDOWN
@@ -499,13 +499,40 @@ def get_next_session():
 # ============================================
 
 def get_reference_levels(symbol):
-    """Return an explicit unavailable state; no synthetic levels are generated."""
+    """PDH/PDL and the most recent SAST 00:00-07:00 range from closed MT5 bars."""
     if symbol not in SYMBOL_CONFIG:
         return None
+    status = get_mt5_candle_status(symbol)
+    d1_record = MT5_CANDLES.get((symbol,'D1'))
+    m15_record = MT5_CANDLES.get((symbol,'M15'))
+    if not d1_record or not status['timeframes']['D1']['ready'] or not m15_record or not status['timeframes']['M15']['ready']:
+        return {'symbol':symbol,'available':False,'reason':'Waiting for fresh MT5 D1 and M15 bars.'}
+    d1 = d1_record.get('candles',[])
+    m15 = m15_record.get('candles',[])
+    if not d1 or not m15:
+        return {'symbol':symbol,'available':False,'reason':'MT5 bar history is empty.'}
+    pdh, pdl = d1[-1]['high'], d1[-1]['low']
+    grouped = {}
+    for bar in m15:
+        try:
+            dt = datetime.fromtimestamp(int(bar['time']), timezone.utc).astimezone(JOHANNESBURG_TZ or timezone.utc)
+        except (TypeError, ValueError, OSError):
+            continue
+        if 0 <= dt.hour < 7:
+            grouped.setdefault(dt.date().isoformat(), []).append(bar)
+    if not grouped:
+        return {'symbol':symbol,'available':False,'reason':'No recent bars found in the SAST Asian session window.'}
+    session_date = max(grouped)
+    session_bars = grouped[session_date]
+    quote = get_mt5_quote(symbol)
     return {
-        'symbol': symbol,
-        'available': False,
-        'reason': 'Verified MT5 OHLC candle history is not connected yet.',
+        'symbol':symbol,'available':True,
+        'pdh':round(pdh,5),'pdl':round(pdl,5),
+        'asian_high':round(max(b['high'] for b in session_bars),5),
+        'asian_low':round(min(b['low'] for b in session_bars),5),
+        'asian_session_date':session_date,
+        'current_price':quote['price'] if quote else None,
+        'source':'MT5 closed candles',
     }
 
 # ============================================
@@ -696,73 +723,225 @@ def calculate_lot_size(symbol, sl_distance, balance, risk_pct):
 # MULTI-SYMBOL AUTO-SCAN ENGINE
 # ============================================
 
-def auto_scan_symbol(symbol, custom_price=None, min_confidence=None):
-    """Safe placeholder: quote alone is not candle/structure data.
+def _ema_last(values, period):
+    if len(values) < period:
+        return None
+    ema = sum(values[:period]) / period
+    alpha = 2.0 / (period + 1.0)
+    for value in values[period:]:
+        ema = alpha * value + (1.0 - alpha) * ema
+    return ema
 
-    No BUY/SELL is generated until a real MT5 OHLC history feed is connected.
-    custom_price is accepted only as an explicitly labelled MT5 screenshot value.
+
+def _atr_last(candles, period=14):
+    if len(candles) < period + 1:
+        return None
+    ranges = []
+    for i in range(1, len(candles)):
+        bar = candles[i]
+        prev_close = candles[i - 1]['close']
+        ranges.append(max(bar['high'] - bar['low'], abs(bar['high'] - prev_close), abs(bar['low'] - prev_close)))
+    values = ranges[-period:]
+    return sum(values) / len(values) if values else None
+
+
+def _ema_trend(candles):
+    closes = [bar['close'] for bar in candles]
+    fast, slow = _ema_last(closes, 20), _ema_last(closes, 50)
+    if fast is None or slow is None:
+        return 'unavailable'
+    if fast > slow and closes[-1] > fast:
+        return 'bullish'
+    if fast < slow and closes[-1] < fast:
+        return 'bearish'
+    return 'neutral'
+
+
+def _find_sweep_and_bos(candles):
+    """Find a recent sweep of the prior 20-bar range followed by a closed-bar structure break."""
+    if len(candles) < 32:
+        return None
+    candidates = []
+    first_recent = max(20, len(candles) - 8)
+    for sweep_index in range(first_recent, len(candles) - 1):
+        base = candles[max(0, sweep_index - 20):sweep_index]
+        local = candles[max(0, sweep_index - 5):sweep_index]
+        if len(base) < 10 or not local:
+            continue
+        range_high = max(b['high'] for b in base)
+        range_low = min(b['low'] for b in base)
+        sweep = candles[sweep_index]
+        if sweep['low'] < range_low and sweep['close'] > range_low:
+            level = max(b['high'] for b in local)
+            for confirm_index in range(sweep_index + 1, len(candles)):
+                confirm = candles[confirm_index]
+                if confirm['close'] > level:
+                    candidates.append({'direction': 'BUY', 'sweep_index': sweep_index,
+                                       'confirm_index': confirm_index, 'sweep_extreme': sweep['low'],
+                                       'break_level': level})
+                    break
+        if sweep['high'] > range_high and sweep['close'] < range_high:
+            level = min(b['low'] for b in local)
+            for confirm_index in range(sweep_index + 1, len(candles)):
+                confirm = candles[confirm_index]
+                if confirm['close'] < level:
+                    candidates.append({'direction': 'SELL', 'sweep_index': sweep_index,
+                                       'confirm_index': confirm_index, 'sweep_extreme': sweep['high'],
+                                       'break_level': level})
+                    break
+    return max(candidates, key=lambda item: item['confirm_index']) if candidates else None
+
+
+def _has_fvg(candles, start_index, end_index, direction):
+    for i in range(max(2, start_index), min(len(candles) - 1, end_index) + 1):
+        if direction == 'BUY' and candles[i]['low'] > candles[i - 2]['high']:
+            return True
+        if direction == 'SELL' and candles[i]['high'] < candles[i - 2]['low']:
+            return True
+    return False
+
+
+def auto_scan_symbol(symbol, custom_price=None, min_confidence=None):
+    """Deterministic SMC-core demo candidate using real closed MT5 OHLC bars.
+
+    This is an unvalidated research rule, not a probability or live recommendation.
+    It only reports a candidate when H1/H4 EMA trend, D1 context, M15 liquidity
+    sweep, subsequent BOS/CHoCH and displacement all align. FVG is an extra check.
     """
     if symbol not in SYMBOL_CONFIG:
         return None
-    try:
-        signal_gate = int(min_confidence) if min_confidence is not None else SIGNAL_MIN_CONFIDENCE
-    except (TypeError, ValueError):
-        signal_gate = SIGNAL_MIN_CONFIDENCE
-    signal_gate = max(50, min(95, signal_gate))
-
+    candle_status = get_mt5_candle_status(symbol)
     quote = get_mt5_quote(symbol)
     if quote and float(quote.get('price', 0) or 0) > 0:
         current_price = float(quote['price'])
         price_source = 'MT5 live bridge'
     else:
         try:
-            screenshot_price = float(custom_price) if custom_price is not None else None
+            current_price = float(custom_price) if custom_price is not None else None
         except (TypeError, ValueError):
-            screenshot_price = None
-        if screenshot_price is not None and screenshot_price > 0:
-            current_price = screenshot_price
+            current_price = None
+        if current_price is not None and current_price > 0:
             price_source = 'MT5 screenshot'
         else:
-            current_price = None
-            price_source = 'unavailable'
+            current_price, price_source = None, 'unavailable'
 
-    candle_status = get_mt5_candle_status(symbol)
-    if current_price is None:
-        reason = 'WAIT: no fresh exact Exness price. Connect the MT5 bridge or upload a current MT5 chart.'
-    elif not candle_status['ready']:
-        missing = [tf for tf, info in candle_status['timeframes'].items() if not info['ready']]
-        reason = 'WAIT: exact price is live; waiting for enough fresh closed MT5 candles on ' + ', '.join(missing) + '. Keep MT5 open while history loads.'
-    else:
-        reason = 'WAIT: fresh MT5 candles are received, but the deterministic strategy is still disabled pending validation/backtesting. No trade levels are fabricated.'
-
-    return {
+    factors = {
+        'H1/H4 trend alignment': {'pass': False, 'detail': 'Waiting for closed bars'},
+        'D1 context not opposing': {'pass': False, 'detail': 'Waiting for closed bars'},
+        'M15 liquidity sweep': {'pass': False, 'detail': 'No sweep of the prior range detected'},
+        'BOS/CHoCH after sweep': {'pass': False, 'detail': 'No later closed-bar break detected'},
+        'Displacement candle': {'pass': False, 'detail': 'No confirmed displacement'},
+        'Fair Value Gap': {'pass': False, 'detail': 'Optional confluence not detected'},
+    }
+    result = {
         'symbol': symbol,
-        'timeframe': 'H1',
+        'timeframe': 'M15 trigger · H1/H4/D1 context',
         'price': round(current_price, 5) if current_price is not None else None,
         'price_source': price_source,
         'direction': 'WAIT',
         'confidence': None,
+        'setup_score': 0,
+        'setup_total': len(factors),
         'grade': '—',
-        'strategy': 'No fabricated setup',
-        'entry': None,
-        'sl': None,
-        'tp': None,
-        'tp1': None,
-        'tp2': None,
-        'tp3': None,
+        'strategy': 'SMC Core v1 · demo-only, unvalidated',
+        'signal_mode': 'WAIT',
+        'entry': None, 'sl': None, 'tp': None,
+        'tp1': None, 'tp2': None, 'tp3': None,
         'rr': '—',
         'structure': 'UNAVAILABLE',
-        'factors': {},
+        'factors': factors,
         'factors_grouped': {},
         'passed_count': 0,
-        'total_count': 0,
+        'total_count': len(factors),
         'lot_info': None,
-        'signal_min_confidence': signal_gate,
-        'signal_reason': reason,
         'signal_available': False,
         'candle_status': candle_status,
         'timestamp': johannesburg_now().strftime('%Y-%m-%d %H:%M:%S %Z'),
+        'validation_status': 'UNVALIDATED_DEMO_ONLY',
     }
+
+    if current_price is None:
+        result['signal_reason'] = 'WAIT: no fresh exact Exness quote. Connect the MT5 bridge.'
+        return result
+    if not candle_status['ready']:
+        missing = [tf for tf, item in candle_status['timeframes'].items() if not item['ready']]
+        result['signal_reason'] = 'WAIT: waiting for enough fresh closed bars on ' + ', '.join(missing) + '.'
+        return result
+    if not quote:
+        result['signal_reason'] = 'WAIT: screenshot price is for reference only; a fresh live MT5 quote is required for a candidate.'
+        return result
+
+    candles = {tf: MT5_CANDLES[(symbol, tf)]['candles'] for tf in MT5_TIMEFRAMES}
+    m15, h1, h4, d1 = candles['M15'], candles['H1'], candles['H4'], candles['D1']
+    if len(m15) < 32:
+        result['signal_reason'] = 'WAIT: not enough M15 bars to test the core SMC rule.'
+        return result
+
+    h1_bias, h4_bias, d1_bias = _ema_trend(h1), _ema_trend(h4), _ema_trend(d1)
+    trend_bias = h1_bias if h1_bias in ('bullish', 'bearish') and h1_bias == h4_bias else None
+    direction = {'bullish': 'BUY', 'bearish': 'SELL'}.get(trend_bias)
+    factors['H1/H4 trend alignment'] = {'pass': direction is not None, 'detail': f'H1={h1_bias}; H4={h4_bias}'}
+    d1_ok = direction is not None and d1_bias in (trend_bias, 'neutral')
+    factors['D1 context not opposing'] = {'pass': d1_ok, 'detail': f'D1={d1_bias}; must agree or be neutral'}
+
+    pattern = _find_sweep_and_bos(m15)
+    atr = _atr_last(m15, 14)
+    if pattern:
+        pattern_direction = pattern['direction']
+        aligned = direction == pattern_direction
+        factors['M15 liquidity sweep'] = {'pass': aligned, 'detail': f'{pattern_direction} sweep; trend-aligned={aligned}'}
+        confirm = m15[pattern['confirm_index']]
+        body = abs(confirm['close'] - confirm['open'])
+        displacement = bool(atr and atr > 0 and body >= 0.6 * atr and
+                            ((pattern_direction == 'BUY' and confirm['close'] > confirm['open']) or
+                             (pattern_direction == 'SELL' and confirm['close'] < confirm['open'])))
+        factors['BOS/CHoCH after sweep'] = {'pass': aligned, 'detail': f'Closed M15 break at {pattern["break_level"]:.5f}' if aligned else 'Break conflicts with H1/H4 trend'}
+        factors['Displacement candle'] = {'pass': displacement, 'detail': f'Body/ATR={body / atr:.2f} (min 0.60)' if atr and atr > 0 else 'ATR unavailable'}
+        fvg = _has_fvg(m15, pattern['confirm_index'] - 2, len(m15) - 1, pattern_direction)
+        factors['Fair Value Gap'] = {'pass': fvg, 'detail': 'Three-candle gap detected' if fvg else 'No recent gap'}
+    else:
+        pattern_direction = None
+        displacement = False
+        factors['M15 liquidity sweep'] = {'pass': False, 'detail': 'No sweep of the prior 20-bar range'}
+        factors['BOS/CHoCH after sweep'] = {'pass': False, 'detail': 'No later close beyond local structure'}
+        factors['Displacement candle'] = {'pass': False, 'detail': 'No displacement after a sweep'}
+        factors['Fair Value Gap'] = {'pass': False, 'detail': 'No validated sweep/BOS sequence'}
+
+    passed = sum(1 for value in factors.values() if value['pass'])
+    result['factors'] = factors
+    result['passed_count'] = passed
+    result['setup_score'] = passed
+    result['structure'] = direction or 'neutral / conflicting'
+
+    core_pass = bool(pattern and direction == pattern_direction and d1_ok and displacement)
+    if not core_pass:
+        result['signal_reason'] = f'WAIT: {passed}/6 objective candle checks pass; trend, sweep, break and displacement must align.'
+        return result
+
+    buffer = (atr or 0) * 0.15
+    if pattern_direction == 'BUY':
+        stop = pattern['sweep_extreme'] - buffer
+        risk_distance = current_price - stop
+        target = current_price + 2.0 * risk_distance
+    else:
+        stop = pattern['sweep_extreme'] + buffer
+        risk_distance = stop - current_price
+        target = current_price - 2.0 * risk_distance
+    if risk_distance <= 0 or (atr and risk_distance > 6.0 * atr):
+        result['signal_reason'] = 'WAIT: the live quote is too far from the sweep invalidation level.'
+        return result
+
+    result.update({
+        'direction': pattern_direction,
+        'signal_mode': 'DEMO_CANDIDATE_UNVALIDATED',
+        'signal_available': True,
+        'entry': round(current_price, 5),
+        'sl': round(stop, 5),
+        'tp': round(target, 5),
+        'rr': '1:2',
+        'signal_reason': f'DEMO CANDIDATE only: trend, liquidity sweep, BOS/CHoCH and displacement align ({passed}/6 checks). This rule has not passed a historical backtest; do not use as a live recommendation.',
+    })
+    return result
 
 # Keep old function for backward-compat
 def auto_scan_btc():
@@ -1908,7 +2087,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.0.0</div>
+            <div class="scanner-name">Precision Scanner v9.2.0</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -1983,7 +2162,7 @@ HTML = """
         <div class="auto-scan-banner">
             <div class="auto-scan-icon">🎯</div>
             <div class="auto-scan-text">PRECISION SCAN</div>
-            <div class="auto-scan-sub">Exact MT5 quotes and closed candles only. Signals stay WAIT until rules are validated.</div>
+            <div class="auto-scan-sub">Closed MT5 candles feed a demo-only SMC candidate rule; no calibrated probability is shown.</div>
 
             <!-- v9.0: verified MT5 price banner; no public proxy -->
             <div id="livePricePreview" style="background: rgba(0, 212, 170, 0.1); border: 1px solid rgba(0, 212, 170, 0.4); border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: center;">
@@ -2138,13 +2317,8 @@ HTML = """
             </div>
 
             <div class="form-group">
-                <label>⏰ Timeframe</label>
-                <select id="timeframe">
-                    <option value="M15">M15 (15 min)</option>
-                    <option value="H1" selected>H1 (1 hour)</option>
-                    <option value="H4">H4 (4 hours)</option>
-                    <option value="D1">D1 (Daily)</option>
-                </select>
+                <label>⏰ Rule timeframes</label>
+                <div style="padding:11px;background:rgba(0,0,0,.25);border:1px solid rgba(0,150,255,.25);border-radius:8px;color:#8fc7bb;font-size:12px;line-height:1.5;">M15 sweep/BOS trigger · H1/H4 EMA trend filter · D1 context. All inputs come from closed MT5 candles.</div>
             </div>
 
             <div class="form-group">
@@ -2153,15 +2327,6 @@ HTML = """
                 <div style="font-size: 11px; color: #888; margin-top: 5px;">No public proxy or estimate is used. Without exact price and candle history, the result remains WAIT.</div>
             </div>
 
-            <div class="form-group">
-                <label>📈 Visible Trend (from your chart)</label>
-                <select id="visibleTrend">
-                    <option value="auto">🤖 Auto-detect from HTF bias</option>
-                    <option value="bullish">🟢 Bullish (Higher highs/lows)</option>
-                    <option value="bearish">🔴 Bearish (Lower highs/lows)</option>
-                    <option value="ranging">🟡 Ranging / Choppy</option>
-                </select>
-            </div>
 
             <button class="analyze-btn" id="analyzeBtn" onclick="analyzeImage()">🤖 Check MT5 Price / Scan Status</button>
         </div>
@@ -2174,8 +2339,8 @@ HTML = """
 
         <div id="result">
             <div class="signal-header">
-                <div class="direction-buy" id="direction">BUY</div>
-                <div class="confidence-value" id="confidence">85%</div>
+                <div class="direction-wait" id="direction">WAIT</div>
+                <div class="confidence-value" id="confidence">—</div>
                 <div>
                     <span class="badge gold" id="grade">Grade A+</span>
                     <span class="badge" id="strategy">PO3</span>
@@ -2324,13 +2489,8 @@ HTML = """
                 </div>
             </div>
 
-            <div style="margin-bottom: 14px;">
-                <label style="display: block; color: #888; font-size: 11px; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">🎯 Min Confidence</label>
-                <div id="confButtons" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
-                    <button class="conf-btn" data-conf="65" onclick="setConfidence(65, this)" style="padding: 10px 4px; background: rgba(0,150,255,0.1); border: 1px solid rgba(0,150,255,0.3); color: #ccc; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;">Aggressive<br><span style="font-size: 9px; font-weight: 400; opacity: 0.7;">65%</span></button>
-                    <button class="conf-btn active" data-conf="75" onclick="setConfidence(75, this)" style="padding: 10px 4px; background: rgba(0,212,170,0.2); border: 1px solid #00d4aa; color: #00d4aa; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 0 10px rgba(0,212,170,0.3);">Balanced<br><span style="font-size: 9px; font-weight: 400; opacity: 0.7;">75%</span></button>
-                    <button class="conf-btn" data-conf="85" onclick="setConfidence(85, this)" style="padding: 10px 4px; background: rgba(0,150,255,0.1); border: 1px solid rgba(0,150,255,0.3); color: #ccc; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;">Conservative<br><span style="font-size: 9px; font-weight: 400; opacity: 0.7;">85%</span></button>
-                </div>
+            <div style="margin-bottom:14px;padding:10px;border:1px solid rgba(255,215,0,.2);border-radius:8px;color:#ffcc80;font-size:11px;line-height:1.5;">
+                Confidence percentages are hidden until the rule is calibrated on historical data. The SMC checklist is a condition count, not a win probability.
             </div>
 
             <!-- Live risk preview -->
@@ -2390,11 +2550,11 @@ HTML = """
         <!-- App Info (simplified) -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.0.0</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.2.0</span></div>
             <div class="info-row"><span class="label">Account:</span><span class="value">Sbusiso</span></div>
             <div class="info-row"><span class="label">Broker:</span><span class="value">Exness</span></div>
             <div class="info-row"><span class="label">Account #:</span><span class="value">134644333</span></div>
-            <div class="info-row"><span class="label">SMC Factors:</span><span class="value">20</span></div>
+            <div class="info-row"><span class="label">SMC Core Checks:</span><span class="value">6 · Demo / unvalidated</span></div>
             <div class="info-row"><span class="label">Symbols:</span><span class="value">7 pairs</span></div>
             <p style="margin-top: 12px; font-size: 11px; color: #888; text-align: center;">
                 Precision Trading, Zero Emotion
@@ -2740,17 +2900,35 @@ HTML = """
                 .then(r => r.json())
                 .then(data => {
                     const panel = document.getElementById('refLevels');
-                    if (panel) panel.style.display = data.available ? 'block' : 'none';
+                    if (!panel) return;
+                    panel.style.display = data.available ? 'block' : 'none';
+                    if (!data.available) return;
+                    document.getElementById('pdhValue').textContent = formatPriceForSymbol(symbol, data.pdh);
+                    document.getElementById('pdlValue').textContent = formatPriceForSymbol(symbol, data.pdl);
+                    document.getElementById('asianHigh').textContent = formatPriceForSymbol(symbol, data.asian_high);
+                    document.getElementById('asianLow').textContent = formatPriceForSymbol(symbol, data.asian_low);
+                    document.getElementById('refLevelsSymbol').textContent = symbol;
                 })
-                .catch(() => {
-                    const panel = document.getElementById('refLevels');
-                    if (panel) panel.style.display = 'none';
-                });
+                .catch(() => { const panel = document.getElementById('refLevels'); if (panel) panel.style.display = 'none'; });
         }
 
         function loadHTFBias(symbol) {
             const panel = document.getElementById('htfBanner');
-            if (panel) panel.style.display = 'none';
+            if (!panel || symbol === 'ALL') return;
+            fetch('/api/htf-bias?symbol=' + encodeURIComponent(symbol))
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.available) { panel.style.display = 'none'; return; }
+                    panel.style.display = 'block';
+                    const d = document.getElementById('htfDaily');
+                    const h = document.getElementById('htf4H');
+                    d.textContent = data.daily; d.className = 'htf-tf-value ' + String(data.daily).toLowerCase();
+                    h.textContent = data.h4; h.className = 'htf-tf-value ' + String(data.h4).toLowerCase();
+                    document.getElementById('htfAlignment').textContent = data.alignment;
+                    document.getElementById('htfAlignment').style.color = data.alignment_color;
+                    document.getElementById('htfSymbolName').textContent = symbol;
+                })
+                .catch(() => { panel.style.display = 'none'; });
         }
 
         // ============ TICKER (unchanged) ============
@@ -2902,155 +3080,56 @@ HTML = """
             return parts.length ? parts.join(' · ') : 'No candle status received';
         }
 
+        function renderRuleScanCard(data) {
+            const candidate = data.signal_available === true && ['BUY','SELL'].includes(data.direction);
+            const color = data.direction === 'BUY' ? '#00d4aa' : data.direction === 'SELL' ? '#ff6b6b' : '#ffd700';
+            const priceLine = Number(data.price) > 0
+                ? `<div style="margin:7px 0;color:#00d4aa;">Verified price: ${formatPriceForSymbol(data.symbol, data.price)} · ${escapeHtml(data.price_source || '')}</div>`
+                : '<div style="margin:7px 0;color:#ff6b6b;">No fresh exact Exness price</div>';
+            const score = `${Number(data.setup_score || 0)}/${Number(data.setup_total || 6)} checks`;
+            const factorRows = Object.entries(data.factors || {}).map(([name, info]) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;font-size:11px;border-bottom:1px solid rgba(255,255,255,.04);"><span style="color:${info.pass ? '#00d4aa' : '#888'};">${info.pass ? '✓' : '·'} ${escapeHtml(name)}</span><span style="color:#999;text-align:right;">${escapeHtml(info.detail || '')}</span></div>`).join('');
+            const levels = candidate ? `<div style="margin-top:10px;padding:10px;background:rgba(0,0,0,.25);border-radius:8px;text-align:left;font-size:12px;">
+                <div style="padding:4px 0;">Entry: <strong>${formatPriceForSymbol(data.symbol, data.entry)}</strong></div>
+                <div style="padding:4px 0;">Stop: <strong style="color:#ff6b6b;">${formatPriceForSymbol(data.symbol, data.sl)}</strong></div>
+                <div style="padding:4px 0;">Target: <strong style="color:#00d4aa;">${formatPriceForSymbol(data.symbol, data.tp)}</strong> · ${escapeHtml(data.rr || '')}</div>
+            </div><div style="margin-top:9px;padding:9px;color:#ffcc80;background:rgba(255,204,128,.08);border-radius:7px;font-size:11px;">DEMO CANDIDATE ONLY — this rule has not been validated on long historical data. Do not treat it as a live recommendation; no win probability is claimed.</div>` : '';
+            return `<div style="padding:14px;background:rgba(0,0,0,.28);border-radius:10px;margin-bottom:9px;">
+                <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+                    <strong style="color:#00d4ff;">${escapeHtml(data.symbol)} · ${escapeHtml(data.timeframe || '')}</strong>
+                    <strong style="font-size:24px;color:${color};">${candidate ? 'DEMO ' : ''}${escapeHtml(data.direction || 'WAIT')}</strong>
+                </div>
+                ${priceLine}
+                <div style="font-size:11px;color:#ffd700;margin:5px 0;">Setup checklist: ${score} · not a probability</div>
+                <div style="font-size:12px;color:#ddd;line-height:1.5;margin:7px 0;">${escapeHtml(data.signal_reason || '')}</div>
+                ${levels}
+                ${factorRows ? `<details style="margin-top:9px;"><summary style="color:#8fc7bb;font-size:11px;cursor:pointer;">Show actual candle checks</summary><div style="margin-top:6px;">${factorRows}</div></details>` : ''}
+            </div>`;
+        }
+
         function runAutoScan() {
             const resultDiv = document.getElementById('autoScanResult');
             resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<div style="text-align:center;padding:14px;color:#00d4aa;">Checking verified quotes and closed MT5 candles…</div>';
             if (selectedSymbol === 'ALL') {
-                const symbols = ['XAUUSDm','BTCUSDm','EURUSDm','GBPUSDm','USDJPYm','USTECm','US30m'];
-                const missing = symbols.filter(s => !hasMt5BridgeQuote(s));
-                if (missing.length) {
-                    showSafeScanWait('ALL', null, 'unavailable', 'Waiting for fresh exact MT5 quotes for: ' + missing.join(', ') + '.');
-                    return;
-                }
-                showSafeScanWait('ALL', null, 'unavailable', 'All seven exact prices are live. Check individual symbol scans for the M15/H1/H4/D1 candle-feed counts. Trade signals remain paused until the candle strategy is validated.');
+                fetch('/api/auto-scan-all')
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!Array.isArray(data.results)) throw new Error('No scan results');
+                        resultDiv.innerHTML = '<div style="font-size:11px;color:#ffcc80;margin-bottom:9px;">Experimental SMC core · demo candidates only · no calibrated win probability</div>' + data.results.map(renderRuleScanCard).join('');
+                    })
+                    .catch(() => { resultDiv.innerHTML = '<div style="color:#ff6b6b;text-align:center;padding:14px;">Scan status unavailable. Refresh and try again.</div>'; });
                 return;
             }
             const screenshot = getRecentMt5ScreenshotPrice(selectedSymbol);
-            const bridge = livePricesCache[selectedSymbol];
-            const quote = hasMt5BridgeQuote(selectedSymbol) ? bridge : null;
-            const price = quote ? quote.price : screenshot ? screenshot.price : null;
-            const source = quote ? 'MT5 live bridge' : screenshot ? 'MT5 screenshot' : 'unavailable';
-            if (!price) {
-                showSafeScanWait(selectedSymbol, null, source, 'Connect the MT5 bridge or upload a current MT5 chart. No public proxy or estimated quote is used.');
-                return;
-            }
-            showSafeScanWait(selectedSymbol, price, source, 'Checking fresh closed MT5 candle history…');
-            fetch('/api/mt5/candles/status?symbol=' + encodeURIComponent(selectedSymbol))
+            const priceParam = screenshot ? '&price=' + encodeURIComponent(screenshot.price) : '';
+            fetch('/api/auto-scan?symbol=' + encodeURIComponent(selectedSymbol) + priceParam)
                 .then(r => r.json())
                 .then(data => {
-                    const statusLine = 'MT5 candle feed: ' + describeCandleStatus(data) + '.';
-                    const message = data.ready
-                        ? statusLine + ' The bars are arriving, but trade signals remain paused until the rule set is validated on historical data. No confidence, Entry, SL or TP is generated yet.'
-                        : statusLine + ' The scanner needs fresh closed candles before it can test structure. Keep MT5 open and let the history feed load.';
-                    showSafeScanWait(selectedSymbol, price, source, message);
+                    if (data.error) throw new Error(data.error);
+                    resultDiv.innerHTML = renderRuleScanCard(data);
+                    resultDiv.scrollIntoView({behavior:'smooth'});
                 })
-                .catch(() => showSafeScanWait(selectedSymbol, price, source, 'Exact price is live, but the candle-status check failed. The app will stay WAIT rather than invent a setup.'));
-        }
-
-        function renderSingleResult(data) {
-            const resultDiv = document.getElementById('autoScanResult');
-            if (data && data.signal_available === false) {
-                showSafeScanWait(data.symbol || selectedSymbol, data.price, data.price_source || 'unavailable', data.signal_reason || 'Verified candle history is required.');
-                return;
-            }
-            const dirColor = data.direction === 'BUY' ? '#00d4aa' : data.direction === 'SELL' ? '#ff6b6b' : '#888';
-
-            const factorsHtml = Object.entries(data.factors).map(([name, info]) => {
-                const icon = info.pass ? '✓' : '✗';
-                const color = info.pass ? '#00d4aa' : '#555';
-                return `<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px;">
-                    <span style="color: ${color};">${icon} ${name}</span>
-                    <span style="color: ${color}; font-size: 10px;">${info.detail}</span>
-                </div>`;
-            }).join('');
-
-            // NEW v8.0: Confluence categories
-            let catsHtml = '';
-            if (data.factors_grouped) {
-                catsHtml = '<div class="confluence-cats"><div class="confluence-cats-title">📊 CONFLUENCE BREAKDOWN BY CATEGORY</div>';
-                const cats = data.factors_grouped;
-                for (const [catName, catData] of Object.entries(cats)) {
-                    const cls = catName.toLowerCase();
-                    catsHtml += `<div class="cat-row">
-                        <span class="cat-name ${cls}">${catName}</span>
-                        <div class="cat-bar"><div class="cat-bar-fill ${cls}" style="width: ${catData.pct}%;"></div></div>
-                        <span class="cat-pct ${cls}">${catData.passed}/${catData.total}</span>
-                    </div>`;
-                }
-                catsHtml += '</div>';
-            }
-
-            const lot = data.lot_info;
-
-            // TP levels display
-            const tpHtml = data.direction !== 'WAIT' ? `
-                <div class="tp-levels">
-                    <div class="tp-levels-title">🎯 Multiple Take Profit</div>
-                    <div class="tp-row"><span class="tp-label">TP1</span><span class="tp-price">${data.tp1}</span><span class="tp-pct">33%</span></div>
-                    <div class="tp-row"><span class="tp-label">TP2</span><span class="tp-price">${data.tp2}</span><span class="tp-pct">33%</span></div>
-                    <div class="tp-row"><span class="tp-label">TP3</span><span class="tp-price">${data.tp3}</span><span class="tp-pct">34%</span></div>
-                </div>
-            ` : '';
-
-            // Lot calc display
-            const lotHtml = data.direction !== 'WAIT' ? `
-                <div class="lot-result">
-                    <div class="lot-result-title">💰 Lot Size (Exness)</div>
-                    <div class="lot-result-value">${lot.lots}</div>
-                    <div class="lot-result-detail"><span style="color: #888;">SL Distance:</span><span style="color: #fff; font-weight: 700;">${lot.sl_pips} pips</span></div>
-                    <div class="lot-result-detail"><span style="color: #888;">Risk Amount:</span><span style="color: #ffd700; font-weight: 700;">R${lot.risk_amount}</span></div>
-                </div>
-            ` : '';
-
-            resultDiv.innerHTML = `
-                <div style="text-align: center; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 10px; margin-bottom: 10px;">
-                    <div style="font-size: 12px; color: #00d4ff; margin-bottom: 6px;">${data.symbol} · ${data.timeframe}</div>
-                    <div style="font-size: 36px; font-weight: 800; color: ${dirColor};">${data.direction}</div>
-                    <div style="font-size: 48px; font-weight: 800; color: #00d4aa; margin: 8px 0;">${data.confidence}%</div>
-                    <span class="badge gold">Grade ${data.grade}</span>
-                    <span class="badge">${data.strategy}</span>
-                    <div style="margin-top: 8px; font-size: 10px; color: ${(data.price_source === 'MT5 screenshot' || data.price_source === 'MT5 live bridge') ? '#00d4aa' : '#ffd700'};">Price source: ${data.price_source || 'unknown'}</div>
-                </div>
-                <div style="margin-bottom: 10px; padding: 9px; background: ${data.direction === 'WAIT' ? 'rgba(255,215,0,0.08)' : 'rgba(0,212,170,0.08)'}; border: 1px solid ${data.direction === 'WAIT' ? 'rgba(255,215,0,0.25)' : 'rgba(0,212,170,0.25)'}; border-radius: 8px; color: ${data.direction === 'WAIT' ? '#ffd700' : '#00d4aa'}; font-size: 11px; text-align: center;">${data.signal_reason || (data.direction === 'WAIT' ? 'No trade: setup did not pass the scanner gate.' : 'Directional setup passed the scanner gate.')}</div>
-                <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; margin-bottom: 10px;">
-                    <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Entry:</span><span style="color: ${data.direction === 'WAIT' ? '#666' : '#fff'}; font-weight: 700;">${data.direction === 'WAIT' ? '— (no trade)' : data.entry}</span></div>
-                    <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Stop Loss:</span><span style="color: ${data.direction === 'WAIT' ? '#666' : '#ff6b6b'}; font-weight: 700;">${data.direction === 'WAIT' ? '— (no trade)' : data.sl}</span></div>
-                    <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Take Profit:</span><span style="color: ${data.direction === 'WAIT' ? '#666' : '#00d4aa'}; font-weight: 700;">${data.direction === 'WAIT' ? '— (no trade)' : data.tp}</span></div>
-                    <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;"><span style="color: #888;">Risk:Reward:</span><span style="color: ${data.direction === 'WAIT' ? '#666' : '#00d4ff'}; font-weight: 700;">${data.direction === 'WAIT' ? '—' : data.rr}</span></div>
-                </div>
-                ${lotHtml}
-                ${tpHtml}
-                ${catsHtml}
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
-                    <div style="color: #00d4ff; font-size: 11px; font-weight: 700; margin-bottom: 8px;">📋 ALL FACTORS (${data.passed_count}/${data.total_count})</div>
-                    ${factorsHtml}
-                </div>
-                <div style="margin-top: 12px;">
-                    <button onclick="markOutcome('${data.symbol}', '${data.direction}', '${data.entry}', '${data.sl}', '${data.tp}')"
-                        style="width: 100%; padding: 10px; background: ${data.direction === 'WAIT' ? 'rgba(100,100,100,0.2)' : 'linear-gradient(135deg, rgba(0, 212, 170, 0.3), rgba(0, 150, 255, 0.2))'}; border: 1px solid ${data.direction === 'WAIT' ? '#666' : '#00d4aa'}; color: ${data.direction === 'WAIT' ? '#888' : '#00d4aa'}; border-radius: 8px; font-weight: 700; cursor: ${data.direction === 'WAIT' ? 'not-allowed' : 'pointer'}; font-size: 13px; ${data.direction === 'WAIT' ? 'display:none;' : ''}">
-                        📌 Save Signal to History
-                    </button>
-                </div>
-                <div style="margin-top: 10px; font-size: 11px; color: #888; text-align: center;">Scanned: ${data.timestamp}</div>
-            `;
-            resultDiv.scrollIntoView({behavior: 'smooth'});
-        }
-
-        function renderMultiSymbolResults(results) {
-            const resultDiv = document.getElementById('autoScanResult');
-            let html = '<div style="text-align: center; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 10px; margin-bottom: 12px;"><div style="color: #00d4aa; font-weight: 700;">🎯 ALL SYMBOLS SCAN</div></div>';
-
-            results.forEach(data => {
-                if (!data) return;
-                const dirColor = data.direction === 'BUY' ? '#00d4aa' : data.direction === 'SELL' ? '#ff6b6b' : '#888';
-                html += `
-                    <div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 10px; margin-bottom: 8px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                            <span style="color: #00d4ff; font-weight: 700; font-size: 13px;">${data.symbol}</span>
-                            <span style="color: ${dirColor}; font-weight: 800; font-size: 16px;">${data.direction}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888;">
-                            <span>Conf: <span style="color: #00d4aa; font-weight: 700;">${data.confidence}%</span></span>
-                            <span>Grade: <span style="color: #ffd700; font-weight: 700;">${data.grade}</span></span>
-                            <span>Entry: <span style="color: #fff;">${data.entry}</span></span>
-                        </div>
-                        <div style="font-size: 10px; color: #888; margin-top: 4px;">${data.passed_count}/${data.total_count} factors</div>
-                    </div>
-                `;
-            });
-
-            resultDiv.innerHTML = html;
-            resultDiv.scrollIntoView({behavior: 'smooth'});
+                .catch(() => { resultDiv.innerHTML = '<div style="color:#ff6b6b;text-align:center;padding:14px;">Scan status unavailable. Refresh and try again.</div>'; });
         }
 
         // ============ SIGNAL HISTORY (NEW v7.0) ============
@@ -3164,8 +3243,7 @@ HTML = """
         function saveSettings() {
             const balance = parseFloat(document.getElementById('settingsBalanceInput').value) || 369.19;
             const risk = parseFloat(document.querySelector('.risk-btn.active').dataset.risk);
-            const conf = parseFloat(document.querySelector('.conf-btn.active').dataset.conf);
-            const settings = { balance, risk, conf };
+            const settings = { balance, risk };
             localStorage.setItem('eliteSettings', JSON.stringify(settings));
             updateLiveRiskCalc();
             const cf = document.getElementById('saveConfirm');
@@ -3183,13 +3261,6 @@ HTML = """
                         document.querySelectorAll('.risk-btn').forEach(b => {
                             if (parseFloat(b.dataset.risk) === s.risk) {
                                 setRisk(s.risk, b);
-                            }
-                        });
-                    }
-                    if (s.conf) {
-                        document.querySelectorAll('.conf-btn').forEach(b => {
-                            if (parseFloat(b.dataset.conf) === s.conf) {
-                                setConfidence(s.conf, b);
                             }
                         });
                     }
@@ -3214,23 +3285,6 @@ HTML = """
                 btn.style.boxShadow = '0 0 10px rgba(0,212,170,0.3)';
             }
             updateLiveRiskCalc();
-        }
-
-        function setConfidence(value, btn) {
-            document.querySelectorAll('.conf-btn').forEach(b => {
-                b.classList.remove('active');
-                b.style.background = 'rgba(0,150,255,0.1)';
-                b.style.border = '1px solid rgba(0,150,255,0.3)';
-                b.style.color = '#ccc';
-                b.style.boxShadow = 'none';
-            });
-            if (btn) {
-                btn.classList.add('active');
-                btn.style.background = 'rgba(0,212,170,0.2)';
-                btn.style.border = '1px solid #00d4aa';
-                btn.style.color = '#00d4aa';
-                btn.style.boxShadow = '0 0 10px rgba(0,212,170,0.3)';
-            }
         }
 
         function updateLiveRiskCalc() {
@@ -3349,27 +3403,30 @@ HTML = """
 
         function analyzeImage() {
             const symbol = document.getElementById('symbol').value;
-            const timeframe = document.getElementById('timeframe').value;
             const screenshot = getRecentMt5ScreenshotPrice(symbol);
             const info = livePricesCache[symbol];
             const bridge = info && info.source === 'mt5' && Number(info.price) > 0 ? info : null;
             const price = bridge ? Number(bridge.price) : screenshot ? Number(screenshot.price) : null;
-            const source = bridge ? 'MT5 live bridge' : screenshot ? 'MT5 screenshot' : 'unavailable';
             document.getElementById('loading').style.display = 'none';
             document.getElementById('previewSection').style.display = 'none';
             const result = document.getElementById('result');
             result.style.display = 'block';
-            const priceHtml = price
-                ? `<div style="color:#00d4aa;margin:10px 0;">Verified MT5 price: ${formatPriceForSymbol(symbol, price)} · ${escapeHtml(source)}</div>`
-                : '<div style="color:#ff6b6b;margin:10px 0;">No exact Exness price is available. Proxy and estimated prices are disabled.</div>';
-            result.innerHTML = `<div style="text-align:center;padding:18px;background:rgba(0,0,0,.25);border:1px solid rgba(255,215,0,.25);border-radius:12px;">
-                <div style="font-size:12px;color:#00d4ff;">${escapeHtml(symbol)} · ${escapeHtml(timeframe)}</div>
-                <div style="font-size:36px;font-weight:800;color:#ffd700;margin:8px 0;">WAIT</div>${priceHtml}
-                <div style="font-size:13px;color:#ddd;line-height:1.6;">Chart upload can identify the symbol and read the highlighted price. The app checks the MT5 candle feed before any setup can be considered. Until the bars and strategy are validated, it will not invent SMC patterns or a BUY/SELL direction.</div>
-                <div style="font-size:12px;color:#ffcc80;margin-top:10px;">Next step: confirm fresh closed MT5 bars and validate the scanner with historical tests before enabling trade levels.</div>
-                <button class="new-scan-btn" onclick="resetForm()" style="margin-top:14px;">🔄 Scan Another Chart</button>
-            </div>`;
-            result.scrollIntoView({behavior:'smooth'});
+            if (!price) {
+                result.innerHTML = `<div style="text-align:center;padding:18px;color:#ddd;background:rgba(0,0,0,.25);border-radius:12px;"><strong style="color:#ffd700;font-size:28px;">WAIT</strong><p>No exact Exness quote is available. Keep MT5 connected or upload a current chart.</p></div>`;
+                return;
+            }
+            result.innerHTML = '<div style="text-align:center;padding:14px;color:#00d4aa;">Evaluating the same closed-candle SMC checks as the Precision Scan…</div>';
+            const priceParam = screenshot ? '&price=' + encodeURIComponent(screenshot.price) : '';
+            fetch('/api/auto-scan?symbol=' + encodeURIComponent(symbol) + priceParam)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+                    result.innerHTML = renderRuleScanCard(data);
+                    result.scrollIntoView({behavior:'smooth'});
+                })
+                .catch(() => {
+                    result.innerHTML = '<div style="text-align:center;padding:16px;color:#ff6b6b;">Candle scan unavailable. The safe result is WAIT.</div>';
+                });
         }
 
         // v9.0: Load exact MT5 quotes only.
@@ -3613,6 +3670,27 @@ def api_news_scenario():
     result['calendar_status'] = calendar_data.get('status')
     return jsonify(result)
 
+@app.route('/api/strategy/status')
+def api_strategy_status():
+    symbol = request.args.get('symbol', 'US30m')
+    if symbol not in SYMBOL_CONFIG:
+        return jsonify({'error': 'Unknown symbol'}), 400
+    candles = get_mt5_candle_status(symbol)
+    m15_count = candles['timeframes']['M15']['bars']
+    return jsonify({
+        'symbol': symbol,
+        'strategy': 'SMC Core v1',
+        'mode': 'DEMO_CANDIDATE_UNVALIDATED',
+        'implemented_checks': ['H1/H4 EMA trend alignment', 'D1 context', 'M15 liquidity sweep', 'BOS/CHoCH close', 'displacement', 'FVG'],
+        'not_implemented_or_not_used': ['breaker/mitigation blocks', 'equal highs/lows', 'PO3/Judas', 'OTE', 'volume confirmation'],
+        'candle_feed_ready': candles['ready'],
+        'm15_bars_available': m15_count,
+        'backtest_status': 'NOT RUN',
+        'minimum_m15_bars_for_initial_backtest': 500,
+        'validated_for_live_trading': False,
+        'reason': 'The rule is a demo candidate only. A backtest including spread/slippage and out-of-sample checks has not been completed; no win probability is claimed.',
+    })
+
 @app.route('/api/htf-bias')
 def api_htf_bias():
     symbol = request.args.get('symbol', 'BTCUSDm')
@@ -3628,13 +3706,11 @@ def api_auto_scan():
     """
     symbol = request.args.get('symbol', 'BTCUSDm')
     custom_price = request.args.get('price')
-    min_confidence = request.args.get('min_confidence')
     try:
         parsed_price = float(custom_price) if custom_price else None
-        parsed_confidence = int(min_confidence) if min_confidence else None
     except (TypeError, ValueError):
-        return jsonify({'error': 'Invalid price or confidence parameter'}), 400
-    result = auto_scan_symbol(symbol, custom_price=parsed_price, min_confidence=parsed_confidence)
+        return jsonify({'error': 'Invalid screenshot price parameter'}), 400
+    result = auto_scan_symbol(symbol, custom_price=parsed_price)
     if result:
         return jsonify(result)
     return jsonify({'error': 'Unknown symbol'}), 400
@@ -3642,14 +3718,9 @@ def api_auto_scan():
 @app.route('/api/auto-scan-all')
 def api_auto_scan_all():
     """NEW v7.0: Scan all 7 symbols at once."""
-    min_confidence = request.args.get('min_confidence')
-    try:
-        gate = int(min_confidence) if min_confidence else None
-    except (TypeError, ValueError):
-        return jsonify({'error': 'Invalid confidence parameter'}), 400
     results = []
     for symbol in SYMBOL_CONFIG.keys():
-        results.append(auto_scan_symbol(symbol, min_confidence=gate))
+        results.append(auto_scan_symbol(symbol))
     return jsonify({'results': results})
 
 @app.route('/api/next-session')
@@ -3683,36 +3754,14 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.1.0',
-        'features': ['read_only_mt5_bridge', 'exact_prices_only', 'conditional_news_scenarios', 'read_only_mt5_ohlc_candles',
-                     'lot_size_calculator', 'signal_history', 'session_countdown',
-                     'economic_calendar_live_attributed', 'manual_risk_tracker_not_mt5_synced',
-                     'exact_mt5_prices_only', 'conditional_news_scenarios', 'ohlc_candle_feed_diagnostics',
-                     'editable_balance', 'editable_risk_pct', 'editable_min_confidence',
-                     'manual_chart_v8_2_safe'],
-        'new_in_v9_1': ['mt5_closed_ohlc_candle_transport', 'candle_feed_status_per_symbol_timeframe', 'removed_manual_price_input', 'highlighted_mt5_price_ocr', 'auto_live_price_preview', 'live_price_preview_on_scan_tab', 'confidence_gate_matches_settings', 'removed_yahoo_proxy_and_static_prices', 'mt5_read_only_quote_bridge', 'm15_h1_h4_d1_ohlc_feed_pending_strategy_validation'],
-        'new_in_v8_4': ['iphone_upload_two_buttons', 'camera_gallery_split',
-                        'best_action_hidden_when_wait', 'best_action_color_dynamic'],
-        'new_in_v8_3': ['tesseract_ocr_engine', 'auto_price_from_photo',
-                        'auto_symbol_from_photo', 'camera_capture_environment',
-                        'ocr_progress_indicator'],
-        'new_in_v8_2': ['demo_warning_banner', 'manual_price_input',
-                        'use_live_price_button', 'trend_selector_dropdown',
-                        'fixed_random_entry_bug'],
-        'new_in_v8_1': ['editable_account_balance', 'editable_risk_pct_buttons',
-                        'editable_min_confidence_buttons', 'live_risk_preview',
-                        'history_stats_in_settings', 'clear_history_button',
-                        'save_settings_button'],
-        'removed_in_v8_1': ['dark_mode_toggle', 'push_notifications_toggle',
-                            'fake_scan_interval', 'confusing_lot_calc_label'],
-        'new_in_v8': ['confluence_grouped_categories', 'drawdown_tracker',
-                      'time_session_countdown', 'breaker_blocks',
-                      'mitigation_blocks', 'asian_range_markers', 'pdh_pdl_markers'],
-        'new_in_v7': ['multi_symbol_picker', 'htf_bias_banner', 'lot_size_calc',
-                      'multi_tp_levels', 'signal_history_with_outcomes'],
-        'removed': ['profit_target_tracker', 'balance_pressure_display',
-                   'fake_winrate_stat', 'mt5_webhook_push',
-                   'open_in_mt5_button', 'real_broker_api', 'ai_photo_symbol']
+        'version': '9.2.0',
+        'features': [
+            'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
+            'live_attributed_economic_calendar', 'conditional_news_scenarios',
+            'deterministic_smc_core_demo_candidate', 'no_uncalibrated_confidence_percent',
+            'strategy_validation_status_endpoint', 'screenshot_symbol_price_ocr',
+        ],
+        'strategy_validation': 'DEMO_ONLY_UNVALIDATED',
     })
 
 if __name__ == '__main__':

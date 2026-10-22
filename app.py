@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.3.0 — read-only MT5 OHLC + 20-factor SMC checks.
+Elite Alpha EA v9.4.0 — cleaner mobile scan, real timeframes, 20 factor states.
 
 Safety changes:
 - No public proxy prices or static quote estimates are presented or scanned.
@@ -109,6 +109,16 @@ ECONOMIC_CALENDAR_TTL_SECONDS = 300
 ECONOMIC_CALENDAR_COUNTRIES = 'US,GB,EU,JP,CN'
 
 
+def _is_trading_relevant_event(item):
+    text = (str(item.get('title') or item.get('name') or item.get('event') or '') + ' ' + str(item.get('category') or '')).lower()
+    # Remove routine auctions/energy reports that clutter the mobile calendar.
+    if any(term in text for term in ('treasury bill auction', '4-week bill', '8-week bill', '10-day cmb', 'eia weekly natural gas', 'gas storage')):
+        return False
+    if 'auction' in text and not any(term in text for term in ('10-year note', '30-year bond', '10-year bond')):
+        return False
+    return bool(re.search(r'cpi|ppi|pce|inflation|payroll|employment|unemployment|jobless|claims|wage|labor market|labour market|nonfarm|non-farm|gdp|retail sales|pmi|ism|fomc|rate decision|interest rate|monetary policy|central bank|fed |ecb|boe|boj|bank of england|bank of japan|consumer confidence|michigan sentiment|housing starts|new home sales|industrial production|durable goods|trade balance|press conference|ppi|producer price', text))
+
+
 def _calendar_datetime_utc(value):
     if not value:
         return None
@@ -160,7 +170,7 @@ def get_economic_calendar_data(force_refresh=False):
             if not isinstance(item, dict):
                 continue
             impact = str(item.get('impact') or '').strip().lower()
-            if impact not in ('high', 'medium'):
+            if impact not in ('high', 'medium') or not _is_trading_relevant_event(item):
                 continue
             title = str(item.get('title') or item.get('name') or item.get('event') or '').strip()
             if not title:
@@ -210,6 +220,7 @@ def get_economic_calendar_data(force_refresh=False):
             })
 
         normalized.sort(key=lambda e: e.get('release_at_utc') or '9999')
+        normalized = normalized[:10]
         ECONOMIC_CALENDAR_CACHE = {
             'events': normalized,
             'fetched_at': now_epoch,
@@ -304,8 +315,23 @@ def build_news_scenario(event, symbol):
     actual = _macro_number(event.get('actual'))
     consensus = _macro_number(event.get('consensus'))
     prior = event.get('prior')
+    prior_number = _macro_number(prior)
     actual_vs_consensus = None
     released_note = None
+    consensus_lean = {
+        'label': 'No pre-release directional lean',
+        'text': 'The calendar has not supplied comparable consensus and previous values, so the app will show scenarios rather than guess a direction.'
+    }
+    if consensus is not None and prior_number is not None and family in ('inflation', 'labor', 'growth'):
+        tolerance = max(abs(prior_number) * 0.002, 0.01)
+        comparison = 'above' if consensus > prior_number + tolerance else 'below' if consensus < prior_number - tolerance else 'inline'
+        stance = _stance_from_surprise(event, family, comparison)
+        effect = _asset_effect_for_currency(symbol, currency, stance)
+        lean_label = 'Consensus-implied hotter/stronger tilt' if stance == 'firm' else 'Consensus-implied cooler/weaker tilt' if stance == 'soft' else 'Consensus near prior / mixed'
+        consensus_lean = {
+            'label': lean_label,
+            'text': f'Forecast {event.get("consensus")} versus previous {prior}. If the release matches consensus, {effect} This is a market-expectation tilt, not a prediction of the actual print.'
+        }
 
     if actual is not None and consensus is not None:
         tolerance = max(abs(consensus) * 0.002, 0.01)
@@ -366,6 +392,7 @@ def build_news_scenario(event, symbol):
         'consensus': event.get('consensus'),
         'prior': prior,
         'actual': event.get('actual'),
+        'consensus_lean': consensus_lean,
         'actual_vs_consensus': actual_vs_consensus,
         'scenarios': scenarios,
         'caution': 'Do not enter solely because of a calendar scenario. News can cause slippage, spread widening, whipsaws and reversals. Wait for a verified Exness price and price-action confirmation.',
@@ -802,10 +829,13 @@ def _has_fvg(candles, start_index, end_index, direction):
     return False
 
 
-def auto_scan_symbol(symbol, custom_price=None, min_confidence=None):
+def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='M15'):
     """Evaluate 20 explicit candle-derived factors; emit only unvalidated candidates."""
     if symbol not in SYMBOL_CONFIG:
         return None
+    timeframe = str(timeframe or 'M15').upper()
+    if timeframe not in MT5_TIMEFRAMES:
+        timeframe = 'M15'
     candle_status = get_mt5_candle_status(symbol)
     quote = get_mt5_quote(symbol)
     if quote and float(quote.get('price', 0) or 0) > 0:
@@ -834,6 +864,7 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None):
         calendar=events,
         calendar_status=calendar.get('status', 'unavailable'),
         now_sast=johannesburg_now(),
+        trigger_timeframe=timeframe,
     )
     factors = analysis.get('factors', {})
     available = sum(1 for item in factors.values() if item.get('available'))
@@ -872,7 +903,7 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None):
 
     return {
         'symbol': symbol,
-        'timeframe': 'M15 trigger · H1/H4/D1 context',
+        'timeframe': f'{timeframe} trigger · H1/H4/D1 context',
         'price': round(price,5) if price is not None else None,
         'price_source': price_source,
         'direction': direction,
@@ -2047,7 +2078,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.3.0</div>
+            <div class="scanner-name">Precision Scanner v9.4.0</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2277,8 +2308,14 @@ HTML = """
             </div>
 
             <div class="form-group">
-                <label>⏰ Rule timeframes</label>
-                <div style="padding:11px;background:rgba(0,0,0,.25);border:1px solid rgba(0,150,255,.25);border-radius:8px;color:#8fc7bb;font-size:12px;line-height:1.5;">M15 sweep/BOS trigger · H1/H4 EMA trend filter · D1 context. All inputs come from closed MT5 candles.</div>
+                <label>⏰ Trigger timeframe</label>
+                <select id="timeframe" onchange="updateScanLivePricePreview()">
+                    <option value="M15" selected>M15 (15 min)</option>
+                    <option value="H1">H1 (1 hour)</option>
+                    <option value="H4">H4 (4 hours)</option>
+                    <option value="D1">D1 (Daily)</option>
+                </select>
+                <div style="font-size:11px;color:#8fc7bb;margin-top:5px;">This selects the sweep/BOS trigger bars; H1/H4/D1 remain trend/context checks.</div>
             </div>
 
             <div class="form-group">
@@ -2510,7 +2547,7 @@ HTML = """
         <!-- App Info (simplified) -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.3.0</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.4.0</span></div>
             <div class="info-row"><span class="label">Account:</span><span class="value">Sbusiso</span></div>
             <div class="info-row"><span class="label">Broker:</span><span class="value">Exness</span></div>
             <div class="info-row"><span class="label">Account #:</span><span class="value">134644333</span></div>
@@ -2932,6 +2969,13 @@ HTML = """
             return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
         }
 
+        function shortCalendarDate(value) {
+            const parts = String(value || '').split('-');
+            if (parts.length !== 3) return String(value || 'Date TBC');
+            const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(parts[1])-1] || '';
+            return Number(parts[2]) + ' ' + month;
+        }
+
         function loadNews() {
             fetch('/api/news')
                 .then(r => r.json())
@@ -2955,11 +2999,11 @@ HTML = """
                     list.innerHTML = economicEventsCache.map((event, index) => {
                         const impact = String(event.impact || 'MEDIUM').toUpperCase();
                         const cls = impact === 'HIGH' ? 'news-impact-high' : 'news-impact-medium';
-                        const dateLabel = event.date_local || '';
+                        const dateLabel = shortCalendarDate(event.date_local);
                         const timeLabel = event.time_local || 'Time TBC';
                         const title = event.title || 'Economic event';
-                        return `<button class="news-item" type="button" onclick="showNewsScenario(${index})" style="width:100%;text-align:left;background:transparent;color:#ddd;border:0;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;">
-                            <span><strong>${escapeHtml(dateLabel)} ${escapeHtml(timeLabel)}</strong> · ${escapeHtml(event.country || event.currency || '')} · ${escapeHtml(title)}<small style="display:block;color:#888;margin-top:2px;">Tap for conditional scenarios · consensus: ${escapeHtml(event.consensus ?? 'not published')}</small></span>
+                        return `<button class="news-item" type="button" onclick="showNewsScenario(${index})" style="width:100%;text-align:left;background:transparent;color:#ddd;border:0;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:start;padding:9px 2px;">
+                            <span><strong style="color:#fff;">${escapeHtml(dateLabel)} · ${escapeHtml(timeLabel)} SAST</strong><span style="display:block;margin-top:3px;line-height:1.35;">${escapeHtml(event.currency || event.country || '')} · ${escapeHtml(title)}</span><small style="display:block;color:#888;margin-top:3px;">Tap for scenario · consensus ${escapeHtml(event.consensus ?? 'not published')}</small></span>
                             <span class="${cls}">${escapeHtml(impact)}</span>
                         </button>`;
                     }).join('');
@@ -3006,8 +3050,9 @@ HTML = """
                     }
                     const scenarios = (data.scenarios || []).map(item => `<div style="margin:8px 0;padding:8px;border-radius:7px;background:rgba(255,255,255,.04);"><strong style="color:#00d4aa;">${escapeHtml(item.label)}</strong><div style="color:#ccc;margin-top:3px;">${escapeHtml(item.text)}</div></div>`).join('');
                     const metrics = `<div style="color:#aaa;margin:5px 0 8px;">Consensus: ${escapeHtml(data.consensus ?? 'not published')} · Previous: ${escapeHtml(data.prior ?? '—')} · Actual: ${escapeHtml(data.actual ?? 'not released')}</div>`;
+                    const lean = data.consensus_lean ? `<div style="margin:8px 0;padding:9px;border:1px solid rgba(0,212,170,.2);border-radius:8px;background:rgba(0,212,170,.05);"><strong style="color:#00d4aa;">${escapeHtml(data.consensus_lean.label)}</strong><div style="margin-top:4px;color:#ccc;">${escapeHtml(data.consensus_lean.text)}</div></div>` : '';
                     const source = data.source_url ? `<div style="margin-top:7px;"><a href="${escapeHtml(data.source_url)}" target="_blank" rel="noopener" style="color:#00d4aa;">Event source / details</a></div>` : '';
-                    content.innerHTML = `<div style="font-weight:700;color:#ffd700;">${escapeHtml(data.phase)} · ${escapeHtml(data.symbol)}</div><div style="margin:6px 0;color:#ddd;">${escapeHtml(data.event)}</div><div style="color:#ccc;">${escapeHtml(data.summary)}</div>${metrics}${scenarios}<div style="margin-top:8px;color:#ffcc80;font-size:11px;">⚠️ ${escapeHtml(data.caution)}</div>${source}`;
+                    content.innerHTML = `<div style="font-weight:700;color:#ffd700;">${escapeHtml(data.phase)} · ${escapeHtml(data.symbol)}</div><div style="margin:6px 0;color:#ddd;">${escapeHtml(data.event)}</div><div style="color:#ccc;">${escapeHtml(data.summary)}</div>${metrics}${lean}${scenarios}<div style="margin-top:8px;color:#ffcc80;font-size:11px;">⚠️ ${escapeHtml(data.caution)}</div>${source}`;
                 })
                 .catch(() => { if (content) content.textContent = 'Could not load the event scenario. Try again.'; });
         }
@@ -3086,7 +3131,9 @@ HTML = """
             }
             const screenshot = getRecentMt5ScreenshotPrice(selectedSymbol);
             const priceParam = screenshot ? '&price=' + encodeURIComponent(screenshot.price) : '';
-            fetch('/api/auto-scan?symbol=' + encodeURIComponent(selectedSymbol) + priceParam)
+            const tfControl = document.getElementById('timeframe');
+            const timeframe = tfControl ? tfControl.value : 'M15';
+            fetch('/api/auto-scan?symbol=' + encodeURIComponent(selectedSymbol) + '&timeframe=' + encodeURIComponent(timeframe) + priceParam)
                 .then(r => r.json())
                 .then(data => {
                     if (data.error) throw new Error(data.error);
@@ -3381,7 +3428,8 @@ HTML = """
             }
             result.innerHTML = '<div style="text-align:center;padding:14px;color:#00d4aa;">Evaluating the same closed-candle SMC checks as the Precision Scan…</div>';
             const priceParam = screenshot ? '&price=' + encodeURIComponent(screenshot.price) : '';
-            fetch('/api/auto-scan?symbol=' + encodeURIComponent(symbol) + priceParam)
+            const timeframe = document.getElementById('timeframe') ? document.getElementById('timeframe').value : 'M15';
+            fetch('/api/auto-scan?symbol=' + encodeURIComponent(symbol) + '&timeframe=' + encodeURIComponent(timeframe) + priceParam)
                 .then(r => r.json())
                 .then(data => {
                     if (data.error) throw new Error(data.error);
@@ -3671,7 +3719,7 @@ def api_strategy_status():
     checks = list(factor_state.get('factors', {}).keys())
     return jsonify({
         'symbol': symbol,
-        'strategy': 'SMC Factor Engine v1',
+        'strategy': 'SMC Factor Engine v1.1 (timeframe-selectable)',
         'mode': 'UNVALIDATED_REAL_MT5_DATA',
         'implemented_checks': checks,
         'factor_states': factor_state.get('factors', {}),
@@ -3699,11 +3747,14 @@ def api_auto_scan():
     """
     symbol = request.args.get('symbol', 'BTCUSDm')
     custom_price = request.args.get('price')
+    timeframe = request.args.get('timeframe', 'M15').upper()
+    if timeframe not in MT5_TIMEFRAMES:
+        return jsonify({'error': 'Timeframe must be M15, H1, H4, or D1'}), 400
     try:
         parsed_price = float(custom_price) if custom_price else None
     except (TypeError, ValueError):
         return jsonify({'error': 'Invalid screenshot price parameter'}), 400
-    result = auto_scan_symbol(symbol, custom_price=parsed_price)
+    result = auto_scan_symbol(symbol, custom_price=parsed_price, timeframe=timeframe)
     if result:
         return jsonify(result)
     return jsonify({'error': 'Unknown symbol'}), 400
@@ -3747,7 +3798,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.3.0',
+        'version': '9.4.0',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',

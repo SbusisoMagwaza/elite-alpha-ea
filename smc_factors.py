@@ -89,7 +89,7 @@ def sweep_bos(m15):
     return max(found,key=lambda x:x['confirm']) if found else None
 
 
-def evaluate_smc_factors(symbol, price, candles, calendar, calendar_status, now_sast, trigger_timeframe='M15'):
+def evaluate_smc_factors(symbol, price, candles, calendar, calendar_status, now_sast, trigger_timeframe='M15', historical=False):
     m15=candles.get('M15',[]); trigger_timeframe=str(trigger_timeframe or 'M15').upper()
     if trigger_timeframe not in ('M15','H1','H4','D1'): trigger_timeframe='M15'
     trigger=candles.get(trigger_timeframe,[]); h1=candles.get('H1',[]); h4=candles.get('H4',[]); d1=candles.get('D1',[])
@@ -196,8 +196,10 @@ def evaluate_smc_factors(symbol, price, candles, calendar, calendar_status, now_
         for n in ('PO3','Judas Swing','Session Quality','Asian Range Position'):
             f[n]=factor(False,detail='Install bridge v1.06 for broker time normalization')
 
-    # News filter uses the live calendar.
-    if calendar_status in ('live','stale'):
+    # A historical calendar series is not currently archived; never apply today's news to past bars.
+    if historical:
+        f['News Clear']=factor(False,detail='Historical event archive not available; excluded from backtest')
+    elif calendar_status in ('live','stale'):
         rel={'XAUUSDm':['US'],'USTECm':['US'],'US30m':['US'],'BTCUSDm':['US'],'EURUSDm':['US','EU'],'GBPUSDm':['US','GB'],'USDJPYm':['US','JP']}[symbol]
         nearby=[]
         now_utc=now_sast.astimezone(timezone.utc)
@@ -209,4 +211,5 @@ def evaluate_smc_factors(symbol, price, candles, calendar, calendar_status, now_
     else: f['News Clear']=factor(False,detail='Live calendar unavailable')
 
     available=sum(1 for x in f.values() if x['available']); passed=sum(1 for x in f.values() if x['available'] and x['pass'])
-    return {'factors':f,'direction':direction,'pattern':pattern,'atr':a,'trigger_timeframe':trigger_timeframe,'candidate':bool(direction and d1_ok and pattern and pattern['direction']==('BUY' if direction=='bullish' else 'SELL') and f['Displacement']['pass'] and f['News Clear']['pass']), 'score':passed,'available':available}
+    news_ok = True if historical else bool(f['News Clear']['available'] and f['News Clear']['pass'])
+    return {'factors':f,'direction':direction,'pattern':pattern,'atr':a,'trigger_timeframe':trigger_timeframe,'candidate':bool(direction and d1_ok and pattern and pattern['direction']==('BUY' if direction=='bullish' else 'SELL') and f['Displacement']['pass'] and news_ok), 'score':passed,'available':available}

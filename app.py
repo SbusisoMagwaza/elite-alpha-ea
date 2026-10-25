@@ -1,12 +1,13 @@
 """
-Elite Alpha EA v9.5.2 — compact scan cards and readable factor layout.
+Elite Alpha EA v9.5.3 — privacy, scan-history and UI correctness fixes.
 
 Safety changes:
-- No public proxy prices or static quote estimates are presented or scanned.
-- Trade-direction scanners stay in WAIT until real MT5 candle history is available.
-- Randomly generated market structure, bias, levels and scores have been removed.
-- Economic calendar events are fetched from FinanceCalendar.com with visible attribution.
-- News analysis is conditional scenario information, not a guaranteed prediction.
+- No public-market proxy prices or static quote estimates are presented or scanned.
+- Trade candidates require fresh MT5 quotes and closed candle history.
+- No account number or account balance is hard-coded into the public page.
+- Signal history is manually saved in the user's browser; it is not MT5 trade history.
+- Historical-test requests use the trigger timeframe shown on the scan card.
+- Strategy remains unvalidated; no win-probability claim or order execution is added.
 """
 
 from flask import Flask, request, jsonify, render_template_string
@@ -406,8 +407,8 @@ def build_news_scenario(event, symbol):
 # ============================================
 
 ACCOUNT_CONFIG = {
-    'balance': 369.19,        # R-amount, used for risk calc
-    'risk_pct': 1.0,          # Editable risk setting; no live lot sizing until contract specs are verified
+    'balance': 0.0,           # No account balance is hard-coded; settings are manual only.
+    'risk_pct': 1.0,          # Display-only risk percentage; lot sizing is not wired to scan results.
 }
 
 # No signal confidence percentage is presented until statistically calibrated.
@@ -570,54 +571,29 @@ def get_reference_levels(symbol):
 # Tracks daily loss limits based on signal history
 # ============================================
 
-def check_drawdown_status(daily_pnl=0.0, weekly_pnl=0.0, balance=369.19):
-    """Returns current drawdown status and warnings.
-    daily_pnl: Today's P&L in R (negative = loss)
-    weekly_pnl: This week's P&L in R
-    balance: Current account balance in R
-
-    Rules:
-      - Daily loss > 3% → STOP trading for today
-      - Daily loss > 5% → HARD STOP
-      - Weekly loss > 7% → STOP for week
-      - Weekly loss > 10% → HARD STOP
-      - 3 consecutive losses → PAUSE 1 hour
-    """
+def check_drawdown_status(daily_pnl=0.0, weekly_pnl=0.0, balance=0.0):
+    """Manual-only drawdown calculator; it is not synchronized to MT5."""
+    try:
+        balance, daily_pnl, weekly_pnl = float(balance), float(daily_pnl), float(weekly_pnl)
+    except (TypeError, ValueError):
+        balance, daily_pnl, weekly_pnl = 0.0, 0.0, 0.0
+    if not all(math.isfinite(x) for x in (balance, daily_pnl, weekly_pnl)) or balance <= 0:
+        return {'status':'NOT_CONFIGURED','message':'No valid manual balance is configured; drawdown was not calculated.',
+                'color':'#888888','can_trade':None,'daily_pnl':round(daily_pnl,2),'weekly_pnl':round(weekly_pnl,2),
+                'daily_loss_pct':None,'weekly_loss_pct':None,'max_daily_pct':5,'max_weekly_pct':10}
     daily_loss_pct = abs(daily_pnl) / balance * 100 if daily_pnl < 0 else 0
     weekly_loss_pct = abs(weekly_pnl) / balance * 100 if weekly_pnl < 0 else 0
-
-    status = 'OK'
-    message = '✅ Within safe limits'
-    color = '#00d4aa'
-    can_trade = True
-
+    status, message, color, can_trade = 'OK', 'Within manually entered limits; not synced to MT5.', '#00d4aa', True
     if daily_loss_pct >= 5 or weekly_loss_pct >= 10:
-        status = 'HARD_STOP'
-        message = '🚫 HARD STOP — Max loss reached. Stop trading.'
-        color = '#ff0000'
-        can_trade = False
+        status, message, color, can_trade = 'HARD_STOP', 'HARD STOP — manually entered max loss reached.', '#ff0000', False
     elif daily_loss_pct >= 3 or weekly_loss_pct >= 7:
-        status = 'WARNING'
-        message = '⚠️ WARNING — Approaching max loss. Consider stopping.'
-        color = '#ff6b6b'
-        can_trade = True
+        status, message, color = 'WARNING', 'WARNING — manually entered loss is approaching the limit.', '#ff6b6b'
     elif daily_loss_pct >= 2 or weekly_loss_pct >= 5:
-        status = 'CAUTION'
-        message = '⚡ CAUTION — Reduce position size.'
-        color = '#ffd700'
-
-    return {
-        'status': status,
-        'message': message,
-        'color': color,
-        'can_trade': can_trade,
-        'daily_pnl': round(daily_pnl, 2),
-        'weekly_pnl': round(weekly_pnl, 2),
-        'daily_loss_pct': round(daily_loss_pct, 2),
-        'weekly_loss_pct': round(weekly_loss_pct, 2),
-        'max_daily_pct': 5,
-        'max_weekly_pct': 10,
-    }
+        status, message, color = 'CAUTION', 'CAUTION — review manually entered risk.', '#ffd700'
+    return {'status':status,'message':message,'color':color,'can_trade':can_trade,
+            'daily_pnl':round(daily_pnl,2),'weekly_pnl':round(weekly_pnl,2),
+            'daily_loss_pct':round(daily_loss_pct,2),'weekly_loss_pct':round(weekly_loss_pct,2),
+            'max_daily_pct':5,'max_weekly_pct':10}
 
 # ============================================
 # v8.0 NEW: CONFLUENCE CATEGORIES
@@ -679,17 +655,15 @@ def group_factors_by_category(factors_dict):
 # ============================================
 
 def get_session_quality():
-    hour = datetime.utcnow().hour
-    if 12 <= hour < 16:
-        return {'session': 'EXCELLENT', 'detail': 'London/NY Overlap (Best Time!)', 'score': 95}
-    elif 7 <= hour < 12:
-        return {'session': 'GOOD', 'detail': 'London Session', 'score': 80}
-    elif 16 <= hour < 21:
-        return {'session': 'GOOD', 'detail': 'New York Session', 'score': 80}
-    elif 21 <= hour < 23 or 0 <= hour < 7:
-        return {'session': 'POOR', 'detail': 'Asian Session (Low Volatility)', 'score': 40}
-    else:
-        return {'session': 'FAIR', 'detail': 'Session Transition', 'score': 60}
+    """Return a rough fixed-UTC session label, never a performance percentage."""
+    hour = datetime.now(timezone.utc).hour
+    if 12 <= hour < 16: label, session = 'London/NY overlap window', 'OVERLAP'
+    elif 7 <= hour < 12: label, session = 'London schedule window', 'LONDON'
+    elif 16 <= hour < 21: label, session = 'New York schedule window', 'NEW YORK'
+    elif 21 <= hour < 23 or 0 <= hour < 7: label, session = 'Asian schedule window', 'ASIAN'
+    else: label, session = 'Session transition window', 'TRANSITION'
+    return {'session':session,'detail':label+' · fixed UTC schedule only; not a performance score',
+            'score':None,'schedule_only':True}
 
 # ============================================
 # LOT SIZE CALCULATOR
@@ -906,6 +880,7 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
     return {
         'symbol': symbol,
         'timeframe': f'{timeframe} trigger · H1/H4/D1 context',
+        'trigger_timeframe': timeframe,
         'price': round(price,5) if price is not None else None,
         'price_source': price_source,
         'direction': direction,
@@ -2185,7 +2160,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.5.2</div>
+            <div class="scanner-name">Precision Scanner v9.5.3</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2229,7 +2204,7 @@ HTML = """
                 </div>
             </div>
             <div class="htf-alignment" id="htfAlignment">-</div>
-            <div style="margin-top: 10px; font-size: 10px; color: #888;">Symbol: <span id="htfSymbolName" style="color: #00d4ff; font-weight: 700;">BTCUSDm</span></div>
+            <div style="margin-top: 10px; font-size: 10px; color: #888;">Symbol: <span id="htfSymbolName" style="color: #00d4ff; font-weight: 700;">XAUUSDm</span></div>
         </div>
 
         <!-- v8.0 NEW: DRAWDOWN TRACKER -->
@@ -2244,14 +2219,14 @@ HTML = """
                     <div class="dd-bar-track">
                         <div class="dd-bar-fill" id="dailyBar" style="width: 0%;"></div>
                     </div>
-                    <div class="dd-bar-value" id="dailyValue">R0 / R18.5 max (0%)</div>
+                    <div class="dd-bar-value" id="dailyValue">Not synced to MT5</div>
                 </div>
                 <div class="dd-bar-row">
                     <div class="dd-bar-label">Weekly</div>
                     <div class="dd-bar-track">
                         <div class="dd-bar-fill" id="weeklyBar" style="width: 0%;"></div>
                     </div>
-                    <div class="dd-bar-value" id="weeklyValue">R0 / R37 max (0%)</div>
+                    <div class="dd-bar-value" id="weeklyValue">Not synced to MT5</div>
                 </div>
             </div>
         </div>
@@ -2267,22 +2242,22 @@ HTML = """
                 <div style="font-size: 10px; color: #00d4aa; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px;">📡 VERIFIED EXNESS PRICE (MT5 ONLY)</div>
                 <div style="font-size: 22px; color: #00d4aa; font-weight: 800;" id="livePriceValue">—</div>
                 <div style="font-size: 10px; color: #888; margin-top: 2px;" id="livePriceSource">Loading...</div>
-                <div style="font-size: 10px; color: #ffd700; margin-top: 6px;">Only fresh MT5 quotes or a recent MT5 screenshot are shown; stale/missing data stays blank.</div>
+                <div style="font-size: 10px; color: #ffd700; margin-top: 6px;">Screenshot OCR is reference-only. A scan candidate still requires a fresh MT5 quote and closed candles.</div>
             </div>
 
             <!-- NEW: Symbol picker chips -->
             <div class="symbol-picker" id="symbolPicker">
-                <div class="symbol-chip active" data-symbol="BTCUSDm" onclick="pickSymbol(this, 'BTCUSDm')">BTC</div>
-                <div class="symbol-chip" data-symbol="XAUUSDm" onclick="pickSymbol(this, 'XAUUSDm')">XAU</div>
+                <div class="symbol-chip active" data-symbol="XAUUSDm" onclick="pickSymbol(this, 'XAUUSDm')">XAU</div>
+                <div class="symbol-chip" data-symbol="US30m" onclick="pickSymbol(this, 'US30m')">US30</div>
+                <div class="symbol-chip" data-symbol="USTECm" onclick="pickSymbol(this, 'USTECm')">NAS</div>
+                <div class="symbol-chip" data-symbol="BTCUSDm" onclick="pickSymbol(this, 'BTCUSDm')">BTC</div>
                 <div class="symbol-chip" data-symbol="EURUSDm" onclick="pickSymbol(this, 'EURUSDm')">EUR</div>
                 <div class="symbol-chip" data-symbol="GBPUSDm" onclick="pickSymbol(this, 'GBPUSDm')">GBP</div>
                 <div class="symbol-chip" data-symbol="USDJPYm" onclick="pickSymbol(this, 'USDJPYm')">JPY</div>
-                <div class="symbol-chip" data-symbol="USTECm" onclick="pickSymbol(this, 'USTECm')">NAS</div>
-                <div class="symbol-chip" data-symbol="US30m" onclick="pickSymbol(this, 'US30m')">US30</div>
                 <div class="symbol-chip" data-symbol="ALL" onclick="pickSymbol(this, 'ALL')">ALL</div>
             </div>
 
-            <button class="auto-scan-btn" id="autoScanBtn" onclick="runAutoScan()">🎯 SCAN <span id="scanBtnSymbol">BTC</span></button>
+            <button class="auto-scan-btn" id="autoScanBtn" onclick="runAutoScan()">🎯 SCAN <span id="scanBtnSymbol">XAU</span></button>
             <div class="auto-scan-result" id="autoScanResult"></div>
         </div>
 
@@ -2309,7 +2284,7 @@ HTML = """
                 <span class="ref-level-name">🟦</span>
                 <span class="ref-level-value" id="asianLow">--</span>
             </div>
-            <div style="font-size: 10px; color: #888; text-align: center; margin-top: 8px;">Symbol: <span id="refLevelsSymbol" style="color: #00d4ff; font-weight: 700;">BTCUSDm</span></div>
+            <div style="font-size: 10px; color: #888; text-align: center; margin-top: 8px;">Symbol: <span id="refLevelsSymbol" style="color: #00d4ff; font-weight: 700;">XAUUSDm</span></div>
         </div>
 
         <!-- LIVE ECONOMIC CALENDAR + CONDITIONAL SCENARIOS -->
@@ -2371,7 +2346,7 @@ HTML = """
         <div style="background: linear-gradient(135deg, rgba(0, 212, 170, 0.15), rgba(0, 150, 255, 0.1)); border: 2px solid rgba(0, 212, 170, 0.4); border-radius: 12px; padding: 14px; margin-bottom: 15px;">
             <div style="font-size: 13px; font-weight: 800; color: #00d4aa; margin-bottom: 6px;">📸 SMART CHART UPLOAD</div>
             <div style="font-size: 12px; color: #ccc; line-height: 1.5;">
-                Upload your MT5 chart. The app identifies the <strong style="color: #00d4aa;">symbol</strong> and reads the highlighted current-price box automatically. No price picker and no typing while the market moves.
+                Upload your MT5 chart for browser-side symbol/price OCR. The captured screenshot price is reference-only; a scan candidate still requires the live MT5 bridge and closed candles.
             </div>
         </div>
 
@@ -2404,13 +2379,13 @@ HTML = """
             <div class="form-group">
                 <label>💱 Symbol</label>
                 <select id="symbol" onchange="updateScanLivePricePreview(); useLivePrice();">
-                    <option value="XAUUSDm">XAUUSDm (Gold)</option>
-                    <option value="BTCUSDm" selected>BTCUSDm (Bitcoin)</option>
+                    <option value="XAUUSDm" selected>XAUUSDm (Gold)</option>
+                    <option value="US30m">US30m</option>
+                    <option value="USTECm">USTECm (NASDAQ)</option>
+                    <option value="BTCUSDm">BTCUSDm (Bitcoin)</option>
                     <option value="EURUSDm">EURUSDm</option>
                     <option value="GBPUSDm">GBPUSDm</option>
                     <option value="USDJPYm">USDJPYm</option>
-                    <option value="USTECm">USTECm (NASDAQ)</option>
-                    <option value="US30m">US30m</option>
                 </select>
             </div>
 
@@ -2438,120 +2413,10 @@ HTML = """
         <div class="loading" id="loading">
             <div class="spinner"></div>
             <p style="color: #00d4aa; font-weight: 600;">Checking MT5 data…</p>
-            <p style="color: #888; font-size: 12px; margin-top: 8px;">Reading the chart price; real candle analysis is not connected yet</p>
+            <p style="color: #888; font-size: 12px; margin-top: 8px;">Waiting for a fresh MT5 quote and closed-candle scan</p>
         </div>
 
-        <div id="result">
-            <div class="signal-header">
-                <div class="direction-wait" id="direction">WAIT</div>
-                <div class="confidence-value" id="confidence">—</div>
-                <div>
-                    <span class="badge gold" id="grade">Grade A+</span>
-                    <span class="badge" id="strategy">PO3</span>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="info-row"><span class="label">Entry:</span><span class="value" id="entry">-</span></div>
-                <div class="info-row"><span class="label">Stop Loss:</span><span class="value loss" id="sl">-</span></div>
-                <div class="info-row"><span class="label">Take Profit:</span><span class="value profit" id="tp">-</span></div>
-                <div class="info-row"><span class="label">Risk:Reward:</span><span class="value" id="rr">1:3.0</span></div>
-            </div>
-
-            <!-- LOT CALCULATOR RESULT (NEW v7.0) -->
-            <div class="lot-result">
-                <div class="lot-result-title">💰 Lot Size (Exness)</div>
-                <div class="lot-result-value" id="lotSizeValue">0.01</div>
-                <div class="lot-result-detail">
-                    <span style="color: #888;">SL Distance:</span>
-                    <span style="color: #fff; font-weight: 700;" id="slPips">-</span>
-                </div>
-                <div class="lot-result-detail">
-                    <span style="color: #888;">Risk Amount:</span>
-                    <span style="color: #ffd700; font-weight: 700;" id="lotRiskAmount">-</span>
-                </div>
-            </div>
-
-            <!-- MULTI-TP DISPLAY (NEW v7.0) -->
-            <div class="tp-levels">
-                <div class="tp-levels-title">🎯 Multiple Take Profit Levels</div>
-                <div class="tp-row">
-                    <span class="tp-label">TP1</span>
-                    <span class="tp-price" id="tp1Value">-</span>
-                    <span class="tp-pct">33%</span>
-                </div>
-                <div class="tp-row">
-                    <span class="tp-label">TP2</span>
-                    <span class="tp-price" id="tp2Value">-</span>
-                    <span class="tp-pct">33%</span>
-                </div>
-                <div class="tp-row">
-                    <span class="tp-label">TP3</span>
-                    <span class="tp-price" id="tp3Value">-</span>
-                    <span class="tp-pct">34%</span>
-                </div>
-            </div>
-
-            <div class="best-action" id="bestAction" style="display: none;">BEST TO BUY</div>
-
-            <div class="analysis-section">
-                <h4>📊 HTF Trend</h4>
-                <p class="main" id="htfTrend"></p>
-                <p class="sub" id="htfExplanation"></p>
-            </div>
-
-            <div class="analysis-section">
-                <h4>🏗️ Market Structure</h4>
-                <p class="main" id="marketStructure"></p>
-                <p class="sub" id="marketStructureExplanation"></p>
-            </div>
-
-            <div class="analysis-section">
-                <h4>💧 Liquidity Sweep</h4>
-                <p class="main" id="liquiditySweep"></p>
-                <p class="sub" id="liquidityExplanation"></p>
-            </div>
-
-            <div class="analysis-section">
-                <h4>🔄 Structure Shift</h4>
-                <p class="main" id="structureShift"></p>
-                <p class="sub" id="structureShiftExplanation"></p>
-            </div>
-
-            <div class="analysis-section">
-                <h4>🎯 Predicted Next Move</h4>
-                <p class="main" id="predictedMove"></p>
-                <p class="sub" id="predictedMoveExplanation"></p>
-            </div>
-
-            <div class="confluence-checklist">
-                <h4>📋 CONFLUENCE CHECKLIST</h4>
-                <div id="confluenceChecklistItems"></div>
-            </div>
-
-            <div class="confluence-checklist">
-                <h4>📋 CONFLUENCES</h4>
-                <div id="confluencesList"></div>
-            </div>
-
-            <div class="topdown-section">
-                <div class="topdown-header">🎯 TOP-DOWN ANALYSIS</div>
-                <div class="topdown-action" id="topdownAction">
-                    <span class="topdown-action-label">BEST ACTION NOW</span>
-                    <span class="topdown-action-text" id="topdownActionText">WAIT — candle feed required</span>
-                </div>
-                <div class="topdown-trigger-row">
-                    <div class="topdown-trigger-label">⏭️ NEXT TRIGGER</div>
-                    <div class="topdown-trigger-text" id="nextTriggerText">No verified candle trigger is available yet</div>
-                </div>
-                <div class="topdown-trigger-row">
-                    <div class="topdown-trigger-label">🚫 INVALIDATION</div>
-                    <div class="topdown-trigger-text" id="invalidationText">No verified invalidation level is available yet</div>
-                </div>
-            </div>
-
-            <button class="new-scan-btn" onclick="resetForm()">🔄 Scan Another Chart</button>
-        </div>
+        <div id="result" style="display: none;"></div>
     </div>
 
     <!-- SETTINGS TAB v8.1 — CLEANED UP -->
@@ -2560,7 +2425,7 @@ HTML = """
 
         <!-- MT5 Push Notifications Setup -->
         <div class="setup-instructions">
-            <h4>📱 MT5 Push Notifications Setup</h4>
+            <h4>📱 MT5 Notification Setup Guide</h4>
             <ol>
                 <li>Open MT5 Mobile app on your phone</li>
                 <li>Go to <code>Settings → MetaQuotes ID</code></li>
@@ -2569,17 +2434,17 @@ HTML = """
                 <li>Enable notifications & paste your MetaQuotes ID</li>
                 <li>Click <code>Test</code> to verify it works</li>
             </ol>
-            <p style="margin-top: 10px;">Pair MT5 with this app to get push alerts. Setup takes 2 min.</p>
+            <p style="margin-top: 10px;">These steps configure MT5's own notifications. The Elite Alpha web scanner does not currently send BUY/SELL phone alerts.</p>
         </div>
 
         <!-- v8.1 NEW: Editable Account Settings -->
         <div class="setup-instructions">
             <h4>💼 Account & Risk Settings</h4>
-            <p style="font-size: 11px; color: #888; margin-bottom: 12px;">Used for lot size calculation. Saved on this device.</p>
+            <p style="font-size: 11px; color: #888; margin-bottom: 12px;">Manual planning only; not synced to MT5 and not used to calculate scan lots. Saved on this device.</p>
 
             <div style="margin-bottom: 14px;">
-                <label style="display: block; color: #888; font-size: 11px; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px;">💰 Account Balance (R)</label>
-                <input type="number" id="settingsBalanceInput" value="369.19" min="100" step="0.01"
+                <label style="display: block; color: #888; font-size: 11px; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px;">💰 Manual Account Balance (R)</label>
+                <input type="number" id="settingsBalanceInput" value="" min="0.01" step="0.01" placeholder="Enter balance to calculate risk amounts"
                     style="width: 100%; padding: 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0,150,255,0.3); color: #00d4aa; border-radius: 8px; font-size: 16px; font-weight: 700;">
             </div>
 
@@ -2601,15 +2466,15 @@ HTML = """
             <div style="background: rgba(0,0,0,0.3); border-radius: 8px; padding: 12px; margin-top: 14px;">
                 <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px;">
                     <span style="color: #888;">Risk Amount:</span>
-                    <span id="liveRiskAmount" style="color: #ffd700; font-weight: 700;">R3.69</span>
+                    <span id="liveRiskAmount" style="color: #ffd700; font-weight: 700;">—</span>
                 </div>
                 <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px;">
                     <span style="color: #888;">Max Daily Loss (5%):</span>
-                    <span id="liveMaxDaily" style="color: #ff6b6b; font-weight: 700;">R18.46</span>
+                    <span id="liveMaxDaily" style="color: #ff6b6b; font-weight: 700;">—</span>
                 </div>
                 <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px;">
                     <span style="color: #888;">Max Weekly Loss (10%):</span>
-                    <span id="liveMaxWeekly" style="color: #ff6b6b; font-weight: 700;">R36.92</span>
+                    <span id="liveMaxWeekly" style="color: #ff6b6b; font-weight: 700;">—</span>
                 </div>
             </div>
 
@@ -2651,18 +2516,14 @@ HTML = """
             </button>
         </div>
 
-        <!-- App Info (simplified) -->
+        <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.5.2</span></div>
-            <div class="info-row"><span class="label">Account:</span><span class="value">Sbusiso</span></div>
-            <div class="info-row"><span class="label">Broker:</span><span class="value">Exness</span></div>
-            <div class="info-row"><span class="label">Account #:</span><span class="value">134644333</span></div>
-            <div class="info-row"><span class="label">SMC Core Checks:</span><span class="value">6 · Demo / unvalidated</span></div>
-            <div class="info-row"><span class="label">Symbols:</span><span class="value">7 pairs</span></div>
-            <p style="margin-top: 12px; font-size: 11px; color: #888; text-align: center;">
-                Precision Trading, Zero Emotion
-            </p>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.5.3</span></div>
+            <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
+            <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
+            <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
+            <p style="margin-top: 12px; font-size: 11px; color: #888; text-align: center;">Scanner only · no orders are placed</p>
         </div>
     </div>
 
@@ -2683,7 +2544,7 @@ HTML = """
 
     <script>
         // ============ STATE (NEW v7.0) ============
-        let selectedSymbol = 'BTCUSDm';
+        let selectedSymbol = 'XAUUSDm';
         let signalHistory = []; // Local cache of signals with outcomes
         let livePricesCache = {}; // fresh MT5 quotes only
         let economicEventsCache = [];
@@ -2694,11 +2555,11 @@ HTML = """
             loadTicker();
             loadSession();
             loadNews();
-            loadHTFBias('BTCUSDm');
+            loadHTFBias('XAUUSDm');
             loadHistory();
             loadNextSession();
             loadDrawdown();
-            loadReferenceLevels('BTCUSDm');
+            loadReferenceLevels('XAUUSDm');
             loadSettings(); // v8.1 NEW: Load saved settings
             updateLivePricePreview(); // v8.9 NEW: Show live price banner
             updateScanLivePricePreview(); // v8.9 NEW: same live price on Scan tab
@@ -2995,8 +2856,7 @@ HTML = """
             if (weeklyBar) weeklyBar.style.width = '0%';
         }
 
-        // Helper for drawdown bar values
-        const balance = 369.19;
+        // Risk displays are manual-only and blank until a balance is entered.
 
         // ============ v8.0 NEW: REFERENCE LEVELS ============
         function loadReferenceLevels(symbol) {
@@ -3067,7 +2927,7 @@ HTML = """
                 .then(r => r.json())
                 .then(data => {
                     document.getElementById('sessionName').textContent = data.detail;
-                    document.getElementById('sessionScore').textContent = data.session + ' (' + data.score + '%)';
+                    document.getElementById('sessionScore').textContent = 'SCHEDULE ONLY';
                 });
         }
 
@@ -3197,6 +3057,8 @@ HTML = """
             const color = data.direction === 'BUY' ? '#00d4aa' : data.direction === 'SELL' ? '#ff6b6b' : '#ffd84d';
             const symbol = String(data.symbol || '');
             const symbolKey = symbol.replace(/[^A-Za-z0-9]/g, '');
+            const requestedTf = String(data.trigger_timeframe || 'M15').toUpperCase();
+            const triggerTimeframe = ['M15','H1','H4','D1'].includes(requestedTf) ? requestedTf : 'M15';
             const price = Number(data.price) > 0 ? formatPriceForSymbol(symbol, data.price) : '—';
             const source = data.price_source === 'MT5 live bridge' ? '🟢 Exness live' : data.price_source === 'MT5 screenshot' ? '📷 MT5 screenshot' : 'Quote unavailable';
             const passed = Number(data.setup_score || 0);
@@ -3218,6 +3080,9 @@ HTML = """
             const setupType = candidate
                 ? 'Liquidity sweep → BOS/CHoCH → displacement' + (factors['Fair Value Gap']?.pass ? ' + FVG' : '')
                 : 'No complete setup confirmed';
+            const saveHistoryButton = candidate && [data.entry, data.sl, data.tp].every(v => Number.isFinite(Number(v)) && Number(v) > 0)
+                ? `<button type="button" data-symbol="${escapeHtml(symbol)}" data-direction="${escapeHtml(data.direction)}" data-entry="${Number(data.entry)}" data-sl="${Number(data.sl)}" data-tp="${Number(data.tp)}" data-timeframe="${triggerTimeframe}" onclick="saveRuleSignalFromButton(this)" style="margin-top:10px;padding:10px;width:100%;background:rgba(0,212,170,.10);border:1px solid rgba(0,212,170,.32);color:#68e0c4;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;">📜 Save candidate to Signal History</button>`
+                : '';
             const plan = candidate ? `<div style="margin-top:12px;">
                 <div style="color:#ffcc80;font-weight:800;font-size:11px;letter-spacing:.7px;margin-bottom:7px;">UNVALIDATED CANDIDATE · REAL MT5 DATA</div>
                 <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;">
@@ -3238,16 +3103,19 @@ HTML = """
                 <div style="font-size:12px;color:#d0d5db;line-height:1.45;margin-top:9px;">${escapeHtml(data.signal_reason || '')}</div>
                 <div style="margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;">${keyHtml}</div>
                 ${plan}
+                ${saveHistoryButton}
                 <details style="margin-top:11px;"><summary style="color:#74c9ea;font-size:11px;font-weight:700;cursor:pointer;padding:5px 0;">All 20 factor states · ${available} available</summary><div style="margin-top:6px;">${factorRows}</div></details>
-                <button type="button" onclick="runSMCBacktest('${symbolKey}')" style="margin-top:11px;padding:10px;width:100%;background:rgba(0,150,255,.10);border:1px solid rgba(0,150,255,.30);color:#91d7ff;border-radius:8px;font-size:11px;font-weight:700;">Run historical test (${escapeHtml(data.timeframe || 'M15')})</button>
+                <button type="button" onclick="runSMCBacktest('${symbolKey}','${triggerTimeframe}')" style="margin-top:11px;padding:10px;width:100%;background:rgba(0,150,255,.10);border:1px solid rgba(0,150,255,.30);color:#91d7ff;border-radius:8px;font-size:11px;font-weight:700;">Run historical test (${triggerTimeframe})</button>
                 <div id="smcBacktest${symbolKey}" style="margin-top:7px;font-size:11px;color:#bbb;"></div>
             </div>`;
         }
 
-        function runSMCBacktest(symbol) {
+        function runSMCBacktest(symbol, timeframe = 'M15') {
             const box = document.getElementById('smcBacktest' + String(symbol).replace(/[^A-Za-z0-9]/g,''));
-            if (box) box.textContent = 'Replaying closed MT5 candles…';
-            fetch('/api/strategy/backtest?symbol=' + encodeURIComponent(symbol) + '&timeframe=M15')
+            const requestedTf = String(timeframe || 'M15').toUpperCase();
+            const safeTf = ['M15','H1','H4','D1'].includes(requestedTf) ? requestedTf : 'M15';
+            if (box) box.textContent = 'Replaying closed ' + safeTf + ' MT5 candles…';
+            fetch('/api/strategy/backtest?symbol=' + encodeURIComponent(symbol) + '&timeframe=' + encodeURIComponent(safeTf))
                 .then(r => r.json())
                 .then(data => {
                     if (!box) return;
@@ -3287,22 +3155,32 @@ HTML = """
                 .catch(() => { resultDiv.innerHTML = '<div style="color:#ff6b6b;text-align:center;padding:14px;">Scan status unavailable. Refresh and try again.</div>'; });
         }
 
-        // ============ SIGNAL HISTORY (NEW v7.0) ============
-        function markOutcome(symbol, direction, entry, sl, tp) {
-            const signal = {
-                id: Date.now(),
-                symbol, direction,
-                entry: parseFloat(entry),
-                sl: parseFloat(sl),
-                tp: parseFloat(tp),
-                outcome: null,
-                timestamp: new Date().toISOString()
-            };
-            signalHistory.unshift(signal);
-            if (signalHistory.length > 20) signalHistory = signalHistory.slice(0, 20);
-            localStorage.setItem('eliteHistory', JSON.stringify(signalHistory));
-            loadHistory();
-            alert('✅ Signal saved! After the trade closes, come back here and mark WIN or LOSS to track your real win rate.');
+        // ============ SIGNAL HISTORY (manual browser record) ============
+        function saveRuleSignalFromButton(button) {
+            if (!button || button.disabled) return;
+            const symbol = String(button.dataset.symbol || '');
+            const direction = String(button.dataset.direction || '').toUpperCase();
+            const entry = Number(button.dataset.entry), sl = Number(button.dataset.sl), tp = Number(button.dataset.tp);
+            const timeframe = String(button.dataset.timeframe || 'M15').toUpperCase();
+            if (!symbol || !['BUY', 'SELL'].includes(direction) ||
+                ![entry, sl, tp].every(Number.isFinite) || [entry, sl, tp].some(v => v <= 0) ||
+                !['M15', 'H1', 'H4', 'D1'].includes(timeframe)) {
+                button.textContent = 'Cannot save: invalid result'; button.disabled = true; return;
+            }
+            try {
+                const saved = localStorage.getItem('eliteHistory');
+                if (saved) { const parsed = JSON.parse(saved); if (Array.isArray(parsed)) signalHistory = parsed; }
+            } catch (e) { /* keep the in-memory list if storage is blocked */ }
+            const signature = [symbol, direction, entry.toFixed(5), sl.toFixed(5), tp.toFixed(5), timeframe].join('|');
+            if (signalHistory.some(s => s && s.signature === signature)) {
+                button.textContent = '✅ Already saved'; button.disabled = true; return;
+            }
+            signalHistory.unshift({ id: Date.now(), symbol, direction, entry, sl, tp, timeframe,
+                signature, outcome: null, timestamp: new Date().toISOString() });
+            signalHistory = signalHistory.slice(0, 20);
+            try { localStorage.setItem('eliteHistory', JSON.stringify(signalHistory)); }
+            catch (e) { signalHistory.shift(); button.textContent = 'Storage unavailable'; button.disabled = true; return; }
+            loadHistory(); button.textContent = '✅ Saved to Signal History'; button.disabled = true;
         }
 
         function setOutcome(id, outcome) {
@@ -3315,14 +3193,10 @@ HTML = """
         }
 
         function loadHistory() {
-            const saved = localStorage.getItem('eliteHistory');
-            if (saved) {
-                try {
-                    signalHistory = JSON.parse(saved);
-                } catch (e) {
-                    signalHistory = [];
-                }
-            }
+            try {
+                const saved = localStorage.getItem('eliteHistory');
+                if (saved) { const parsed = JSON.parse(saved); signalHistory = Array.isArray(parsed) ? parsed : []; }
+            } catch (e) { signalHistory = Array.isArray(signalHistory) ? signalHistory : []; }
 
             const total = signalHistory.length;
             const wins = signalHistory.filter(s => s.outcome === 'win').length;
@@ -3368,12 +3242,12 @@ HTML = """
                 return `
                     <div class="history-item">
                         <div class="history-item-header">
-                            <span class="history-symbol">${s.symbol}</span>
-                            <span class="history-direction ${dirClass}">${s.direction}</span>
+                            <span class="history-symbol">${escapeHtml(s.symbol)}</span>
+                            <span class="history-direction ${dirClass}">${escapeHtml(s.direction)}</span>
                         </div>
                         <div class="history-detail">
-                            Entry: ${s.entry} · SL: ${s.sl} · TP: ${s.tp}
-                            <br>${new Date(s.timestamp).toLocaleString()}
+                            Entry: ${escapeHtml(s.entry)} · SL: ${escapeHtml(s.sl)} · TP: ${escapeHtml(s.tp)}
+                            ${s.timeframe ? ' · ' + escapeHtml(s.timeframe) : ''}<br>${escapeHtml(new Date(s.timestamp).toLocaleString())}
                         </div>
                         <div class="history-outcome">
                             <button class="outcome-btn win ${winBtn}" onclick="setOutcome(${s.id}, 'win')">✓ WIN</button>
@@ -3396,31 +3270,36 @@ HTML = """
 
         // v8.1 NEW: Settings save/load
         function saveSettings() {
-            const balance = parseFloat(document.getElementById('settingsBalanceInput').value) || 369.19;
-            const risk = parseFloat(document.querySelector('.risk-btn.active').dataset.risk);
-            const settings = { balance, risk };
-            localStorage.setItem('eliteSettings', JSON.stringify(settings));
-            updateLiveRiskCalc();
+            const balance = Number(document.getElementById('settingsBalanceInput').value);
+            const riskBtn = document.querySelector('.risk-btn.active');
+            const risk = riskBtn ? Number(riskBtn.dataset.risk) : 1.0;
             const cf = document.getElementById('saveConfirm');
-            cf.style.display = 'block';
-            setTimeout(() => { cf.style.display = 'none'; }, 2000);
+            if (!Number.isFinite(balance) || balance <= 0) {
+                cf.textContent = 'Enter a positive balance to calculate manual risk amounts.';
+                cf.style.color = '#ffd700'; cf.style.display = 'block'; updateLiveRiskCalc(); return;
+            }
+            try {
+                localStorage.setItem('eliteSettings', JSON.stringify({ balance, risk }));
+                updateLiveRiskCalc(); cf.textContent = '✅ Saved on this device.';
+                cf.style.color = '#00d4aa'; cf.style.display = 'block';
+                setTimeout(() => { cf.style.display = 'none'; }, 2500);
+            } catch (e) {
+                cf.textContent = 'Browser storage unavailable; settings were not saved.';
+                cf.style.color = '#ffd700'; cf.style.display = 'block';
+            }
         }
 
         function loadSettings() {
-            const saved = localStorage.getItem('eliteSettings');
-            if (saved) {
-                try {
-                    const s = JSON.parse(saved);
-                    if (s.balance) document.getElementById('settingsBalanceInput').value = s.balance;
-                    if (s.risk) {
-                        document.querySelectorAll('.risk-btn').forEach(b => {
-                            if (parseFloat(b.dataset.risk) === s.risk) {
-                                setRisk(s.risk, b);
-                            }
-                        });
-                    }
-                } catch (e) { /* ignore */ }
-            }
+            try {
+                const saved = localStorage.getItem('eliteSettings');
+                if (saved) {
+                    const s = JSON.parse(saved), balance = Number(s.balance), risk = Number(s.risk);
+                    if (Number.isFinite(balance) && balance > 0) document.getElementById('settingsBalanceInput').value = String(balance);
+                    if (Number.isFinite(risk)) document.querySelectorAll('.risk-btn').forEach(b => {
+                        if (Number(b.dataset.risk) === risk) setRisk(risk, b);
+                    });
+                }
+            } catch (e) { /* storage may be unavailable or contain older data */ }
             updateLiveRiskCalc();
         }
 
@@ -3443,18 +3322,17 @@ HTML = """
         }
 
         function updateLiveRiskCalc() {
-            const balance = parseFloat(document.getElementById('settingsBalanceInput').value) || 369.19;
+            const input = document.getElementById('settingsBalanceInput');
+            const balance = input ? Number(input.value) : NaN;
+            const validBalance = Number.isFinite(balance) && balance > 0;
             const riskBtn = document.querySelector('.risk-btn.active');
-            const riskPct = riskBtn ? parseFloat(riskBtn.dataset.risk) : 1.0;
-            const riskAmount = (balance * riskPct / 100).toFixed(2);
-            const maxDaily = (balance * 0.05).toFixed(2);
-            const maxWeekly = (balance * 0.10).toFixed(2);
-            const ra = document.getElementById('liveRiskAmount');
-            if (ra) ra.textContent = 'R' + riskAmount;
-            const md = document.getElementById('liveMaxDaily');
-            if (md) md.textContent = 'R' + maxDaily;
-            const mw = document.getElementById('liveMaxWeekly');
-            if (mw) mw.textContent = 'R' + maxWeekly;
+            const riskPct = riskBtn ? Number(riskBtn.dataset.risk) : 1.0;
+            const riskAmount = validBalance ? 'R' + (balance * riskPct / 100).toFixed(2) : '—';
+            const maxDaily = validBalance ? 'R' + (balance * 0.05).toFixed(2) : '—';
+            const maxWeekly = validBalance ? 'R' + (balance * 0.10).toFixed(2) : '—';
+            const ra = document.getElementById('liveRiskAmount'); if (ra) ra.textContent = riskAmount;
+            const md = document.getElementById('liveMaxDaily'); if (md) md.textContent = maxDaily;
+            const mw = document.getElementById('liveMaxWeekly'); if (mw) mw.textContent = maxWeekly;
         }
 
         // ============ MANUAL UPLOAD + ANALYZE (v8.3 OCR) ============
@@ -3497,7 +3375,7 @@ HTML = """
         async function runOCR(imageDataUrl) {
             const statusEl = document.getElementById("ocrStatus");
             const resultEl = document.getElementById("ocrResult");
-            const selectedBeforeScan = document.getElementById("symbol").value || "BTCUSDm";
+            const selectedBeforeScan = document.getElementById("symbol").value || "XAUUSDm";
             statusEl.innerHTML = "🔍 Finding the highlighted MT5 price...";
             statusEl.style.color = "#ffd700";
             resultEl.innerHTML = "";
@@ -3544,9 +3422,9 @@ HTML = """
             if (screenshotPrice && Number(screenshotPrice) > 0) {
                 saveMt5ScreenshotPrice(detectedSymbol, screenshotPrice);
                 setScanPriceDisplay(detectedSymbol, screenshotPrice, "🟢 MT5 screenshot price");
-                statusEl.innerHTML = "✅ Read MT5 current price: " + formatPriceForSymbol(detectedSymbol, screenshotPrice) + " for " + detectedSymbol + ". This price will be used.";
+                statusEl.innerHTML = "✅ OCR captured " + formatPriceForSymbol(detectedSymbol, screenshotPrice) + " for " + detectedSymbol + ". Reference only; a fresh MT5 bridge quote is still required for a candidate.";
                 statusEl.style.color = "#00d4aa";
-                resultEl.innerHTML = `<div style="padding: 9px; background: rgba(0,212,170,0.08); border: 1px solid rgba(0,212,170,0.25); border-radius: 7px; color: #00d4aa; font-size: 11px; text-align: center;">📸 Exact highlighted MT5 price captured and saved for this symbol.</div>`;
+                resultEl.innerHTML = `<div style="padding: 9px; background: rgba(0,212,170,0.08); border: 1px solid rgba(0,212,170,0.25); border-radius: 7px; color: #00d4aa; font-size: 11px; text-align: center;">📸 Screenshot price saved as a temporary reference. It does not replace a fresh MT5 bridge quote.</div>`;
             } else {
                 // Do not show a proxy or estimated price when OCR fails.
                 updateScanLivePricePreview();
@@ -3899,7 +3777,7 @@ def api_strategy_status():
 
 @app.route('/api/htf-bias')
 def api_htf_bias():
-    symbol = request.args.get('symbol', 'BTCUSDm')
+    symbol = request.args.get('symbol', 'XAUUSDm')
     result = get_htf_bias(symbol)
     if result:
         return jsonify(result)
@@ -3910,7 +3788,7 @@ def api_auto_scan():
     """UPDATED v8.7: Accepts ?symbol= and ?price= params.
     price param: optional real price from user's MT5 (more accurate than placeholder).
     """
-    symbol = request.args.get('symbol', 'BTCUSDm')
+    symbol = request.args.get('symbol', 'XAUUSDm')
     custom_price = request.args.get('price')
     timeframe = request.args.get('timeframe', 'M15').upper()
     if timeframe not in MT5_TIMEFRAMES:
@@ -3939,7 +3817,7 @@ def api_next_session():
 
 @app.route('/api/reference-levels')
 def api_reference_levels():
-    symbol = request.args.get('symbol', 'BTCUSDm')
+    symbol = request.args.get('symbol', 'XAUUSDm')
     levels = get_reference_levels(symbol)
     if levels:
         return jsonify(levels)
@@ -3963,12 +3841,14 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.5.2',
+        'version': '9.5.3',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
             'deterministic_20_factor_engine_unvalidated', 'no_uncalibrated_confidence_percent',
             'strategy_validation_status_endpoint', 'screenshot_symbol_price_ocr',
+            'manual_candidate_signal_history', 'trigger_timeframe_backtest_wiring',
+            'no_public_account_identifier_or_default_balance',
         ],
         'strategy_validation': 'UNVALIDATED_REAL_MT5_DATA',
     })

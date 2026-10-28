@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.5.3 — privacy, scan-history and UI correctness fixes.
+Elite Alpha EA v9.5.4 — compact session-label hotfix; scan rules unchanged.
 
 Safety changes:
 - No public-market proxy prices or static quote estimates are presented or scanned.
@@ -655,15 +655,19 @@ def group_factors_by_category(factors_dict):
 # ============================================
 
 def get_session_quality():
-    """Return a rough fixed-UTC session label, never a performance percentage."""
+    """Return a short session name and Johannesburg clock time; no performance score."""
     hour = datetime.now(timezone.utc).hour
-    if 12 <= hour < 16: label, session = 'London/NY overlap window', 'OVERLAP'
-    elif 7 <= hour < 12: label, session = 'London schedule window', 'LONDON'
-    elif 16 <= hour < 21: label, session = 'New York schedule window', 'NEW YORK'
-    elif 21 <= hour < 23 or 0 <= hour < 7: label, session = 'Asian schedule window', 'ASIAN'
-    else: label, session = 'Session transition window', 'TRANSITION'
-    return {'session':session,'detail':label+' · fixed UTC schedule only; not a performance score',
-            'score':None,'schedule_only':True}
+    if 12 <= hour < 16: label, session = 'London/NY Overlap', 'OVERLAP'
+    elif 7 <= hour < 12: label, session = 'London Session', 'LONDON'
+    elif 16 <= hour < 21: label, session = 'New York Session', 'NEW YORK'
+    elif 21 <= hour < 23 or 0 <= hour < 7: label, session = 'Asian Session', 'ASIAN'
+    else: label, session = 'Session Transition', 'TRANSITION'
+    return {
+        'session': session,
+        'detail': label,
+        'current_time_sast': johannesburg_now().strftime('%H:%M'),
+        'score': None,
+    }
 
 # ============================================
 # LOT SIZE CALCULATOR
@@ -2160,7 +2164,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.5.3</div>
+            <div class="scanner-name">Precision Scanner v9.5.4</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2519,7 +2523,7 @@ HTML = """
         <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.5.3</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.5.4</span></div>
             <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
             <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
             <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
@@ -2921,13 +2925,15 @@ HTML = """
                 });
         }
 
-        // ============ SESSION (unchanged) ============
+        // ============ SESSION ============
         function loadSession() {
             fetch('/api/session')
                 .then(r => r.json())
                 .then(data => {
-                    document.getElementById('sessionName').textContent = data.detail;
-                    document.getElementById('sessionScore').textContent = 'SCHEDULE ONLY';
+                    const name = document.getElementById('sessionName');
+                    const clock = document.getElementById('sessionScore');
+                    if (name) name.textContent = data.detail || data.session || 'Session unavailable';
+                    if (clock) clock.textContent = data.current_time_sast ? 'SAST ' + data.current_time_sast : '';
                 });
         }
 
@@ -3841,14 +3847,14 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.5.3',
+        'version': '9.5.4',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
             'deterministic_20_factor_engine_unvalidated', 'no_uncalibrated_confidence_percent',
             'strategy_validation_status_endpoint', 'screenshot_symbol_price_ocr',
             'manual_candidate_signal_history', 'trigger_timeframe_backtest_wiring',
-            'no_public_account_identifier_or_default_balance',
+            'no_public_account_identifier_or_default_balance', 'compact_session_label_and_sast_clock',
         ],
         'strategy_validation': 'UNVALIDATED_REAL_MT5_DATA',
     })

@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.5.4 — compact session-label hotfix; scan rules unchanged.
+Elite Alpha EA v9.6.0 — rich scan explanation UI; rule-based signals unchanged.
 
 Safety changes:
 - No public-market proxy prices or static quote estimates are presented or scanned.
@@ -849,6 +849,12 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
     factors = analysis.get('factors', {})
     available = sum(1 for item in factors.values() if item.get('available'))
     passed = sum(1 for item in factors.values() if item.get('available') and item.get('pass'))
+    check_ratio_pct = round(100 * passed / available) if available else None
+    core_gate_names = ['HTF Alignment', 'Liquidity Sweep', 'BOS', 'Displacement', 'News Clear']
+    core_gates = []
+    for name in core_gate_names:
+        item = factors.get(name, {'available':False, 'pass':None, 'detail':'Not calculated'})
+        core_gates.append({'name':name, 'available':bool(item.get('available')), 'pass':item.get('pass'), 'detail':str(item.get('detail') or '')})
     pattern = analysis.get('pattern')
     direction = pattern.get('direction') if analysis.get('candidate') and pattern else 'WAIT'
 
@@ -863,7 +869,8 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
         reason = 'WAIT: screenshot price is reference-only; a fresh MT5 quote is required for a candidate.'
         direction = 'WAIT'
     elif direction == 'WAIT':
-        reason = f'WAIT: {passed}/{available} available SMC checks pass; the live candle conditions do not form a candidate.'
+        blockers = [f"{gate['name']}: {gate['detail']}" for gate in core_gates if not gate['available'] or not gate['pass']]
+        reason = 'WAIT: Required checks missing — ' + ' · '.join(blockers) + '.' if blockers else 'WAIT: The live candle conditions do not form a candidate.'
     else:
         reason = f'UNVALIDATED CANDIDATE: {passed}/{available} available SMC checks pass. This uses live MT5 data, but the rule has not passed historical/backtest validation.'
 
@@ -892,6 +899,9 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
         'setup_score': passed,
         'setup_total': 20,
         'available_factor_count': available,
+        'check_ratio_pct': check_ratio_pct,
+        'check_ratio_label': 'Available SMC checks passed; not a win probability.',
+        'core_gates': core_gates,
         'grade': '—',
         'strategy': 'SMC Factor Engine v1 · unvalidated',
         'signal_mode': 'UNVALIDATED_CANDIDATE_REAL_MT5' if direction in ('BUY','SELL') else 'WAIT',
@@ -2164,7 +2174,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.5.4</div>
+            <div class="scanner-name">Precision Scanner v9.6.0</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2523,7 +2533,7 @@ HTML = """
         <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.5.4</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.6.0</span></div>
             <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
             <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
             <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
@@ -3060,60 +3070,112 @@ HTML = """
 
         function renderRuleScanCard(data) {
             const candidate = data.signal_available === true && ['BUY','SELL'].includes(data.direction);
-            const color = data.direction === 'BUY' ? '#00d4aa' : data.direction === 'SELL' ? '#ff6b6b' : '#ffd84d';
+            const direction = String(data.direction || 'WAIT');
+            const directionColor = direction === 'BUY' ? '#00d4aa' : direction === 'SELL' ? '#ff6b6b' : '#ffd84d';
             const symbol = String(data.symbol || '');
             const symbolKey = symbol.replace(/[^A-Za-z0-9]/g, '');
             const requestedTf = String(data.trigger_timeframe || 'M15').toUpperCase();
             const triggerTimeframe = ['M15','H1','H4','D1'].includes(requestedTf) ? requestedTf : 'M15';
             const price = Number(data.price) > 0 ? formatPriceForSymbol(symbol, data.price) : '—';
-            const source = data.price_source === 'MT5 live bridge' ? '🟢 Exness live' : data.price_source === 'MT5 screenshot' ? '📷 MT5 screenshot' : 'Quote unavailable';
+            const source = data.price_source === 'MT5 live bridge' ? 'EXNESS LIVE' : data.price_source === 'MT5 screenshot' ? 'SCREENSHOT REFERENCE' : 'QUOTE UNAVAILABLE';
             const passed = Number(data.setup_score || 0);
             const total = Number(data.setup_total || 20);
             const available = Number(data.available_factor_count || 0);
+            const ratioPct = available > 0 ? Math.round(100 * passed / available) : null;
             const factors = data.factors || {};
-            const keyFactors = ['HTF Alignment','Liquidity Sweep','BOS','Displacement'];
-            const keyHtml = keyFactors.map(name => {
+            const coreDefs = ['HTF Alignment','Liquidity Sweep','BOS','Displacement','News Clear'];
+            const coreGates = Array.isArray(data.core_gates) ? data.core_gates : coreDefs.map(name => {
                 const f = factors[name] || {available:false,pass:null,detail:'Not calculated'};
-                const state = f.available === false ? 'N/A' : f.pass ? 'PASS' : 'WAIT';
-                const stateColor = f.available === false ? '#8c9299' : f.pass ? '#00d4aa' : '#ffcc80';
-                return `<div style="padding:9px;background:rgba(255,255,255,.035);border-radius:8px;min-height:58px;"><div style="display:flex;justify-content:space-between;gap:5px;"><strong style="font-size:11px;color:#ddd;">${escapeHtml(name)}</strong><b style="font-size:10px;color:${stateColor};">${state}</b></div><div style="font-size:10px;color:#858c96;margin-top:4px;line-height:1.3;">${escapeHtml(f.detail || '')}</div></div>`;
+                return {name, available:f.available, pass:f.pass, detail:f.detail || ''};
+            });
+            const coreHtml = coreGates.map(g => {
+                const state = g.available === false ? 'N/A' : g.pass ? 'PASS' : 'WAIT';
+                const stateColor = g.available === false ? '#8c9299' : g.pass ? '#00d4aa' : '#ffcc80';
+                return `<div style="padding:11px;background:rgba(255,255,255,.035);border-radius:9px;min-height:74px;border:1px solid rgba(255,255,255,.045);">
+                    <div style="display:flex;justify-content:space-between;gap:6px;align-items:center;"><strong style="font-size:11px;color:#e8eef4;">${escapeHtml(g.name)}</strong><b style="font-size:10px;color:${stateColor};">${state}</b></div>
+                    <div style="font-size:10px;color:#9da7b1;margin-top:5px;line-height:1.4;">${escapeHtml(g.detail || '')}</div>
+                </div>`;
             }).join('');
-            const factorRows = Object.entries(factors).map(([name, f]) => {
-                const state = f.available === false ? 'N/A' : f.pass ? 'PASS' : 'NO';
-                const stateColor = f.available === false ? '#8c9299' : f.pass ? '#00d4aa' : '#ffcc80';
-                return `<div style="display:grid;grid-template-columns:minmax(118px,.8fr) 38px minmax(0,1.5fr);gap:6px;padding:7px 2px;border-bottom:1px solid rgba(255,255,255,.045);align-items:start;font-size:11px;"><span style="color:#ddd;">${escapeHtml(name)}</span><b style="color:${stateColor};">${state}</b><span style="color:#9299a2;line-height:1.35;">${escapeHtml(f.detail || '')}</span></div>`;
+            const coreBlockers = coreGates.filter(g => g.available === false || !g.pass);
+            const blockerText = coreBlockers.map(g => g.name).join(' · ');
+            const categoryDefs = {
+                'STRUCTURE':['Market Structure','BOS','CHoCH','Breaker Block','Mitigation Block'],
+                'LIQUIDITY':['Liquidity Sweep','Equal Highs/Lows'],
+                'ENTRY':['Order Block','Fair Value Gap','Displacement','Premium/Discount','PO3','Judas Swing','OTE'],
+                'CONTEXT':['Session Quality','News Clear','HTF Alignment','Volume Confirmation','Asian Range Position','PDH/PDL Distance']
+            };
+            const categoriesHtml = Object.entries(categoryDefs).map(([category,names]) => {
+                const rows = names.filter(name => factors[name]).map(name => {
+                    const f = factors[name];
+                    const state = f.available === false ? 'N/A' : f.pass ? 'PASS' : 'NO';
+                    const color = f.available === false ? '#8c9299' : f.pass ? '#00d4aa' : '#ffcc80';
+                    return `<div style="display:grid;grid-template-columns:minmax(112px,.8fr) 40px minmax(0,1.5fr);gap:7px;padding:8px 2px;border-bottom:1px solid rgba(255,255,255,.05);align-items:start;font-size:11px;">
+                        <span style="color:#e2e8ee;">${escapeHtml(name)}</span><b style="color:${color};">${state}</b><span style="color:#9da7b1;line-height:1.4;">${escapeHtml(f.detail || '')}</span>
+                    </div>`;
+                }).join('');
+                const group = names.map(name => factors[name]).filter(Boolean);
+                const nAvailable = group.filter(f => f.available !== false).length;
+                const nPassed = group.filter(f => f.available !== false && f.pass).length;
+                const pct = nAvailable ? Math.round(nPassed / nAvailable * 100) + '%' : '—';
+                return `<details open style="margin-top:8px;background:rgba(0,0,0,.24);border:1px solid rgba(70,130,170,.18);border-radius:9px;padding:9px 11px;">
+                    <summary style="cursor:pointer;display:flex;justify-content:space-between;color:#8fd5f2;font-size:11px;font-weight:800;letter-spacing:.7px;"><span>${category}</span><span>${nPassed}/${nAvailable} available · ${pct}</span></summary>
+                    <div style="margin-top:7px;">${rows}</div>
+                </details>`;
             }).join('');
             const setupType = candidate
                 ? 'Liquidity sweep → BOS/CHoCH → displacement' + (factors['Fair Value Gap']?.pass ? ' + FVG' : '')
                 : 'No complete setup confirmed';
-            const saveHistoryButton = candidate && [data.entry, data.sl, data.tp].every(v => Number.isFinite(Number(v)) && Number(v) > 0)
-                ? `<button type="button" data-symbol="${escapeHtml(symbol)}" data-direction="${escapeHtml(data.direction)}" data-entry="${Number(data.entry)}" data-sl="${Number(data.sl)}" data-tp="${Number(data.tp)}" data-timeframe="${triggerTimeframe}" onclick="saveRuleSignalFromButton(this)" style="margin-top:10px;padding:10px;width:100%;background:rgba(0,212,170,.10);border:1px solid rgba(0,212,170,.32);color:#68e0c4;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;">📜 Save candidate to Signal History</button>`
-                : '';
-            const plan = candidate ? `<div style="margin-top:12px;">
-                <div style="color:#ffcc80;font-weight:800;font-size:11px;letter-spacing:.7px;margin-bottom:7px;">UNVALIDATED CANDIDATE · REAL MT5 DATA</div>
+            const scorePctText = ratioPct === null ? '—' : ratioPct + '%';
+            const plan = candidate ? `<section style="margin-top:12px;padding:13px;border:1px solid rgba(0,212,170,.30);background:rgba(0,212,170,.055);border-radius:11px;">
+                <div style="color:#ffcc80;font-weight:800;font-size:11px;letter-spacing:.8px;margin-bottom:9px;">RULE-BASED CANDIDATE · NOT VALIDATED</div>
                 <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;">
-                    <div style="padding:9px 5px;text-align:center;background:rgba(255,255,255,.04);border-radius:8px;"><small style="color:#8c9299;">ENTRY</small><div style="color:#fff;font-weight:800;margin-top:4px;font-size:13px;">${formatPriceForSymbol(symbol,data.entry)}</div></div>
-                    <div style="padding:9px 5px;text-align:center;background:rgba(255,107,107,.07);border-radius:8px;"><small style="color:#ff8d8d;">STOP</small><div style="color:#fff;font-weight:800;margin-top:4px;font-size:13px;">${formatPriceForSymbol(symbol,data.sl)}</div></div>
-                    <div style="padding:9px 5px;text-align:center;background:rgba(0,212,170,.07);border-radius:8px;"><small style="color:#00d4aa;">TARGET</small><div style="color:#fff;font-weight:800;margin-top:4px;font-size:13px;">${formatPriceForSymbol(symbol,data.tp)}</div></div>
-                </div><div style="text-align:right;color:#8c9299;font-size:10px;margin-top:5px;">Rule target ${escapeHtml(data.rr || '—')} · no win probability</div>
-            </div>` : `<div style="margin-top:10px;padding:10px;border-left:3px solid #ffcc80;background:rgba(255,204,128,.055);border-radius:6px;color:#e8d6ad;font-size:12px;line-height:1.45;">No trade plan: the core SMC conditions did not align. Entry, stop and target are intentionally omitted.</div>`;
-            return `<div style="padding:14px;background:rgba(0,0,0,.30);border:1px solid rgba(60,140,180,.28);border-radius:12px;margin-bottom:10px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-                    <div><div style="font-size:12px;color:#6fc7ef;font-weight:800;">${escapeHtml(symbol)} · ${escapeHtml(data.timeframe || '')}</div><div style="font-size:10px;color:#8b9199;margin-top:3px;">${escapeHtml(source)} · ${price}</div></div>
-                    <div style="font-size:22px;font-weight:900;color:${color};">${candidate ? 'UNVALIDATED ' : ''}${escapeHtml(data.direction || 'WAIT')}</div>
+                    <div style="padding:10px 5px;text-align:center;background:rgba(255,255,255,.04);border-radius:8px;"><small style="color:#8c9299;">ENTRY</small><div style="color:#fff;font-weight:800;margin-top:4px;font-size:13px;">${formatPriceForSymbol(symbol,data.entry)}</div></div>
+                    <div style="padding:10px 5px;text-align:center;background:rgba(255,107,107,.07);border-radius:8px;"><small style="color:#ff8d8d;">STOP LOSS</small><div style="color:#fff;font-weight:800;margin-top:4px;font-size:13px;">${formatPriceForSymbol(symbol,data.sl)}</div></div>
+                    <div style="padding:10px 5px;text-align:center;background:rgba(0,212,170,.07);border-radius:8px;"><small style="color:#00d4aa;">TAKE PROFIT</small><div style="color:#fff;font-weight:800;margin-top:4px;font-size:13px;">${formatPriceForSymbol(symbol,data.tp)}</div></div>
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:11px;">
-                    <div style="padding:8px;background:rgba(255,255,255,.035);border-radius:7px;"><small style="color:#8c9299;">SMC TYPE</small><div style="color:#ddd;font-weight:700;margin-top:3px;font-size:11px;">${escapeHtml(setupType)}</div></div>
-                    <div style="padding:8px;background:rgba(255,255,255,.035);border-radius:7px;"><small style="color:#8c9299;">CHECKLIST</small><div style="color:#ffd84d;font-weight:800;margin-top:3px;">${passed} pass · ${available}/${total} available</div></div>
-                </div>
-                <div style="font-size:12px;color:#d0d5db;line-height:1.45;margin-top:9px;">${escapeHtml(data.signal_reason || '')}</div>
-                <div style="margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;">${keyHtml}</div>
+                <div style="text-align:right;color:#9da7b1;font-size:10px;margin-top:7px;">Rule target ${escapeHtml(data.rr || '—')} · checklist ratio is not a win probability</div>
+            </section>` : `<section style="margin-top:12px;padding:13px;border-left:4px solid #ffd36a;background:rgba(255,204,128,.055);border-radius:8px;">
+                <div style="font-size:12px;color:#ffe3a3;font-weight:800;">WAIT — NO TRADE PLAN</div>
+                <div style="font-size:12px;color:#d8d0c0;line-height:1.5;margin-top:5px;">${escapeHtml(data.signal_reason || 'Required closed-bar conditions have not aligned.')}</div>
+                ${blockerText ? `<div style="font-size:10px;color:#ffcc80;margin-top:7px;">Required checks still waiting: ${escapeHtml(blockerText)}</div>` : ''}
+            </section>`;
+            const saveHistoryButton = candidate && [data.entry,data.sl,data.tp].every(v => Number.isFinite(Number(v)) && Number(v) > 0)
+                ? `<button type="button" data-symbol="${escapeHtml(symbol)}" data-direction="${escapeHtml(direction)}" data-entry="${Number(data.entry)}" data-sl="${Number(data.sl)}" data-tp="${Number(data.tp)}" data-timeframe="${triggerTimeframe}" onclick="saveRuleSignalFromButton(this)" style="margin-top:10px;padding:11px;width:100%;background:rgba(0,212,170,.10);border:1px solid rgba(0,212,170,.32);color:#68e0c4;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;">📜 Save candidate to Signal History</button>` : '';
+            const topDownText = candidate
+                ? 'The rule conditions formed a candidate. Verify symbol, price, risk and stop in MT5; no order is placed by this app.'
+                : (coreBlockers.length ? 'Wait for: ' + coreBlockers.map(g => g.detail || g.name).join(' · ') : (data.signal_reason || 'Wait for a new closed-bar setup.'));
+            const invalidationText = candidate
+                ? 'Candidate invalidation is the displayed stop-loss; review it against the live MT5 chart before any manual decision.'
+                : 'No valid entry or invalidation level exists while the setup is WAIT.';
+            return `<article style="padding:14px;background:linear-gradient(180deg,rgba(5,21,31,.98),rgba(0,0,0,.88));border:1px solid rgba(70,145,190,.34);border-radius:14px;margin-bottom:12px;color:#edf3f8;">
+                <header style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:2px 0 10px;border-bottom:1px solid rgba(255,255,255,.08);">
+                    <div><div style="font-size:13px;color:#83d2f0;font-weight:900;">${escapeHtml(symbol)} · ${escapeHtml(data.timeframe || '')}</div><div style="font-size:10px;color:#a5aeb7;margin-top:4px;">${escapeHtml(source)} · ${price} · ${escapeHtml(data.timestamp || '')}</div></div>
+                    <div style="font-size:22px;font-weight:900;color:${directionColor};text-align:right;">${candidate ? 'UNVALIDATED ' : ''}${escapeHtml(direction)}</div>
+                </header>
+                <section style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px;">
+                    <div style="padding:11px;background:rgba(255,255,255,.04);border-radius:9px;"><div style="font-size:10px;color:#8c9299;font-weight:800;letter-spacing:.7px;">SETUP TYPE</div><div style="color:#e9eef2;font-weight:700;margin-top:5px;font-size:12px;">${escapeHtml(setupType)}</div></div>
+                    <div style="padding:11px;background:rgba(255,255,255,.04);border-radius:9px;"><div style="font-size:10px;color:#8c9299;font-weight:800;letter-spacing:.7px;">SMC CHECKLIST</div><div style="color:#ffd84d;font-weight:900;margin-top:2px;font-size:23px;">${scorePctText}</div><div style="color:#c9d1d8;font-size:10px;">${passed}/${available} available checks pass · not win probability</div></div>
+                </section>
                 ${plan}
+                <section style="margin-top:12px;padding:12px;background:rgba(255,255,255,.025);border-radius:10px;">
+                    <div style="font-size:11px;color:#80cdea;font-weight:900;letter-spacing:.8px;margin-bottom:8px;">CORE SMC DECISION</div>
+                    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;">${coreHtml}</div>
+                </section>
+                <section style="margin-top:12px;padding:12px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.06);border-radius:10px;">
+                    <div style="font-size:11px;color:#80cdea;font-weight:900;letter-spacing:.8px;">TOP-DOWN ANALYSIS</div>
+                    <div style="margin-top:8px;"><b style="font-size:10px;color:#ffd36a;">BEST ACTION</b><div style="font-size:12px;line-height:1.45;margin-top:3px;">${candidate ? 'Review candidate manually; no order is placed.' : 'WAIT'}</div></div>
+                    <div style="margin-top:9px;"><b style="font-size:10px;color:#8fd5f2;">NEXT TRIGGER</b><div style="font-size:11px;color:#cbd3da;line-height:1.45;margin-top:3px;">${escapeHtml(topDownText)}</div></div>
+                    <div style="margin-top:9px;"><b style="font-size:10px;color:#ff9b9b;">INVALIDATION</b><div style="font-size:11px;color:#cbd3da;line-height:1.45;margin-top:3px;">${escapeHtml(invalidationText)}</div></div>
+                </section>
+                <section style="margin-top:12px;">
+                    <div style="font-size:11px;color:#80cdea;font-weight:900;letter-spacing:.8px;margin:0 0 5px;">SMC CONFLUENCE BY CATEGORY</div>
+                    ${categoriesHtml}
+                </section>
                 ${saveHistoryButton}
-                <details style="margin-top:11px;"><summary style="color:#74c9ea;font-size:11px;font-weight:700;cursor:pointer;padding:5px 0;">All 20 factor states · ${available} available</summary><div style="margin-top:6px;">${factorRows}</div></details>
-                <button type="button" onclick="runSMCBacktest('${symbolKey}','${triggerTimeframe}')" style="margin-top:11px;padding:10px;width:100%;background:rgba(0,150,255,.10);border:1px solid rgba(0,150,255,.30);color:#91d7ff;border-radius:8px;font-size:11px;font-weight:700;">Run historical test (${triggerTimeframe})</button>
+                <button type="button" onclick="runSMCBacktest('${symbolKey}','${triggerTimeframe}')" style="margin-top:10px;padding:11px;width:100%;background:rgba(0,150,255,.10);border:1px solid rgba(0,150,255,.30);color:#91d7ff;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;">Run historical test (${triggerTimeframe})</button>
                 <div id="smcBacktest${symbolKey}" style="margin-top:7px;font-size:11px;color:#bbb;"></div>
-            </div>`;
+                <div style="margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(255,215,0,.045);color:#ffd899;font-size:10px;line-height:1.45;">The checklist ratio is not a win-rate estimate. Candidate levels are unvalidated, and this web app never places orders.</div>
+            </article>`;
         }
 
         function runSMCBacktest(symbol, timeframe = 'M15') {
@@ -3847,7 +3909,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.5.4',
+        'version': '9.6.0',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
@@ -3855,6 +3917,7 @@ def health():
             'strategy_validation_status_endpoint', 'screenshot_symbol_price_ocr',
             'manual_candidate_signal_history', 'trigger_timeframe_backtest_wiring',
             'no_public_account_identifier_or_default_balance', 'compact_session_label_and_sast_clock',
+            'detailed_smc_scan_reasons', 'checklist_ratio_not_probability',
         ],
         'strategy_validation': 'UNVALIDATED_REAL_MT5_DATA',
     })

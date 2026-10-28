@@ -655,18 +655,24 @@ def group_factors_by_category(factors_dict):
 # ============================================
 
 def get_session_quality():
-    """Return a short session name and Johannesburg clock time; no performance score."""
+    """Simple legacy-style session label/score. Score is a time-window heuristic, not win probability."""
     hour = datetime.now(timezone.utc).hour
-    if 12 <= hour < 16: label, session = 'London/NY Overlap', 'OVERLAP'
-    elif 7 <= hour < 12: label, session = 'London Session', 'LONDON'
-    elif 16 <= hour < 21: label, session = 'New York Session', 'NEW YORK'
-    elif 21 <= hour < 23 or 0 <= hour < 7: label, session = 'Asian Session', 'ASIAN'
-    else: label, session = 'Session Transition', 'TRANSITION'
+    if 12 <= hour < 16:
+        quality, detail, score = 'EXCELLENT', 'London/NY Overlap', 95
+    elif 7 <= hour < 12:
+        quality, detail, score = 'GOOD', 'London Session', 80
+    elif 16 <= hour < 21:
+        quality, detail, score = 'GOOD', 'New York Session', 80
+    elif 21 <= hour < 23 or 0 <= hour < 7:
+        quality, detail, score = 'POOR', 'Asian Session', 40
+    else:
+        quality, detail, score = 'FAIR', 'Session Transition', 60
     return {
-        'session': session,
-        'detail': label,
+        'session': quality,
+        'detail': detail,
+        'score': score,
+        'score_kind': 'time-of-day heuristic, not win probability',
         'current_time_sast': johannesburg_now().strftime('%H:%M'),
-        'score': None,
     }
 
 # ============================================
@@ -2189,8 +2195,9 @@ HTML = """
                 <span class="session-dot"></span>
                 <span id="sessionName">Loading...</span>
             </div>
-            <span id="sessionScore" style="color: #00d4aa; font-weight: 700;">-</span>
+            <span id="sessionScore" title="Time-of-day heuristic only; not trade confidence" style="color: #00d4aa; font-weight: 700;">-</span>
         </div>
+        <div style="font-size:9px;color:#77818b;text-align:right;margin:-8px 3px 10px;">Session timing heuristic · not a win probability</div>
 
         <!-- v8.0 NEW: SESSION COUNTDOWN -->
         <div class="session-countdown">
@@ -2203,6 +2210,23 @@ HTML = """
                 <div style="font-size: 10px; color: #888;" id="countdownActive">-- SAST</div>
             </div>
         </div>
+
+        <!-- Compact home summary: browser-saved history and current selected-symbol feed -->
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 16px;">
+            <div style="background:rgba(0,0,0,.34);border:1px solid rgba(0,150,255,.22);border-radius:12px;padding:12px 6px;text-align:center;">
+                <div id="signalsTodayStat" style="font-size:22px;font-weight:900;color:#00d4aa;">0</div>
+                <div style="font-size:9px;color:#8e9aa4;letter-spacing:.6px;">SAVED TODAY</div>
+            </div>
+            <div style="background:rgba(0,0,0,.34);border:1px solid rgba(0,150,255,.22);border-radius:12px;padding:12px 6px;text-align:center;">
+                <div id="manualWinRateStat" style="font-size:22px;font-weight:900;color:#ffd84d;">—</div>
+                <div style="font-size:9px;color:#8e9aa4;letter-spacing:.6px;">MANUAL WIN RATE</div>
+            </div>
+            <div style="background:rgba(0,0,0,.34);border:1px solid rgba(0,150,255,.22);border-radius:12px;padding:12px 6px;text-align:center;">
+                <div id="bridgeFeedStat" style="font-size:14px;font-weight:900;color:#ffd84d;">CHECKING</div>
+                <div style="font-size:9px;color:#8e9aa4;letter-spacing:.6px;">SELECTED MT5 FEED</div>
+            </div>
+        </div>
+        <div style="font-size:9px;color:#737d86;margin:-10px 2px 12px;">History and win rate use saved/manual results on this device; they are not a strategy backtest.</div>
 
         <!-- HTF BIAS BANNER (NEW v7.0) -->
         <div class="htf-banner" id="htfBanner" style="display: none;">
@@ -2575,14 +2599,16 @@ HTML = """
             loadDrawdown();
             loadReferenceLevels('XAUUSDm');
             loadSettings(); // v8.1 NEW: Load saved settings
-            updateLivePricePreview(); // v8.9 NEW: Show live price banner
-            updateScanLivePricePreview(); // v8.9 NEW: same live price on Scan tab
+            updateLivePricePreview(); // Show live price banner
+            updateScanLivePricePreview(); // Same live price on Scan tab
+            loadBridgeSummary();
             // Refresh drawdown and countdown every 60 seconds
             setInterval(() => {
                 loadNextSession();
                 loadDrawdown();
                 updateLivePricePreview(); // v8.9 NEW
-                updateScanLivePricePreview(); // v8.9 NEW
+                updateScanLivePricePreview();
+                loadBridgeSummary();
             }, 60000);
             // Refresh others every 5 min
             setInterval(() => {
@@ -2824,7 +2850,8 @@ HTML = """
             if (scanSymbolEl && symbol !== 'ALL') scanSymbolEl.value = symbol;
             loadHTFBias(symbol);
             if (symbol !== 'ALL') loadReferenceLevels(symbol);
-            updateLivePricePreview(); // v8.9 NEW: refresh live price banner when symbol changes
+            updateLivePricePreview(); // refresh selected-symbol price
+            loadBridgeSummary();
             // v8.6: Update scan button to show which symbol will be scanned
             const scanBtnLabel = document.getElementById('scanBtnSymbol');
             if (scanBtnLabel) {
@@ -2942,9 +2969,28 @@ HTML = """
                 .then(data => {
                     const name = document.getElementById('sessionName');
                     const clock = document.getElementById('sessionScore');
-                    if (name) name.textContent = data.detail || data.session || 'Session unavailable';
-                    if (clock) clock.textContent = data.current_time_sast ? 'SAST ' + data.current_time_sast : '';
+                    if (name) name.textContent = data.detail || 'Session unavailable';
+                    if (clock) clock.textContent = data.session && Number.isFinite(Number(data.score))
+                        ? data.session + ' (' + Number(data.score) + '%)'
+                        : '';
                 });
+        }
+
+        function loadBridgeSummary() {
+            const badge = document.getElementById('bridgeFeedStat');
+            if (!badge) return;
+            const symbol = selectedSymbol;
+            if (symbol === 'ALL') { badge.textContent = 'SELECT ONE'; badge.style.color = '#ffd84d'; return; }
+            fetch('/api/prices')
+                .then(r => r.json())
+                .then(data => {
+                    livePricesCache = data;
+                    const item = data[symbol];
+                    const live = item && item.source === 'mt5' && Number(item.price) > 0;
+                    badge.textContent = live ? 'LIVE' : 'NO FEED';
+                    badge.style.color = live ? '#00d4aa' : '#ffcc80';
+                })
+                .catch(() => { badge.textContent = 'NO FEED'; badge.style.color = '#ffcc80'; });
         }
 
         // ============ LIVE ECONOMIC CALENDAR + CONDITIONAL EVENT SCENARIOS ============
@@ -3267,6 +3313,11 @@ HTML = """
             } catch (e) { signalHistory = Array.isArray(signalHistory) ? signalHistory : []; }
 
             const total = signalHistory.length;
+            const todayKey = new Intl.DateTimeFormat('en-CA', {timeZone:'Africa/Johannesburg', year:'numeric', month:'2-digit', day:'2-digit'}).format(new Date());
+            const savedToday = signalHistory.filter(s => {
+                const stamp = Date.parse(s.timestamp || '');
+                return Number.isFinite(stamp) && new Intl.DateTimeFormat('en-CA', {timeZone:'Africa/Johannesburg', year:'numeric', month:'2-digit', day:'2-digit'}).format(new Date(stamp)) === todayKey;
+            }).length;
             const wins = signalHistory.filter(s => s.outcome === 'win').length;
             const losses = signalHistory.filter(s => s.outcome === 'loss').length;
             const be = signalHistory.filter(s => s.outcome === 'be').length;
@@ -3281,7 +3332,11 @@ HTML = """
             const lossesEl = document.getElementById('lossesCount');
             if (lossesEl) lossesEl.textContent = losses;
             const wrEl = document.getElementById('realWinRate');
-            if (wrEl) wrEl.textContent = winRate + '%';
+            if (wrEl) wrEl.textContent = decided > 0 ? winRate + '%' : '—';
+            const todayStat = document.getElementById('signalsTodayStat');
+            if (todayStat) todayStat.textContent = String(savedToday);
+            const manualWinStat = document.getElementById('manualWinRateStat');
+            if (manualWinStat) manualWinStat.textContent = decided > 0 ? winRate + '%' : '—';
 
             // v8.1 NEW: Update Settings tab stats (if elements exist)
             const histTotal = document.getElementById('historyTotal');

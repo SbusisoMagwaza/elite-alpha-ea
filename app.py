@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.6.0 — rich scan explanation UI; rule-based signals unchanged.
+Elite Alpha EA v9.7.0 — additive feed-readiness diagnostics; scan rules unchanged.
 
 Safety changes:
 - No public-market proxy prices or static quote estimates are presented or scanned.
@@ -2180,7 +2180,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.6.0</div>
+            <div class="scanner-name">Precision Scanner v9.7.0</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2297,6 +2297,17 @@ HTML = """
 
             <button class="auto-scan-btn" id="autoScanBtn" onclick="runAutoScan()">🎯 SCAN <span id="scanBtnSymbol">XAU</span></button>
             <div class="auto-scan-result" id="autoScanResult"></div>
+        </div>
+
+        <!-- v9.7: additive live-feed and candle-readiness diagnostics -->
+        <div class="setup-instructions" id="feedDiagnosticsCard" style="margin:14px 0;border-color:rgba(0,150,255,.28);">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                <h4 style="margin:0;">📡 MT5 Data Readiness</h4>
+                <button type="button" onclick="loadFeedDiagnostics()" style="padding:7px 10px;background:rgba(0,150,255,.12);border:1px solid rgba(0,150,255,.35);border-radius:7px;color:#8fd5f2;font-weight:700;">Refresh</button>
+            </div>
+            <div id="feedDiagnosticsStatus" style="margin:8px 0;color:#ffd36a;font-size:11px;">Checking Exness bridge…</div>
+            <div id="feedDiagnosticsContent"></div>
+            <div style="margin-top:8px;color:#89939c;font-size:9px;line-height:1.4;">Ready means fresh quotes and closed bars arrived. It does not mean a trade setup is present or validated.</div>
         </div>
 
         <!-- v8.0 NEW: REFERENCE LEVELS -->
@@ -2557,7 +2568,7 @@ HTML = """
         <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.6.0</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.7.0</span></div>
             <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
             <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
             <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
@@ -2602,6 +2613,7 @@ HTML = """
             updateLivePricePreview(); // Show live price banner
             updateScanLivePricePreview(); // Same live price on Scan tab
             loadBridgeSummary();
+            loadFeedDiagnostics();
             // Refresh drawdown and countdown every 60 seconds
             setInterval(() => {
                 loadNextSession();
@@ -2609,6 +2621,7 @@ HTML = """
                 updateLivePricePreview(); // v8.9 NEW
                 updateScanLivePricePreview();
                 loadBridgeSummary();
+                loadFeedDiagnostics();
             }, 60000);
             // Refresh others every 5 min
             setInterval(() => {
@@ -2852,6 +2865,7 @@ HTML = """
             if (symbol !== 'ALL') loadReferenceLevels(symbol);
             updateLivePricePreview(); // refresh selected-symbol price
             loadBridgeSummary();
+            loadFeedDiagnostics();
             // v8.6: Update scan button to show which symbol will be scanned
             const scanBtnLabel = document.getElementById('scanBtnSymbol');
             if (scanBtnLabel) {
@@ -2991,6 +3005,55 @@ HTML = """
                     badge.style.color = live ? '#00d4aa' : '#ffcc80';
                 })
                 .catch(() => { badge.textContent = 'NO FEED'; badge.style.color = '#ffcc80'; });
+        }
+
+        function loadFeedDiagnostics() {
+            const statusEl = document.getElementById('feedDiagnosticsStatus');
+            const contentEl = document.getElementById('feedDiagnosticsContent');
+            if (!statusEl || !contentEl) return;
+            statusEl.textContent = 'Checking Exness bridge and closed candles…';
+            fetch('/api/mt5/status')
+                .then(r => r.json())
+                .then(data => {
+                    const focusSymbols = ['XAUUSDm','US30m','USTECm'];
+                    const quoteMap = data.quotes || {};
+                    const candleMap = data.candles || {};
+                    const rows = focusSymbols.map(symbol => {
+                        const quote = quoteMap[symbol];
+                        const candle = candleMap[symbol] || {};
+                        const frames = candle.timeframes || {};
+                        const quoteOk = !!(quote && Number(quote.price) > 0);
+                        const levels = ['M15','H1','H4','D1'].map(tf => {
+                            const f = frames[tf] || {};
+                            const ready = f.ready === true;
+                            const color = ready ? '#00d4aa' : '#ffcc80';
+                            return `<span style="color:${color};white-space:nowrap;">${tf} ${Number(f.bars || 0)}/${Number(f.minimum_bars || 0)}</span>`;
+                        }).join('<span style="color:#52606b;padding:0 4px;">·</span>');
+                        const ready = quoteOk && ['M15','H1','H4','D1'].every(tf => frames[tf] && frames[tf].ready === true);
+                        const quoteText = quoteOk
+                            ? `LIVE ${formatPriceForSymbol(symbol, quote.price)} · ${Number(quote.age_seconds || 0).toFixed(1)}s`
+                            : 'NO FRESH QUOTE';
+                        return `<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06);">
+                            <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+                                <strong style="color:#e7edf2;font-size:12px;">${escapeHtml(symbol)}</strong>
+                                <b style="color:${ready?'#00d4aa':quoteOk?'#ffd36a':'#ff8b8b'};font-size:10px;">${ready?'DATA READY':quoteOk?'LOADING BARS':'WAIT'}</b>
+                            </div>
+                            <div style="font-size:10px;color:${quoteOk?'#00d4aa':'#ff9b9b'};margin-top:4px;">${escapeHtml(quoteText)}</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:5px;font-size:9px;">${levels}</div>
+                        </div>`;
+                    }).join('');
+                    const allQuotes = focusSymbols.every(symbol => !!quoteMap[symbol]);
+                    statusEl.textContent = data.configured
+                        ? (allQuotes ? 'Bridge token configured · fresh quotes received for all three focus markets.' : 'Bridge token configured · waiting for fresh quotes on one or more focus markets.')
+                        : 'MT5 bridge token is not configured on the server.';
+                    statusEl.style.color = allQuotes ? '#00d4aa' : '#ffd36a';
+                    contentEl.innerHTML = rows;
+                })
+                .catch(() => {
+                    statusEl.textContent = 'Could not read bridge status. Refresh or check the deployed app.';
+                    statusEl.style.color = '#ff9b9b';
+                    contentEl.innerHTML = '';
+                });
         }
 
         // ============ LIVE ECONOMIC CALENDAR + CONDITIONAL EVENT SCENARIOS ============
@@ -3964,7 +4027,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.6.0',
+        'version': '9.7.0',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
@@ -3973,6 +4036,7 @@ def health():
             'manual_candidate_signal_history', 'trigger_timeframe_backtest_wiring',
             'no_public_account_identifier_or_default_balance', 'compact_session_label_and_sast_clock',
             'detailed_smc_scan_reasons', 'checklist_ratio_not_probability',
+            'focus_symbol_quote_and_candle_readiness_panel',
         ],
         'strategy_validation': 'UNVALIDATED_REAL_MT5_DATA',
     })

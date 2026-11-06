@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.7.0 — additive feed-readiness diagnostics; scan rules unchanged.
+Elite Alpha EA v9.7.1 — calendar fallback plus feed diagnostics; scan rules unchanged.
 
 Safety changes:
 - No public-market proxy prices or static quote estimates are presented or scanned.
@@ -106,7 +106,9 @@ def get_mt5_candle_status(symbol):
 
 FINANCE_CALENDAR_API = 'https://www.financecalendar.com/wp-json/fc/v1/calendar'
 FINANCE_CALENDAR_ATTRIBUTION = 'https://www.financecalendar.com'
-ECONOMIC_CALENDAR_CACHE = {'events': [], 'fetched_at': 0.0, 'status': 'empty'}
+FAIR_ECONOMY_WEEKLY_API = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json'
+FAIR_ECONOMY_ATTRIBUTION = 'https://www.forexfactory.com/calendar'
+ECONOMIC_CALENDAR_CACHE = {'events': [], 'fetched_at': 0.0, 'status': 'empty', 'source': None, 'attribution_url': None}
 ECONOMIC_CALENDAR_TTL_SECONDS = 300
 ECONOMIC_CALENDAR_COUNTRIES = 'US'
 
@@ -115,7 +117,7 @@ def _is_trading_relevant_event(item):
     """Keep only the four U.S. releases the partner asked to follow."""
     country = str(item.get('country') or '').strip().upper()
     currency = str(item.get('currency') or '').strip().upper()
-    if country not in ('US', 'UNITED STATES') and currency != 'USD':
+    if country not in ('US', 'UNITED STATES', 'USD') and currency != 'USD':
         return False
     text = (str(item.get('title') or item.get('name') or item.get('event') or '') + ' ' + str(item.get('category') or '')).lower()
     # Limit the phone calendar to U.S. CPI, PPI, NFP/payrolls, and FOMC events.
@@ -135,7 +137,10 @@ def _calendar_datetime_utc(value):
 
 
 def get_economic_calendar_data(force_refresh=False):
-    """Fetch real upcoming medium/high-impact macro events; never substitute fixtures."""
+    """Fetch a real U.S. calendar; use the published weekly feed if the primary is blocked.
+
+    If all live sources fail, return unavailable and keep the scan's news gate closed.
+    """
     global ECONOMIC_CALENDAR_CACHE
     now_epoch = time.time()
     if (not force_refresh and ECONOMIC_CALENDAR_CACHE.get('fetched_at')
@@ -148,102 +153,93 @@ def get_economic_calendar_data(force_refresh=False):
     now_utc = local_now.astimezone(timezone.utc)
     from_date = local_now.date()
     to_date = from_date + timedelta(days=7)
-    params = urllib.parse.urlencode({
-        'from': from_date.isoformat(),
-        'to': to_date.isoformat(),
-        'country': ECONOMIC_CALENDAR_COUNTRIES,
-        'tz': 'Africa/Johannesburg',
-        'limit': 100,
-    })
-    url = FINANCE_CALENDAR_API + '?' + params
-    req = urllib.request.Request(url, headers={
-        'User-Agent': 'EliteAlphaEA/9.0 (economic calendar; visible attribution in app)',
-        'Accept': 'application/json',
-    })
+    params = urllib.parse.urlencode({'from':from_date.isoformat(),'to':to_date.isoformat(),
+                                     'country':'US','tz':'Africa/Johannesburg','limit':100})
+    sources = [
+        ('FinanceCalendar.com', FINANCE_CALENDAR_API + '?' + params, FINANCE_CALENDAR_ATTRIBUTION,
+         {'User-Agent':'EliteAlphaEA/9.7 (economic calendar; attribution shown in app)','Accept':'application/json'}),
+        ('Fair Economy / Forex Factory', FAIR_ECONOMY_WEEKLY_API, FAIR_ECONOMY_ATTRIBUTION,
+         {'User-Agent':'Mozilla/5.0 EliteAlphaEA calendar reader','Accept':'application/json'}),
+    ]
+    source_events = None
+    source_name = None
+    source_attribution = None
+    errors = []
+    for name, url, attribution, headers in sources:
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=8) as response:
+                raw = json.loads(response.read().decode('utf-8'))
+            events = raw.get('events', []) if isinstance(raw, dict) else raw
+            if not isinstance(events, list):
+                raise ValueError('Calendar provider returned an unexpected response shape')
+            source_events, source_name, source_attribution = events, name, attribution
+            break
+        except Exception as exc:
+            errors.append(name + ': ' + str(exc)[:120])
 
-    try:
-        with urllib.request.urlopen(req, timeout=8) as response:
-            raw = json.loads(response.read().decode('utf-8'))
-        source_events = raw.get('events', []) if isinstance(raw, dict) else raw
-        if not isinstance(source_events, list):
-            raise ValueError('Calendar provider returned an unexpected response shape')
-
-        normalized = []
-        for item in source_events:
-            if not isinstance(item, dict):
-                continue
-            impact = str(item.get('impact') or '').strip().lower()
-            if impact not in ('high', 'medium') or not _is_trading_relevant_event(item):
-                continue
-            title = str(item.get('title') or item.get('name') or item.get('event') or '').strip()
-            if not title:
-                continue
-            country = str(item.get('country') or '').strip()
-            release_raw = item.get('release_at_utc') or item.get('time_utc')
-            release_dt = _calendar_datetime_utc(release_raw)
-            if release_dt:
-                # Keep upcoming events and just-released events while their actual
-                # values may still be populating. Exclude stale past placeholders.
-                if release_dt < now_utc - timedelta(minutes=90):
-                    continue
-                if release_dt > now_utc + timedelta(days=8):
-                    continue
-                local_release = release_dt.astimezone(JOHANNESBURG_TZ or timezone.utc)
-                local_date = local_release.strftime('%Y-%m-%d')
-                local_time = item.get('time_local') or local_release.strftime('%H:%M')
-            else:
-                local_date = str(item.get('date') or '')[:10]
-                local_time = str(item.get('time_local') or 'Time TBC')
-
-            slug_source = str(item.get('id') or item.get('series_code') or title).lower()
-            slug = re.sub(r'[^a-z0-9]+', '-', slug_source).strip('-')[:60]
-            event_id = f'{slug}-{local_date or "date-tbc"}'
-            currency = str(item.get('currency') or {
-                'US': 'USD', 'GB': 'GBP', 'UK': 'GBP', 'EU': 'EUR',
-                'JP': 'JPY', 'CN': 'CNY'
-            }.get(country.upper(), '')).upper()
-            normalized.append({
-                'id': event_id,
-                'title': title,
-                'country': country,
-                'currency': currency,
-                'category': str(item.get('category') or ''),
-                'impact': impact.upper(),
-                'date_local': local_date,
-                'time_local': str(local_time),
-                'release_at_utc': release_dt.isoformat() if release_dt else str(release_raw or ''),
-                'status': str(item.get('status') or ('released' if item.get('actual') is not None else 'scheduled')),
-                'consensus': (item.get('consensus', item.get('forecast')) if str(item.get('consensus', item.get('forecast')) or '').strip() else None),
-                'prior': (item.get('prior', item.get('previous')) if str(item.get('prior', item.get('previous')) or '').strip() else None),
-                'actual': (item.get('actual') if str(item.get('actual') or '').strip() else None),
-                'unit': str(item.get('unit') or ''),
-                'source_name': str(item.get('source_name') or ''),
-                'source_url': (str(item.get('source_url') or '') if str(item.get('source_url') or '').startswith('https://') else ''),
-                'url': (str(item.get('url') or FINANCE_CALENDAR_ATTRIBUTION) if str(item.get('url') or FINANCE_CALENDAR_ATTRIBUTION).startswith('https://') else FINANCE_CALENDAR_ATTRIBUTION),
-            })
-
-        normalized.sort(key=lambda e: e.get('release_at_utc') or '9999')
-        normalized = normalized[:10]
-        ECONOMIC_CALENDAR_CACHE = {
-            'events': normalized,
-            'fetched_at': now_epoch,
-            'updated_at': local_now.strftime('%Y-%m-%d %H:%M:%S SAST'),
-            'status': 'live',
-            'message': '',
-        }
-        return dict(ECONOMIC_CALENDAR_CACHE)
-    except Exception as exc:
+    if source_events is None:
         if ECONOMIC_CALENDAR_CACHE.get('events'):
             stale = dict(ECONOMIC_CALENDAR_CACHE)
             stale['status'] = 'stale'
-            stale['message'] = 'Calendar refresh failed; showing cached events. Verify event times before use.'
+            stale['message'] = 'Live calendars failed; showing cached events. Verify event times before use.'
+            stale['error'] = ' | '.join(errors)
             return stale
-        return {
-            'events': [], 'fetched_at': 0, 'updated_at': None,
-            'status': 'unavailable',
-            'message': 'Live calendar could not be reached. No placeholder events are shown.',
-            'error': str(exc)[:180],
-        }
+        return {'events':[],'fetched_at':0,'updated_at':None,'status':'unavailable',
+                'message':'All live calendar sources are unavailable. News-gated scans remain WAIT.',
+                'source':'unavailable','attribution_url':FINANCE_CALENDAR_ATTRIBUTION,
+                'error':' | '.join(errors)}
+
+    country_to_currency={'US':'USD','GB':'GBP','UK':'GBP','EU':'EUR','JP':'JPY','CA':'CAD','AU':'AUD','NZ':'NZD','CH':'CHF','CN':'CNY'}
+    currency_to_country={'USD':'US','GBP':'GB','EUR':'EU','JPY':'JP','CAD':'CA','AUD':'AU','NZD':'NZ','CHF':'CH','CNY':'CN'}
+    normalized=[]
+    for item in source_events:
+        if not isinstance(item,dict): continue
+        impact=str(item.get('impact') or '').strip().lower()
+        if impact not in ('high','medium') or not _is_trading_relevant_event(item): continue
+        title=str(item.get('title') or item.get('name') or item.get('event') or '').strip()
+        if not title: continue
+        raw_country=str(item.get('country') or '').strip().upper()
+        currency=str(item.get('currency') or (raw_country if raw_country in currency_to_country else country_to_currency.get(raw_country,''))).upper()
+        country=currency_to_country.get(raw_country,raw_country)
+        if country in ('UNITED STATES','USA'): country='US'
+        if not country and currency: country=currency_to_country.get(currency,'')
+        release_raw=item.get('release_at_utc') or item.get('time_utc') or item.get('date_iso') or item.get('date')
+        release_dt=_calendar_datetime_utc(release_raw)
+        if release_dt:
+            if release_dt < now_utc-timedelta(minutes=90) or release_dt > now_utc+timedelta(days=8): continue
+            local_release=release_dt.astimezone(JOHANNESBURG_TZ or timezone.utc)
+            local_date=local_release.strftime('%Y-%m-%d')
+            local_time=item.get('time_local') or item.get('time') or local_release.strftime('%H:%M')
+        else:
+            local_date=str(item.get('date') or '')[:10]
+            local_time=str(item.get('time_local') or item.get('time') or 'Time TBC')
+        slug_source=str(item.get('id') or item.get('series_code') or (title+local_date)).lower()
+        slug=re.sub(r'[^a-z0-9]+','-',slug_source).strip('-')[:60]
+        event_id=f'{slug}-{local_date or "date-tbc"}'
+        source_url = str(item.get('source_url') or '')
+        event_url = str(item.get('url') or '')
+        if not source_url.startswith('https://'): source_url = source_attribution
+        if not event_url.startswith('https://'): event_url = source_attribution
+        normalized.append({
+            'id':event_id,'title':title,'country':country,'currency':currency,
+            'category':str(item.get('category') or item.get('event_category') or ''),
+            'impact':impact.upper(),'date_local':local_date,'time_local':str(local_time),
+            'release_at_utc':release_dt.isoformat() if release_dt else str(release_raw or ''),
+            'status':str(item.get('status') or ('released' if item.get('actual') is not None else 'scheduled')),
+            'consensus':(item.get('consensus',item.get('forecast')) if str(item.get('consensus',item.get('forecast')) or '').strip() else None),
+            'prior':(item.get('prior',item.get('previous')) if str(item.get('prior',item.get('previous')) or '').strip() else None),
+            'actual':(item.get('actual') if str(item.get('actual') or '').strip() else None),
+            'unit':str(item.get('unit') or ''),'source_name':str(item.get('source_name') or source_name),
+            'source_url':source_url,
+            'url':event_url,
+        })
+    normalized.sort(key=lambda e:e.get('release_at_utc') or '9999')
+    normalized=normalized[:10]
+    ECONOMIC_CALENDAR_CACHE={'events':normalized,'fetched_at':now_epoch,
+        'updated_at':local_now.strftime('%Y-%m-%d %H:%M:%S SAST'),'status':'live','message':'',
+        'source':source_name,'attribution_url':source_attribution}
+    return dict(ECONOMIC_CALENDAR_CACHE)
 
 
 def _macro_number(value):
@@ -815,7 +811,7 @@ def _has_fvg(candles, start_index, end_index, direction):
     return False
 
 
-def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='M15'):
+def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='M15', manual_news_clear=False):
     """Evaluate 20 explicit candle-derived factors; emit only unvalidated candidates."""
     if symbol not in SYMBOL_CONFIG:
         return None
@@ -843,16 +839,20 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
         copy['_dt_utc'] = _calendar_datetime_utc(event.get('release_at_utc'))
         events.append(copy)
 
+    manual_news_override = bool(manual_news_clear and calendar.get('status') == 'unavailable')
+    rule_calendar_status = 'live' if manual_news_override else calendar.get('status', 'unavailable')
     analysis = evaluate_smc_factors(
         symbol=symbol,
         price=price or 0,
         candles=candles,
         calendar=events,
-        calendar_status=calendar.get('status', 'unavailable'),
+        calendar_status=rule_calendar_status,
         now_sast=johannesburg_now(),
         trigger_timeframe=timeframe,
     )
     factors = analysis.get('factors', {})
+    if manual_news_override and 'News Clear' in factors:
+        factors['News Clear']['detail'] = 'Manual calendar check acknowledged; live provider unavailable. Verify external event times.'
     available = sum(1 for item in factors.values() if item.get('available'))
     passed = sum(1 for item in factors.values() if item.get('available') and item.get('pass'))
     check_ratio_pct = round(100 * passed / available) if available else None
@@ -879,6 +879,8 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
         reason = 'WAIT: Required checks missing — ' + ' · '.join(blockers) + '.' if blockers else 'WAIT: The live candle conditions do not form a candidate.'
     else:
         reason = f'UNVALIDATED CANDIDATE: {passed}/{available} available SMC checks pass. This uses live MT5 data, but the rule has not passed historical/backtest validation.'
+        if manual_news_override:
+            reason += ' Live calendar was unavailable; user manually acknowledged checking news.'
 
     entry = sl = tp = None
     if direction in ('BUY','SELL') and price is not None and pattern:
@@ -908,6 +910,7 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
         'check_ratio_pct': check_ratio_pct,
         'check_ratio_label': 'Available SMC checks passed; not a win probability.',
         'core_gates': core_gates,
+        'manual_news_override': manual_news_override,
         'grade': '—',
         'strategy': 'SMC Factor Engine v1 · unvalidated',
         'signal_mode': 'UNVALIDATED_CANDIDATE_REAL_MT5' if direction in ('BUY','SELL') else 'WAIT',
@@ -2180,7 +2183,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.7.0</div>
+            <div class="scanner-name">Precision Scanner v9.7.1</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2340,8 +2343,12 @@ HTML = """
         <div class="news-panel">
             <div class="news-title">📰 Key U.S. Releases · SAST</div>
             <div id="newsStatus" style="font-size:11px;color:#aaa;margin:0 0 8px;">Loading live calendar…</div>
+            <div id="manualNewsOverrideHome" style="display:none;margin:8px 0;padding:9px;border:1px solid rgba(255,204,128,.28);border-radius:8px;background:rgba(255,204,128,.045);font-size:10px;line-height:1.45;color:#ffdda3;">
+                Calendar source is offline. If you personally checked a trusted calendar and confirmed no related high-impact event is near, tick this manual acknowledgement; otherwise leave it off and scans stay WAIT.
+                <label style="display:block;margin-top:7px;font-weight:700;"><input id="manualNewsCheckHome" type="checkbox" onchange="syncManualNewsCheck('home')"> I checked the calendar manually; allow the technical scan without live news data</label>
+            </div>
             <div id="newsList"></div>
-            <div style="font-size:10px;color:#777;margin-top:8px;">Calendar source: <a href="https://www.financecalendar.com" target="_blank" rel="noopener" style="color:#00d4aa;">FinanceCalendar.com</a></div>
+            <div style="font-size:10px;color:#777;margin-top:8px;">Calendar source: <a id="calendarAttributionLink" href="https://www.financecalendar.com" target="_blank" rel="noopener" style="color:#00d4aa;">Loading source…</a></div>
             <div id="newsScenarioPanel" style="display:none;margin-top:12px;padding:12px;background:rgba(0,0,0,.32);border:1px solid rgba(0,212,170,.25);border-radius:10px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
                     <strong style="color:#00d4aa;font-size:12px;">CONDITIONAL EVENT OUTLOOK</strong>
@@ -2453,6 +2460,10 @@ HTML = """
                 <label>💲 Verified MT5 price only</label>
                 <input type="text" id="currentPrice" value="" readonly placeholder="Waiting for live price..." style="color: #00d4aa; font-weight: 700;">
                 <div style="font-size: 11px; color: #888; margin-top: 5px;">No public proxy or estimate is used. Without exact price and candle history, the result remains WAIT.</div>
+            </div>
+            <div id="manualNewsOverrideScan" style="display:none;margin:-3px 0 12px;padding:9px;border:1px solid rgba(255,204,128,.28);border-radius:8px;background:rgba(255,204,128,.045);font-size:10px;line-height:1.45;color:#ffdda3;">
+                Calendar source is offline. Only use this after checking a trusted economic calendar yourself; never use it to bypass a known NFP/FOMC release.
+                <label style="display:block;margin-top:7px;font-weight:700;"><input id="manualNewsCheckScan" type="checkbox" onchange="syncManualNewsCheck('scan')"> I checked the calendar manually; allow the technical scan without live news data</label>
             </div>
 
 
@@ -2568,7 +2579,7 @@ HTML = """
         <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.7.0</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.7.1</span></div>
             <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
             <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
             <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
@@ -2598,6 +2609,7 @@ HTML = """
         let livePricesCache = {}; // fresh MT5 quotes only
         let economicEventsCache = [];
         let activeNewsEventIndex = -1;
+        let manualNewsCheckState = false;
 
         // ============ INIT ============
         window.onload = function() {
@@ -3075,6 +3087,17 @@ HTML = """
                     economicEventsCache = Array.isArray(data.events) ? data.events : [];
                     const status = document.getElementById('newsStatus');
                     const list = document.getElementById('newsList');
+                    const sourceLink = document.getElementById('calendarAttributionLink');
+                    if (sourceLink) {
+                        sourceLink.textContent = data.source || 'Calendar unavailable';
+                        sourceLink.href = data.attribution_url || 'https://www.financecalendar.com';
+                    }
+                    const manualOverrideAvailable = data.status === 'unavailable';
+                    const homeOverride = document.getElementById('manualNewsOverrideHome');
+                    const scanOverride = document.getElementById('manualNewsOverrideScan');
+                    if (homeOverride) homeOverride.style.display = manualOverrideAvailable ? 'block' : 'none';
+                    if (scanOverride) scanOverride.style.display = manualOverrideAvailable ? 'block' : 'none';
+                    if (!manualOverrideAvailable) syncManualNewsCheck('reset');
                     if (status) {
                         status.textContent = data.status === 'live'
                             ? 'Live calendar · updated ' + (data.updated_at || 'just now')
@@ -3106,6 +3129,29 @@ HTML = """
                     if (status) status.textContent = '⚠️ Live calendar unavailable.';
                     if (list) list.innerHTML = '<div style="color:#aaa;font-size:12px;">No placeholder events are shown while the feed is unavailable.</div>';
                 });
+        }
+
+        function syncManualNewsCheck(source) {
+            const homeBox = document.getElementById('manualNewsCheckHome');
+            const scanBox = document.getElementById('manualNewsCheckScan');
+            if (source === 'reset') manualNewsCheckState = false;
+            else {
+                const selected = source === 'home' ? homeBox : scanBox;
+                manualNewsCheckState = !!(selected && selected.checked);
+            }
+            if (homeBox) homeBox.checked = manualNewsCheckState;
+            if (scanBox) scanBox.checked = manualNewsCheckState;
+        }
+
+        function consumeManualNewsCheck() {
+            const acknowledged = manualNewsCheckState;
+            if (acknowledged) syncManualNewsCheck('reset');
+            return acknowledged;
+        }
+
+        // The manual acknowledgement is one-scan only; user must re-check next time.
+        function manualNewsQuery() {
+            return consumeManualNewsCheck() ? '&manual_news_clear=1' : '';
         }
 
         function showNewsScenario(index) {
@@ -3248,6 +3294,9 @@ HTML = """
                 <div style="font-size:12px;color:#d8d0c0;line-height:1.5;margin-top:5px;">${escapeHtml(data.signal_reason || 'Required closed-bar conditions have not aligned.')}</div>
                 ${blockerText ? `<div style="font-size:10px;color:#ffcc80;margin-top:7px;">Required checks still waiting: ${escapeHtml(blockerText)}</div>` : ''}
             </section>`;
+            const manualNewsNotice = data.manual_news_override
+                ? `<div style="margin-top:9px;padding:9px;border:1px solid rgba(255,204,128,.35);border-radius:8px;background:rgba(255,204,128,.06);color:#ffdda3;font-size:10px;line-height:1.45;">⚠ Manual news acknowledgement used because the live calendar was unavailable. Verify an external calendar yourself; do not trade around NFP/FOMC if unsure.</div>`
+                : '';
             const saveHistoryButton = candidate && [data.entry,data.sl,data.tp].every(v => Number.isFinite(Number(v)) && Number(v) > 0)
                 ? `<button type="button" data-symbol="${escapeHtml(symbol)}" data-direction="${escapeHtml(direction)}" data-entry="${Number(data.entry)}" data-sl="${Number(data.sl)}" data-tp="${Number(data.tp)}" data-timeframe="${triggerTimeframe}" onclick="saveRuleSignalFromButton(this)" style="margin-top:10px;padding:11px;width:100%;background:rgba(0,212,170,.10);border:1px solid rgba(0,212,170,.32);color:#68e0c4;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;">📜 Save candidate to Signal History</button>` : '';
             const topDownText = candidate
@@ -3266,6 +3315,7 @@ HTML = """
                     <div style="padding:11px;background:rgba(255,255,255,.04);border-radius:9px;"><div style="font-size:10px;color:#8c9299;font-weight:800;letter-spacing:.7px;">SMC CHECKLIST</div><div style="color:#ffd84d;font-weight:900;margin-top:2px;font-size:23px;">${scorePctText}</div><div style="color:#c9d1d8;font-size:10px;">${passed}/${available} available checks pass · not win probability</div></div>
                 </section>
                 ${plan}
+                ${manualNewsNotice}
                 <section style="margin-top:12px;padding:12px;background:rgba(255,255,255,.025);border-radius:10px;">
                     <div style="font-size:11px;color:#80cdea;font-weight:900;letter-spacing:.8px;margin-bottom:8px;">CORE SMC DECISION</div>
                     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;">${coreHtml}</div>
@@ -3309,7 +3359,8 @@ HTML = """
             resultDiv.style.display = 'block';
             resultDiv.innerHTML = '<div style="text-align:center;padding:14px;color:#00d4aa;">Checking verified quotes and closed MT5 candles…</div>';
             if (selectedSymbol === 'ALL') {
-                fetch('/api/auto-scan-all')
+                const manualNewsParam = consumeManualNewsCheck() ? '?manual_news_clear=1' : '';
+                fetch('/api/auto-scan-all' + manualNewsParam)
                     .then(r => r.json())
                     .then(data => {
                         if (!Array.isArray(data.results)) throw new Error('No scan results');
@@ -3322,7 +3373,7 @@ HTML = """
             const priceParam = screenshot ? '&price=' + encodeURIComponent(screenshot.price) : '';
             const tfControl = document.getElementById('timeframe');
             const timeframe = tfControl ? tfControl.value : 'M15';
-            fetch('/api/auto-scan?symbol=' + encodeURIComponent(selectedSymbol) + '&timeframe=' + encodeURIComponent(timeframe) + priceParam)
+            fetch('/api/auto-scan?symbol=' + encodeURIComponent(selectedSymbol) + '&timeframe=' + encodeURIComponent(timeframe) + priceParam + manualNewsQuery())
                 .then(r => r.json())
                 .then(data => {
                     if (data.error) throw new Error(data.error);
@@ -3637,7 +3688,7 @@ HTML = """
             result.innerHTML = '<div style="text-align:center;padding:14px;color:#00d4aa;">Evaluating the same closed-candle SMC checks as the Precision Scan…</div>';
             const priceParam = screenshot ? '&price=' + encodeURIComponent(screenshot.price) : '';
             const timeframe = document.getElementById('timeframe') ? document.getElementById('timeframe').value : 'M15';
-            fetch('/api/auto-scan?symbol=' + encodeURIComponent(symbol) + '&timeframe=' + encodeURIComponent(timeframe) + priceParam)
+            fetch('/api/auto-scan?symbol=' + encodeURIComponent(symbol) + '&timeframe=' + encodeURIComponent(timeframe) + priceParam + manualNewsQuery())
                 .then(r => r.json())
                 .then(data => {
                     if (data.error) throw new Error(data.error);
@@ -3897,8 +3948,8 @@ def api_news():
         'status': data.get('status', 'unavailable'),
         'message': data.get('message', ''),
         'updated_at': data.get('updated_at'),
-        'source': 'FinanceCalendar.com',
-        'attribution_url': FINANCE_CALENDAR_ATTRIBUTION,
+        'source': data.get('source') or 'unavailable',
+        'attribution_url': data.get('attribution_url') or FINANCE_CALENDAR_ATTRIBUTION,
     })
 
 @app.route('/api/news-scenario')
@@ -3983,7 +4034,8 @@ def api_auto_scan():
         parsed_price = float(custom_price) if custom_price else None
     except (TypeError, ValueError):
         return jsonify({'error': 'Invalid screenshot price parameter'}), 400
-    result = auto_scan_symbol(symbol, custom_price=parsed_price, timeframe=timeframe)
+    manual_news_clear = request.args.get('manual_news_clear', '').lower() in ('1', 'true', 'yes')
+    result = auto_scan_symbol(symbol, custom_price=parsed_price, timeframe=timeframe, manual_news_clear=manual_news_clear)
     if result:
         return jsonify(result)
     return jsonify({'error': 'Unknown symbol'}), 400
@@ -3992,8 +4044,9 @@ def api_auto_scan():
 def api_auto_scan_all():
     """NEW v7.0: Scan all 7 symbols at once."""
     results = []
+    manual_news_clear = request.args.get('manual_news_clear', '').lower() in ('1', 'true', 'yes')
     for symbol in SYMBOL_CONFIG.keys():
-        results.append(auto_scan_symbol(symbol))
+        results.append(auto_scan_symbol(symbol, manual_news_clear=manual_news_clear))
     return jsonify({'results': results})
 
 @app.route('/api/next-session')
@@ -4027,7 +4080,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.7.0',
+        'version': '9.7.1',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
@@ -4036,7 +4089,8 @@ def health():
             'manual_candidate_signal_history', 'trigger_timeframe_backtest_wiring',
             'no_public_account_identifier_or_default_balance', 'compact_session_label_and_sast_clock',
             'detailed_smc_scan_reasons', 'checklist_ratio_not_probability',
-            'focus_symbol_quote_and_candle_readiness_panel',
+            'focus_symbol_quote_and_candle_readiness_panel', 'economic_calendar_fallback_feed',
+            'manual_news_acknowledgement_when_providers_unavailable',
         ],
         'strategy_validation': 'UNVALIDATED_REAL_MT5_DATA',
     })

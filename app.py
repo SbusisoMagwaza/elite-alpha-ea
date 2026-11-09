@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.7.1 — calendar fallback plus feed diagnostics; scan rules unchanged.
+Elite Alpha EA v9.8.0 — macro countdown and conditional scenarios; scan rules unchanged.
 
 Safety changes:
 - No public-market proxy prices or static quote estimates are presented or scanned.
@@ -2183,7 +2183,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.7.1</div>
+            <div class="scanner-name">Precision Scanner v9.8.0</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2342,6 +2342,10 @@ HTML = """
         <!-- LIVE ECONOMIC CALENDAR + CONDITIONAL SCENARIOS -->
         <div class="news-panel">
             <div class="news-title">📰 Key U.S. Releases · SAST</div>
+            <div id="nextMacroReleaseCard" style="margin:9px 0 12px;padding:12px;background:linear-gradient(135deg,rgba(75,35,120,.35),rgba(22,12,38,.5));border:1px solid rgba(175,125,220,.28);border-radius:11px;color:#eee;">
+                <div style="color:#d5b8ee;font-size:10px;font-weight:900;letter-spacing:1px;">NEXT HIGH-IMPACT U.S. RELEASE</div>
+                <div style="margin-top:7px;color:#c9c1d1;font-size:12px;">Loading verified calendar…</div>
+            </div>
             <div id="newsStatus" style="font-size:11px;color:#aaa;margin:0 0 8px;">Loading live calendar…</div>
             <div id="manualNewsOverrideHome" style="display:none;margin:8px 0;padding:9px;border:1px solid rgba(255,204,128,.28);border-radius:8px;background:rgba(255,204,128,.045);font-size:10px;line-height:1.45;color:#ffdda3;">
                 Calendar source is offline. If you personally checked a trusted calendar and confirmed no related high-impact event is near, tick this manual acknowledgement; otherwise leave it off and scans stay WAIT.
@@ -2579,7 +2583,7 @@ HTML = """
         <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.7.1</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.0</span></div>
             <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
             <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
             <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
@@ -2608,6 +2612,7 @@ HTML = """
         let signalHistory = []; // Local cache of signals with outcomes
         let livePricesCache = {}; // fresh MT5 quotes only
         let economicEventsCache = [];
+        let calendarStatusCache = 'empty';
         let activeNewsEventIndex = -1;
         let manualNewsCheckState = false;
 
@@ -2634,6 +2639,7 @@ HTML = """
                 updateScanLivePricePreview();
                 loadBridgeSummary();
                 loadFeedDiagnostics();
+                renderNextMacroRelease();
             }, 60000);
             // Refresh others every 5 min
             setInterval(() => {
@@ -3080,11 +3086,43 @@ HTML = """
             return Number(parts[2]) + ' ' + month;
         }
 
+        function renderNextMacroRelease() {
+            const card = document.getElementById('nextMacroReleaseCard');
+            if (!card) return;
+            if (calendarStatusCache !== 'live') {
+                const text = calendarStatusCache === 'stale'
+                    ? 'Calendar data is stale. Verify the release time; no countdown or directional call is shown.'
+                    : 'Live calendar unavailable. No countdown or directional call is shown until fresh events arrive.';
+                card.innerHTML = `<div style="color:#d5b8ee;font-size:10px;font-weight:900;letter-spacing:1px;">NEXT HIGH-IMPACT U.S. RELEASE</div><div style="margin-top:7px;color:#ffdc9b;font-size:12px;line-height:1.45;">${escapeHtml(text)}</div>`;
+                return;
+            }
+            const now = Date.now();
+            const candidates = economicEventsCache.map((event,index) => ({event,index,stamp:Date.parse(event.release_at_utc || '')}))
+                .filter(x => String(x.event.impact || '').toUpperCase() === 'HIGH' && Number.isFinite(x.stamp) && x.stamp > now)
+                .sort((a,b) => a.stamp-b.stamp);
+            if (!candidates.length) {
+                card.innerHTML = '<div style="color:#d5b8ee;font-size:10px;font-weight:900;letter-spacing:1px;">NEXT HIGH-IMPACT U.S. RELEASE</div><div style="margin-top:7px;color:#c9c1d1;font-size:12px;line-height:1.45;">No matching high-impact U.S. release is listed in the current 7-day calendar. This does not mean news risk is absent.</div>';
+                return;
+            }
+            const {event,index,stamp} = candidates[0];
+            const ms = Math.max(0, stamp-now);
+            const days = Math.floor(ms/86400000);
+            const hours = Math.floor((ms%86400000)/3600000);
+            const minutes = Math.floor((ms%3600000)/60000);
+            const seconds = Math.floor((ms%60000)/1000);
+            const countdown = (days ? days+'d ' : '') + String(hours).padStart(2,'0')+':'+String(minutes).padStart(2,'0')+':'+String(seconds).padStart(2,'0');
+            const eventTime = `${shortCalendarDate(event.date_local)} · ${escapeHtml(event.time_local || 'Time TBC')} SAST`;
+            const dataLine = `Consensus: ${escapeHtml(event.consensus ?? 'not published')} · Previous: ${escapeHtml(event.prior ?? '—')}`;
+            card.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><div style="color:#d5b8ee;font-size:10px;font-weight:900;letter-spacing:1px;">NEXT HIGH-IMPACT U.S. RELEASE</div><span style="font-size:9px;color:#ffd36a;font-weight:800;">${escapeHtml(String(event.impact || 'HIGH').toUpperCase())}</span></div><div style="font-size:19px;font-weight:900;color:#fff;margin-top:7px;line-height:1.2;">${escapeHtml(event.title || 'U.S. release')}</div><div style="font-size:11px;color:#c8b9d9;margin-top:4px;">${eventTime} · ${escapeHtml(event.currency || 'USD')}</div><div style="font-size:27px;color:#ffc34d;font-weight:900;font-variant-numeric:tabular-nums;margin-top:8px;">${countdown}</div><div style="font-size:10px;color:#c9c1d1;margin-top:4px;">${dataLine}</div><div style="font-size:10px;color:#ffdc9b;line-height:1.45;margin-top:8px;">Conditional scenarios only. Actual reaction can reverse; this is not a BUY/SELL probability or trade plan.</div><button type="button" onclick="showNewsScenario(${index})" style="margin-top:9px;padding:8px 10px;background:rgba(175,125,220,.12);border:1px solid rgba(175,125,220,.35);border-radius:7px;color:#ead8fa;font-size:10px;font-weight:800;">View conditional scenarios</button>`;
+        }
+
         function loadNews() {
             fetch('/api/news')
                 .then(r => r.json())
                 .then(data => {
                     economicEventsCache = Array.isArray(data.events) ? data.events : [];
+                    calendarStatusCache = data.status || 'unavailable';
+                    renderNextMacroRelease();
                     const status = document.getElementById('newsStatus');
                     const list = document.getElementById('newsList');
                     const sourceLink = document.getElementById('calendarAttributionLink');
@@ -4080,7 +4118,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.7.1',
+        'version': '9.8.0',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
@@ -4091,6 +4129,7 @@ def health():
             'detailed_smc_scan_reasons', 'checklist_ratio_not_probability',
             'focus_symbol_quote_and_candle_readiness_panel', 'economic_calendar_fallback_feed',
             'manual_news_acknowledgement_when_providers_unavailable',
+            'next_high_impact_us_release_countdown',
         ],
         'strategy_validation': 'UNVALIDATED_REAL_MT5_DATA',
     })

@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.8.0 — macro countdown and conditional scenarios; scan rules unchanged.
+Elite Alpha EA v9.8.1 — event/market selector and US index quick scan; rules unchanged.
 
 Safety changes:
 - No public-market proxy prices or static quote estimates are presented or scanned.
@@ -2183,7 +2183,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.8.0</div>
+            <div class="scanner-name">Precision Scanner v9.8.1</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2302,6 +2302,20 @@ HTML = """
             <div class="auto-scan-result" id="autoScanResult"></div>
         </div>
 
+        <!-- v9.8.1: focused US index M15 scan shortcut -->
+        <div class="setup-instructions" id="usIndexQuickPanel" style="margin:14px 0;border-color:rgba(0,212,170,.30);">
+            <h4>📈 US30 / NASDAQ Session Scan</h4>
+            <div style="font-size:11px;color:#aab5bf;line-height:1.45;margin:5px 0 10px;">Choose an index for a live Exness M15 scan. The US cash open shifts between 15:30 and 16:30 SAST with U.S. daylight saving. A scan reports only closed-bar rules; time alone does not predict direction.</div>
+            <div style="display:grid;grid-template-columns:1fr 1.25fr;gap:8px;">
+                <select id="usIndexQuickSymbol" style="width:100%;padding:10px;background:#071318;color:#fff;border:1px solid rgba(0,212,170,.35);border-radius:8px;font-weight:700;">
+                    <option value="US30m" selected>US30m · US30</option>
+                    <option value="USTECm">USTECm · NASDAQ</option>
+                </select>
+                <button type="button" onclick="runUSIndexQuickScan()" style="padding:10px;background:linear-gradient(135deg,#00d4aa,#0096ff);color:#001015;border:0;border-radius:8px;font-weight:900;">Scan selected index</button>
+            </div>
+            <div id="usIndexQuickStatus" style="margin-top:7px;font-size:10px;color:#929da7;">Uses M15 trigger bars with H1/H4/D1 context.</div>
+        </div>
+
         <!-- v9.7: additive live-feed and candle-readiness diagnostics -->
         <div class="setup-instructions" id="feedDiagnosticsCard" style="margin:14px 0;border-color:rgba(0,150,255,.28);">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
@@ -2347,6 +2361,19 @@ HTML = """
                 <div style="margin-top:7px;color:#c9c1d1;font-size:12px;">Loading verified calendar…</div>
             </div>
             <div id="newsStatus" style="font-size:11px;color:#aaa;margin:0 0 8px;">Loading live calendar…</div>
+            <div id="newsScenarioSelector" style="display:none;margin:8px 0 12px;padding:10px;background:rgba(0,0,0,.24);border:1px solid rgba(175,125,220,.22);border-radius:9px;">
+                <div style="font-size:10px;color:#cdb3e2;font-weight:900;letter-spacing:.7px;margin-bottom:7px;">CONDITIONAL NEWS SCENARIO</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;">
+                    <select id="calendarEventSelect" style="min-width:0;width:100%;padding:8px;background:#071318;color:#fff;border:1px solid #59436f;border-radius:7px;font-size:10px;">
+                        <option value="">Choose live event…</option>
+                    </select>
+                    <select id="newsAssetSelect" onchange="markNewsAssetSelection()" style="min-width:0;width:100%;padding:8px;background:#071318;color:#fff;border:1px solid #59436f;border-radius:7px;font-size:10px;">
+                        <option value="XAUUSDm" selected>XAUUSDm · Gold</option><option value="US30m">US30m · US30</option><option value="USTECm">USTECm · NASDAQ</option><option value="BTCUSDm">BTCUSDm · Bitcoin</option><option value="EURUSDm">EURUSDm</option><option value="GBPUSDm">GBPUSDm</option><option value="USDJPYm">USDJPYm</option>
+                    </select>
+                </div>
+                <button type="button" onclick="showSelectedNewsScenario()" style="margin-top:8px;padding:8px 10px;background:rgba(175,125,220,.12);border:1px solid rgba(175,125,220,.34);border-radius:7px;color:#ead8fa;font-size:10px;font-weight:800;">View conditional scenario</button>
+                <div style="margin-top:6px;color:#a89ab2;font-size:9px;line-height:1.35;">No fixed confidence or pre-news order levels. The outlook is conditional; verify the release and post-news price action.</div>
+            </div>
             <div id="manualNewsOverrideHome" style="display:none;margin:8px 0;padding:9px;border:1px solid rgba(255,204,128,.28);border-radius:8px;background:rgba(255,204,128,.045);font-size:10px;line-height:1.45;color:#ffdda3;">
                 Calendar source is offline. If you personally checked a trusted calendar and confirmed no related high-impact event is near, tick this manual acknowledgement; otherwise leave it off and scans stay WAIT.
                 <label style="display:block;margin-top:7px;font-weight:700;"><input id="manualNewsCheckHome" type="checkbox" onchange="syncManualNewsCheck('home')"> I checked the calendar manually; allow the technical scan without live news data</label>
@@ -2358,10 +2385,7 @@ HTML = """
                     <strong style="color:#00d4aa;font-size:12px;">CONDITIONAL EVENT OUTLOOK</strong>
                     <button onclick="closeNewsScenario()" aria-label="Close" style="border:0;background:transparent;color:#aaa;font-size:18px;">×</button>
                 </div>
-                <label for="newsAssetSelect" style="display:block;margin-top:8px;font-size:11px;color:#aaa;">View scenario for</label>
-                <select id="newsAssetSelect" onchange="refreshNewsScenarioAsset()" style="width:100%;margin:5px 0 8px;padding:8px;background:#071318;color:#fff;border:1px solid #24534b;border-radius:7px;">
-                    <option value="XAUUSDm">XAUUSDm · Gold</option><option value="BTCUSDm">BTCUSDm · Bitcoin</option><option value="EURUSDm">EURUSDm</option><option value="GBPUSDm">GBPUSDm</option><option value="USDJPYm">USDJPYm</option><option value="USTECm">USTECm</option><option value="US30m">US30m</option>
-                </select>
+                <!-- Market selection is available in the event/market picker above. -->
                 <div id="newsScenarioContent" style="font-size:12px;color:#ddd;line-height:1.5;">Choose an event to view conditional scenarios.</div>
             </div>
         </div>
@@ -2583,7 +2607,7 @@ HTML = """
         <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.0</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.1</span></div>
             <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
             <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
             <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
@@ -3123,6 +3147,19 @@ HTML = """
                     economicEventsCache = Array.isArray(data.events) ? data.events : [];
                     calendarStatusCache = data.status || 'unavailable';
                     renderNextMacroRelease();
+                    const eventSelect = document.getElementById('calendarEventSelect');
+                    const scenarioSelector = document.getElementById('newsScenarioSelector');
+                    if (eventSelect) {
+                        const previousEvent = eventSelect.value;
+                        eventSelect.innerHTML = '<option value="">Choose live event…</option>' + economicEventsCache.map(event => {
+                            const id = String(event.id || '');
+                            const label = `${shortCalendarDate(event.date_local)} ${event.time_local || ''} · ${event.currency || event.country || ''} · ${event.title || 'Event'}`;
+                            return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
+                        }).join('');
+                        if (previousEvent && economicEventsCache.some(event => event.id === previousEvent)) eventSelect.value = previousEvent;
+                        eventSelect.disabled = calendarStatusCache !== 'live' || economicEventsCache.length === 0;
+                    }
+                    if (scenarioSelector) scenarioSelector.style.display = calendarStatusCache === 'live' && economicEventsCache.length ? 'block' : 'none';
                     const status = document.getElementById('newsStatus');
                     const list = document.getElementById('newsList');
                     const sourceLink = document.getElementById('calendarAttributionLink');
@@ -3192,9 +3229,31 @@ HTML = """
             return consumeManualNewsCheck() ? '&manual_news_clear=1' : '';
         }
 
+        function markNewsAssetSelection() {
+            const asset = document.getElementById('newsAssetSelect');
+            if (asset) asset.dataset.userSelected = 'true';
+            if (activeNewsEventIndex >= 0) refreshNewsScenarioAsset();
+        }
+
+        function showSelectedNewsScenario() {
+            const selector = document.getElementById('calendarEventSelect');
+            const eventId = selector ? selector.value : '';
+            const index = economicEventsCache.findIndex(event => event.id === eventId);
+            if (index < 0) {
+                const panel = document.getElementById('newsScenarioPanel');
+                const content = document.getElementById('newsScenarioContent');
+                if (panel) panel.style.display = 'block';
+                if (content) content.textContent = 'Choose a live event first. No directional prediction is available without event data.';
+                return;
+            }
+            showNewsScenario(index);
+        }
+
         function showNewsScenario(index) {
             if (index < 0 || index >= economicEventsCache.length) return;
             activeNewsEventIndex = index;
+            const eventSelect = document.getElementById('calendarEventSelect');
+            if (eventSelect && economicEventsCache[index]) eventSelect.value = economicEventsCache[index].id;
             const panel = document.getElementById('newsScenarioPanel');
             const asset = document.getElementById('newsAssetSelect');
             if (panel) panel.style.display = 'block';
@@ -3209,10 +3268,10 @@ HTML = """
         }
 
         function refreshNewsScenarioAsset() {
-            if (activeNewsEventIndex < 0 || !economicEventsCache[activeNewsEventIndex]) return;
             const asset = document.getElementById('newsAssetSelect');
-            const symbol = asset ? asset.value : 'XAUUSDm';
             if (asset) asset.dataset.userSelected = 'true';
+            if (activeNewsEventIndex < 0 || !economicEventsCache[activeNewsEventIndex]) return;
+            const symbol = asset ? asset.value : 'XAUUSDm';
             const event = economicEventsCache[activeNewsEventIndex];
             const content = document.getElementById('newsScenarioContent');
             if (content) content.innerHTML = '<div style="color:#aaa">Preparing conditional scenarios…</div>';
@@ -3419,6 +3478,29 @@ HTML = """
                     resultDiv.scrollIntoView({behavior:'smooth'});
                 })
                 .catch(() => { resultDiv.innerHTML = '<div style="color:#ff6b6b;text-align:center;padding:14px;">Scan status unavailable. Refresh and try again.</div>'; });
+        }
+
+        function runUSIndexQuickScan() {
+            const selector = document.getElementById('usIndexQuickSymbol');
+            const symbol = selector ? selector.value : 'US30m';
+            if (!['US30m','USTECm'].includes(symbol)) return;
+            selectedSymbol = symbol;
+            const scanSymbol = document.getElementById('symbol');
+            const timeframe = document.getElementById('timeframe');
+            if (scanSymbol) scanSymbol.value = symbol;
+            if (timeframe) timeframe.value = 'M15';
+            document.querySelectorAll('#symbolPicker .symbol-chip').forEach(chip => chip.classList.toggle('active', chip.dataset.symbol === symbol));
+            const shortName = symbol === 'USTECm' ? 'NAS' : 'US30';
+            const buttonLabel = document.getElementById('scanBtnSymbol');
+            if (buttonLabel) buttonLabel.textContent = shortName;
+            loadHTFBias(symbol);
+            loadReferenceLevels(symbol);
+            updateLivePricePreview();
+            updateScanLivePricePreview();
+            loadBridgeSummary();
+            const status = document.getElementById('usIndexQuickStatus');
+            if (status) status.textContent = `${symbol} selected · M15 closed-bar scan; U.S. cash open is 15:30/16:30 SAST with daylight saving.`;
+            runAutoScan();
         }
 
         // ============ SIGNAL HISTORY (manual browser record) ============
@@ -4118,7 +4200,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.8.0',
+        'version': '9.8.1',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
@@ -4129,7 +4211,8 @@ def health():
             'detailed_smc_scan_reasons', 'checklist_ratio_not_probability',
             'focus_symbol_quote_and_candle_readiness_panel', 'economic_calendar_fallback_feed',
             'manual_news_acknowledgement_when_providers_unavailable',
-            'next_high_impact_us_release_countdown',
+            'next_high_impact_us_release_countdown', 'news_event_market_selector',
+            'us30_nasdaq_m15_quick_scan',
         ],
         'strategy_validation': 'UNVALIDATED_REAL_MT5_DATA',
     })

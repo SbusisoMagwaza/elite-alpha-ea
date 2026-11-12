@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.8.2 — three-dot quick menu; existing functions preserved.
+Elite Alpha EA v9.8.3 — modal quick actions; existing calendar and scans preserved.
 
 Safety changes:
 - No public-market proxy prices or static quote estimates are presented or scanned.
@@ -2184,6 +2184,42 @@ HTML = """
         </div>
     </div>
 
+    <!-- Quick actions open over the current page; they do not navigate away from Home. -->
+    <div id="quickActionModal" onclick="if(event.target===this) closeQuickActionModal()" style="display:none;position:fixed;inset:0;z-index:1300;background:rgba(0,0,0,.78);padding:72px 12px 20px;overflow-y:auto;">
+        <section onclick="event.stopPropagation()" style="width:min(100%,560px);max-height:84vh;overflow-y:auto;margin:0 auto;padding:14px;background:linear-gradient(180deg,#101222,#080b12);border:1px solid rgba(105,150,190,.4);border-radius:15px;box-shadow:0 16px 42px rgba(0,0,0,.65);color:#edf3f8;">
+            <header style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
+                <strong id="quickActionModalTitle" style="font-size:14px;color:#8fd5f2;">Quick action</strong>
+                <button type="button" onclick="closeQuickActionModal()" aria-label="Close" style="background:transparent;border:0;color:#ddd;font-size:24px;">×</button>
+            </header>
+            <div id="quickNewsModalPanel" style="display:none;">
+                <div id="quickNewsCalendarStatus" style="font-size:11px;color:#b8c2cc;margin-bottom:8px;">Checking calendar…</div>
+                <div id="quickNewsCountdown" style="padding:12px;background:linear-gradient(135deg,rgba(75,35,120,.35),rgba(22,12,38,.5));border:1px solid rgba(175,125,220,.28);border-radius:10px;margin-bottom:10px;"></div>
+                <label for="quickNewsEventSelect" style="display:block;color:#aaa;font-size:10px;margin:8px 0 4px;">NEWS EVENT</label>
+                <select id="quickNewsEventSelect" style="width:100%;padding:10px;background:#071318;color:#fff;border:1px solid #59436f;border-radius:8px;"><option value="">Choose live event…</option></select>
+                <label for="quickNewsMarketSelect" style="display:block;color:#aaa;font-size:10px;margin:9px 0 4px;">MARKET</label>
+                <select id="quickNewsMarketSelect" style="width:100%;padding:10px;background:#071318;color:#fff;border:1px solid #59436f;border-radius:8px;">
+                    <option value="XAUUSDm">Gold · XAUUSDm</option><option value="US30m">US30 · US30m</option><option value="USTECm">NASDAQ · USTECm</option>
+                </select>
+                <button id="quickNewsScenarioButton" type="button" onclick="runQuickNewsScenario()" style="width:100%;margin-top:10px;padding:11px;background:rgba(175,125,220,.15);border:1px solid rgba(175,125,220,.4);border-radius:9px;color:#f1e4ff;font-weight:800;">View conditional news scenario</button>
+                <div id="quickNewsScenarioResult" style="margin-top:10px;"></div>
+                <div style="margin-top:9px;color:#ffdda3;font-size:10px;line-height:1.45;">News context is conditional, not a guaranteed BUY/SELL or win probability. No news-only Entry/SL/TP is generated.</div>
+            </div>
+            <div id="quickIndexModalPanel" style="display:none;">
+                <div style="font-size:11px;color:#bbc6cf;line-height:1.5;margin-bottom:10px;">This runs the existing Exness M15 scan. The U.S. cash open moves between 15:30 and 16:30 SAST with daylight saving. It does not predict direction from the clock; the M15 bar must close.</div>
+                <label for="quickIndexSymbolSelect" style="display:block;color:#aaa;font-size:10px;margin:8px 0 4px;">CHOOSE INDEX</label>
+                <select id="quickIndexSymbolSelect" style="width:100%;padding:10px;background:#071318;color:#fff;border:1px solid #24534b;border-radius:8px;">
+                    <option value="US30m" selected>US30 · US30m</option><option value="USTECm">NASDAQ · USTECm</option>
+                </select>
+                <div id="quickIndexManualNewsWrap" style="display:none;margin-top:10px;padding:9px;border:1px solid rgba(255,204,128,.28);border-radius:8px;color:#ffdda3;font-size:10px;line-height:1.45;">
+                    Calendar source unavailable. Only tick this after independently checking that no related high-impact release is near.
+                    <label style="display:block;margin-top:6px;font-weight:700;"><input id="manualNewsCheckQuick" type="checkbox" onchange="syncManualNewsCheck('quick')"> I checked the calendar manually for this scan</label>
+                </div>
+                <button type="button" onclick="runQuickIndexScan()" style="width:100%;margin-top:10px;padding:11px;background:linear-gradient(135deg,#00d4aa,#0096ff);border:0;border-radius:9px;color:#001015;font-weight:900;">Scan selected index (M15)</button>
+                <div id="quickIndexScanResult" style="margin-top:10px;"></div>
+            </div>
+        </section>
+    </div>
+
     <!-- HOME TAB -->
     <div class="tab-content active" id="home-tab">
         <div class="home-header">
@@ -2191,7 +2227,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.8.2</div>
+            <div class="scanner-name">Precision Scanner v9.8.3</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2310,7 +2346,7 @@ HTML = """
             <div class="auto-scan-result" id="autoScanResult"></div>
         </div>
 
-        <!-- v9.8.2: focused US index M15 scan shortcut -->
+        <!-- v9.8.3: focused US index M15 scan shortcut -->
         <div class="setup-instructions" id="usIndexQuickPanel" style="display:none;margin:14px 0;border-color:rgba(0,212,170,.30);">
             <h4>📈 US30 / NASDAQ Session Scan</h4>
             <div style="font-size:11px;color:#aab5bf;line-height:1.45;margin:5px 0 10px;">Choose an index for a live Exness M15 scan. The US cash open shifts between 15:30 and 16:30 SAST with U.S. daylight saving. A scan reports only closed-bar rules; time alone does not predict direction.</div>
@@ -2616,7 +2652,7 @@ HTML = """
         <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.2</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.3</span></div>
             <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
             <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
             <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
@@ -2646,9 +2682,11 @@ HTML = """
         let livePricesCache = {}; // fresh MT5 quotes only
         let economicEventsCache = [];
         let calendarStatusCache = 'empty';
+        let calendarSourceCache = 'unavailable';
         let activeNewsEventIndex = -1;
         let manualNewsCheckState = false;
         let newsPredictionPanelOpen = false;
+        let activeQuickFeature = '';
 
         // ============ INIT ============
         window.onload = function() {
@@ -3049,22 +3087,120 @@ HTML = """
 
         function openQuickFeature(feature) {
             const menu = document.getElementById('quickActionsPanel');
+            const modal = document.getElementById('quickActionModal');
+            const newsPanel = document.getElementById('quickNewsModalPanel');
+            const indexPanel = document.getElementById('quickIndexModalPanel');
+            const title = document.getElementById('quickActionModalTitle');
             if (menu) menu.style.display = 'none';
-            const homeTab = document.getElementById('home-tab');
-            if (homeTab && !homeTab.classList.contains('active')) {
-                const homeButton = document.querySelector('.bottom-nav .nav-btn');
-                switchTab('home', homeButton);
+            if (!modal) return;
+            activeQuickFeature = feature;
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+            if (newsPanel) newsPanel.style.display = feature === 'news' ? 'block' : 'none';
+            if (indexPanel) indexPanel.style.display = feature === 'us-index' ? 'block' : 'none';
+            if (title) title.textContent = feature === 'news' ? 'News predictions' : 'US30 / NASDAQ session scan';
+            if (feature === 'news') renderQuickNewsPanel();
+            if (feature === 'us-index') {
+                const manualWrap = document.getElementById('quickIndexManualNewsWrap');
+                if (manualWrap) manualWrap.style.display = calendarStatusCache === 'unavailable' ? 'block' : 'none';
+                const manualBox = document.getElementById('manualNewsCheckQuick');
+                if (manualBox) manualBox.checked = manualNewsCheckState;
             }
-            setTimeout(() => {
-                if (feature === 'news') {
-                    newsPredictionPanelOpen = true;
-                    const selector = document.getElementById('newsScenarioSelector');
-                    if (selector) { selector.style.display = 'block'; selector.scrollIntoView({behavior:'smooth',block:'center'}); }
-                } else if (feature === 'us-index') {
-                    const panel = document.getElementById('usIndexQuickPanel');
-                    if (panel) { panel.style.display = 'block'; panel.scrollIntoView({behavior:'smooth',block:'center'}); }
+        }
+
+        function closeQuickActionModal(event) {
+            const modal = document.getElementById('quickActionModal');
+            if (event && event.target !== modal) return;
+            if (modal) modal.style.display = 'none';
+            document.body.style.overflow = '';
+            activeQuickFeature = '';
+        }
+
+        function renderQuickNewsPanel() {
+            const statusEl = document.getElementById('quickNewsCalendarStatus');
+            const countdownEl = document.getElementById('quickNewsCountdown');
+            const eventSelect = document.getElementById('quickNewsEventSelect');
+            const marketSelect = document.getElementById('quickNewsMarketSelect');
+            const button = document.getElementById('quickNewsScenarioButton');
+            const result = document.getElementById('quickNewsScenarioResult');
+            if (!statusEl || !eventSelect || !button) return;
+            if (calendarStatusCache !== 'live') {
+                const msg = calendarStatusCache === 'stale'
+                    ? 'Calendar is stale; verify release details before using a scenario.'
+                    : 'Calendar feed is unavailable. No current event direction can be inferred.';
+                statusEl.textContent = (calendarSourceCache || 'Calendar') + ' · ' + msg;
+                statusEl.style.color = '#ffd36a';
+                eventSelect.innerHTML = '<option value="">No verified live event</option>';
+                eventSelect.disabled = true;
+                if (marketSelect) marketSelect.disabled = true;
+                button.disabled = true;
+                if (countdownEl) countdownEl.innerHTML = `<div style="color:#ffdc9b;font-size:12px;">${escapeHtml(msg)}</div>`;
+                if (result) result.innerHTML = '';
+                return;
+            }
+            const events = Array.isArray(economicEventsCache) ? economicEventsCache : [];
+            const oldId = eventSelect.value;
+            eventSelect.innerHTML = '<option value="">Choose an upcoming event…</option>' + events.map(e => {
+                const label = `${shortCalendarDate(e.date_local)} ${e.time_local || ''} · ${e.currency || e.country || ''} · ${e.title || 'Event'}`;
+                return `<option value="${escapeHtml(e.id || '')}">${escapeHtml(label)}</option>`;
+            }).join('');
+            if (oldId && events.some(e => e.id === oldId)) eventSelect.value = oldId;
+            else if (oldId) eventSelect.value = '';
+            eventSelect.disabled = events.length === 0;
+            if (marketSelect) marketSelect.disabled = events.length === 0;
+            button.disabled = events.length === 0;
+            statusEl.textContent = `${calendarSourceCache || 'Live calendar'} · ${events.length} matching event(s) · times shown in SAST`;
+            statusEl.style.color = '#8fc7bb';
+
+            const now = Date.now();
+            const next = events.map(e => ({event:e, stamp:Date.parse(e.release_at_utc || '')}))
+                .filter(x => String(x.event.impact || '').toUpperCase() === 'HIGH' && Number.isFinite(x.stamp) && x.stamp > now)
+                .sort((a,b) => a.stamp-b.stamp)[0];
+            if (countdownEl) {
+                if (!next) {
+                    countdownEl.innerHTML = '<div style="color:#c9c1d1;font-size:12px;">No upcoming high-impact U.S. event is listed in the current feed.</div>';
+                } else {
+                    const ms=next.stamp-now, days=Math.floor(ms/86400000), hours=Math.floor((ms%86400000)/3600000), minutes=Math.floor((ms%3600000)/60000), seconds=Math.floor((ms%60000)/1000);
+                    const timer=(days?days+'d ':'')+String(hours).padStart(2,'0')+':'+String(minutes).padStart(2,'0')+':'+String(seconds).padStart(2,'0');
+                    countdownEl.innerHTML=`<div style="font-size:10px;color:#d5b8ee;font-weight:900;letter-spacing:.7px;">NEXT HIGH-IMPACT RELEASE</div><div style="font-size:16px;color:#fff;font-weight:800;margin-top:4px;">${escapeHtml(next.event.title)}</div><div style="font-size:10px;color:#c9c1d1;margin-top:3px;">${shortCalendarDate(next.event.date_local)} · ${escapeHtml(next.event.time_local || 'Time TBC')} SAST · ${escapeHtml(next.event.currency || 'USD')}</div><div style="font-size:24px;color:#ffc34d;font-weight:900;margin-top:5px;">${timer}</div>`;
                 }
-            }, 80);
+            }
+        }
+
+        function runQuickNewsScenario() {
+            const eventSelect=document.getElementById('quickNewsEventSelect');
+            const marketSelect=document.getElementById('quickNewsMarketSelect');
+            const output=document.getElementById('quickNewsScenarioResult');
+            const eventId=eventSelect ? eventSelect.value : '';
+            const symbol=marketSelect ? marketSelect.value : 'XAUUSDm';
+            if (!output) return;
+            if (calendarStatusCache !== 'live' || !eventId) {
+                output.innerHTML='<div style="padding:10px;border-left:3px solid #ffcc80;color:#ffdda3;font-size:11px;">Choose a verified live event first. No directional forecast is fabricated when event data is missing.</div>';
+                return;
+            }
+            output.innerHTML='<div style="color:#b9a6cd;font-size:11px;padding:8px;">Loading conditional scenario…</div>';
+            fetch('/api/news-scenario?event_id='+encodeURIComponent(eventId)+'&symbol='+encodeURIComponent(symbol))
+                .then(r=>r.json()).then(data=>{
+                    if (data.error) { output.textContent=data.error; return; }
+                    const scenarios=(data.scenarios||[]).map(x=>`<div style="margin:7px 0;padding:8px;border-radius:7px;background:rgba(255,255,255,.04);"><strong style="color:#d9b4f1;">${escapeHtml(x.label)}</strong><div style="color:#d6d6dc;margin-top:3px;font-size:11px;">${escapeHtml(x.text)}</div></div>`).join('');
+                    const lean=data.consensus_lean?`<div style="margin:8px 0;padding:9px;border:1px solid rgba(175,125,220,.25);border-radius:8px;"><strong style="color:#dec2f6;">Conditional lean · ${escapeHtml(data.consensus_lean.label)}</strong><div style="color:#d2c6db;font-size:11px;margin-top:4px;">${escapeHtml(data.consensus_lean.text)}</div></div>`:'<div style="color:#aaa;font-size:11px;margin:7px 0;">No comparable consensus/prior data; no directional lean is shown.</div>';
+                    const metrics=`<div style="font-size:10px;color:#aeb6c0;">Consensus ${escapeHtml(data.consensus??'not published')} · Previous ${escapeHtml(data.prior??'—')} · Actual ${escapeHtml(data.actual??'not released')}</div>`;
+                    output.innerHTML=`<div style="font-size:11px;color:#ffd36a;font-weight:800;">${escapeHtml(data.phase)} · ${escapeHtml(symbol)}</div><div style="color:#fff;font-weight:700;margin:5px 0;">${escapeHtml(data.event)}</div>${metrics}${lean}${scenarios}<div style="font-size:10px;color:#ffdda3;margin-top:8px;line-height:1.45;">⚠ ${escapeHtml(data.caution||'Conditional scenario only; not a BUY/SELL instruction or probability.')}</div>`;
+                }).catch(()=>{output.textContent='Could not load the scenario. Check the live calendar status and try again.';});
+        }
+
+        function runQuickIndexScan() {
+            const selector=document.getElementById('quickIndexSymbolSelect');
+            const output=document.getElementById('quickIndexScanResult');
+            const symbol=selector ? selector.value : 'US30m';
+            if (!output || !['US30m','USTECm'].includes(symbol)) return;
+            output.innerHTML='<div style="padding:9px;color:#91d7ff;font-size:11px;">Checking exact MT5 quote and closed M15/context candles…</div>';
+            const newsParam=manualNewsQuery();
+            fetch('/api/auto-scan?symbol='+encodeURIComponent(symbol)+'&timeframe=M15'+newsParam)
+                .then(r=>r.json()).then(data=>{
+                    if (data.error) { output.textContent=data.error; return; }
+                    output.innerHTML=renderRuleScanCard(data,'QuickModal');
+                }).catch(()=>{output.textContent='Scan request failed. Check MT5 data readiness and retry.';});
         }
 
         function closeNewsPredictionSelector() {
@@ -3187,6 +3323,7 @@ HTML = """
                 .then(data => {
                     economicEventsCache = Array.isArray(data.events) ? data.events : [];
                     calendarStatusCache = data.status || 'unavailable';
+                    calendarSourceCache = data.source || 'unavailable';
                     renderNextMacroRelease();
                     const eventSelect = document.getElementById('calendarEventSelect');
                     const scenarioSelector = document.getElementById('newsScenarioSelector');
@@ -3200,6 +3337,7 @@ HTML = """
                         if (previousEvent && economicEventsCache.some(event => event.id === previousEvent)) eventSelect.value = previousEvent;
                         eventSelect.disabled = calendarStatusCache !== 'live' || economicEventsCache.length === 0;
                     }
+                    renderQuickNewsPanel();
                     if (scenarioSelector) scenarioSelector.style.display = newsPredictionPanelOpen ? 'block' : 'none';
                     const scenarioButton = document.getElementById('showNewsScenarioButton');
                     if (scenarioButton) scenarioButton.disabled = calendarStatusCache !== 'live' || economicEventsCache.length === 0;
@@ -3215,8 +3353,10 @@ HTML = """
                     const manualOverrideAvailable = data.status === 'unavailable';
                     const homeOverride = document.getElementById('manualNewsOverrideHome');
                     const scanOverride = document.getElementById('manualNewsOverrideScan');
+                    const quickOverride = document.getElementById('quickIndexManualNewsWrap');
                     if (homeOverride) homeOverride.style.display = manualOverrideAvailable ? 'block' : 'none';
                     if (scanOverride) scanOverride.style.display = manualOverrideAvailable ? 'block' : 'none';
+                    if (quickOverride) quickOverride.style.display = manualOverrideAvailable ? 'block' : 'none';
                     if (!manualOverrideAvailable) syncManualNewsCheck('reset');
                     if (status) {
                         status.textContent = data.status === 'live'
@@ -3254,13 +3394,15 @@ HTML = """
         function syncManualNewsCheck(source) {
             const homeBox = document.getElementById('manualNewsCheckHome');
             const scanBox = document.getElementById('manualNewsCheckScan');
+            const quickBox = document.getElementById('manualNewsCheckQuick');
             if (source === 'reset') manualNewsCheckState = false;
             else {
-                const selected = source === 'home' ? homeBox : scanBox;
+                const selected = source === 'home' ? homeBox : source === 'scan' ? scanBox : quickBox;
                 manualNewsCheckState = !!(selected && selected.checked);
             }
             if (homeBox) homeBox.checked = manualNewsCheckState;
             if (scanBox) scanBox.checked = manualNewsCheckState;
+            if (quickBox) quickBox.checked = manualNewsCheckState;
         }
 
         function consumeManualNewsCheck() {
@@ -3368,12 +3510,13 @@ HTML = """
             return parts.length ? parts.join(' · ') : 'No candle status received';
         }
 
-        function renderRuleScanCard(data) {
+        function renderRuleScanCard(data, viewSuffix = '') {
             const candidate = data.signal_available === true && ['BUY','SELL'].includes(data.direction);
             const direction = String(data.direction || 'WAIT');
             const directionColor = direction === 'BUY' ? '#00d4aa' : direction === 'SELL' ? '#ff6b6b' : '#ffd84d';
             const symbol = String(data.symbol || '');
             const symbolKey = symbol.replace(/[^A-Za-z0-9]/g, '');
+            const cardKey = symbolKey + String(viewSuffix || '').replace(/[^A-Za-z0-9]/g, '');
             const requestedTf = String(data.trigger_timeframe || 'M15').toUpperCase();
             const triggerTimeframe = ['M15','H1','H4','D1'].includes(requestedTf) ? requestedTf : 'M15';
             const price = Number(data.price) > 0 ? formatPriceForSymbol(symbol, data.price) : '—';
@@ -3476,14 +3619,15 @@ HTML = """
                     ${categoriesHtml}
                 </section>
                 ${saveHistoryButton}
-                <button type="button" onclick="runSMCBacktest('${symbolKey}','${triggerTimeframe}')" style="margin-top:10px;padding:11px;width:100%;background:rgba(0,150,255,.10);border:1px solid rgba(0,150,255,.30);color:#91d7ff;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;">Run historical test (${triggerTimeframe})</button>
-                <div id="smcBacktest${symbolKey}" style="margin-top:7px;font-size:11px;color:#bbb;"></div>
+                <button type="button" onclick="runSMCBacktest('${symbolKey}','${triggerTimeframe}','${String(viewSuffix || '').replace(/[^A-Za-z0-9]/g, '')}')" style="margin-top:10px;padding:11px;width:100%;background:rgba(0,150,255,.10);border:1px solid rgba(0,150,255,.30);color:#91d7ff;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;">Run historical test (${triggerTimeframe})</button>
+                <div id="smcBacktest${cardKey}" style="margin-top:7px;font-size:11px;color:#bbb;"></div>
                 <div style="margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(255,215,0,.045);color:#ffd899;font-size:10px;line-height:1.45;">The checklist ratio is not a win-rate estimate. Candidate levels are unvalidated, and this web app never places orders.</div>
             </article>`;
         }
 
-        function runSMCBacktest(symbol, timeframe = 'M15') {
-            const box = document.getElementById('smcBacktest' + String(symbol).replace(/[^A-Za-z0-9]/g,''));
+        function runSMCBacktest(symbol, timeframe = 'M15', viewSuffix = '') {
+            const boxKey = String(symbol).replace(/[^A-Za-z0-9]/g,'') + String(viewSuffix || '').replace(/[^A-Za-z0-9]/g,'');
+            const box = document.getElementById('smcBacktest' + boxKey);
             const requestedTf = String(timeframe || 'M15').toUpperCase();
             const safeTf = ['M15','H1','H4','D1'].includes(requestedTf) ? requestedTf : 'M15';
             if (box) box.textContent = 'Replaying closed ' + safeTf + ' MT5 candles…';
@@ -4248,7 +4392,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.8.2',
+        'version': '9.8.3',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
@@ -4261,6 +4405,7 @@ def health():
             'manual_news_acknowledgement_when_providers_unavailable',
             'next_high_impact_us_release_countdown', 'news_event_market_selector',
             'us30_nasdaq_m15_quick_scan', 'three_dot_news_and_index_quick_menu',
+            'quick_action_modal_without_page_navigation',
         ],
         'strategy_validation': 'UNVALIDATED_REAL_MT5_DATA',
     })

@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.8.3 — modal quick actions; existing calendar and scans preserved.
+Elite Alpha EA v9.8.4 — quick-action overlay scroll fix; existing calendar and scans preserved.
 
 Safety changes:
 - No public-market proxy prices or static quote estimates are presented or scanned.
@@ -2185,8 +2185,8 @@ HTML = """
     </div>
 
     <!-- Quick actions open over the current page; they do not navigate away from Home. -->
-    <div id="quickActionModal" onclick="if(event.target===this) closeQuickActionModal()" style="display:none;position:fixed;inset:0;z-index:1300;background:rgba(0,0,0,.78);padding:72px 12px 20px;overflow-y:auto;">
-        <section onclick="event.stopPropagation()" style="width:min(100%,560px);max-height:84vh;overflow-y:auto;margin:0 auto;padding:14px;background:linear-gradient(180deg,#101222,#080b12);border:1px solid rgba(105,150,190,.4);border-radius:15px;box-shadow:0 16px 42px rgba(0,0,0,.65);color:#edf3f8;">
+    <div id="quickActionModal" aria-hidden="true" onclick="if(event.target===this) closeQuickActionModal(event)" style="display:none;position:fixed;inset:0;z-index:1300;background:rgba(0,0,0,.48);padding:66px 12px 20px;overflow-y:auto;overscroll-behavior:contain;">
+        <section role="dialog" aria-modal="true" aria-labelledby="quickActionModalTitle" onclick="event.stopPropagation()" style="width:min(100%,560px);max-height:84vh;overflow-y:auto;overscroll-behavior:contain;margin:0 auto;padding:14px;background:linear-gradient(180deg,#101222,#080b12);border:1px solid rgba(105,150,190,.4);border-radius:15px;box-shadow:0 16px 42px rgba(0,0,0,.65);color:#edf3f8;">
             <header style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
                 <strong id="quickActionModalTitle" style="font-size:14px;color:#8fd5f2;">Quick action</strong>
                 <button type="button" onclick="closeQuickActionModal()" aria-label="Close" style="background:transparent;border:0;color:#ddd;font-size:24px;">×</button>
@@ -2227,7 +2227,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.8.3</div>
+            <div class="scanner-name">Precision Scanner v9.8.4</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2346,7 +2346,7 @@ HTML = """
             <div class="auto-scan-result" id="autoScanResult"></div>
         </div>
 
-        <!-- v9.8.3: focused US index M15 scan shortcut -->
+        <!-- v9.8.4: focused US index M15 scan shortcut -->
         <div class="setup-instructions" id="usIndexQuickPanel" style="display:none;margin:14px 0;border-color:rgba(0,212,170,.30);">
             <h4>📈 US30 / NASDAQ Session Scan</h4>
             <div style="font-size:11px;color:#aab5bf;line-height:1.45;margin:5px 0 10px;">Choose an index for a live Exness M15 scan. The US cash open shifts between 15:30 and 16:30 SAST with U.S. daylight saving. A scan reports only closed-bar rules; time alone does not predict direction.</div>
@@ -2652,7 +2652,7 @@ HTML = """
         <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.3</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.4</span></div>
             <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
             <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
             <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
@@ -2687,6 +2687,10 @@ HTML = """
         let manualNewsCheckState = false;
         let newsPredictionPanelOpen = false;
         let activeQuickFeature = '';
+        // Keep the underlying page (including Home's calendar) at its exact scroll position.
+        let quickActionScrollX = 0;
+        let quickActionScrollY = 0;
+        let quickActionBodyStyleSnapshot = null;
 
         // ============ INIT ============
         window.onload = function() {
@@ -3085,7 +3089,43 @@ HTML = """
             if (panel) panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
         }
 
+        function lockQuickActionPageScroll() {
+            const body = document.body;
+            if (!body || quickActionBodyStyleSnapshot) return;
+            quickActionScrollX = window.scrollX || window.pageXOffset || 0;
+            quickActionScrollY = window.scrollY || window.pageYOffset || 0;
+            quickActionBodyStyleSnapshot = {
+                position: body.style.position,
+                top: body.style.top,
+                left: body.style.left,
+                width: body.style.width,
+                overflow: body.style.overflow
+            };
+            // Fixed-body scroll locking works on mobile Safari too; the saved offsets
+            // keep the exact underlying tab/calendar in place instead of jumping Home.
+            body.style.position = 'fixed';
+            body.style.top = '-' + quickActionScrollY + 'px';
+            body.style.left = '-' + quickActionScrollX + 'px';
+            body.style.width = '100%';
+            body.style.overflow = 'hidden';
+        }
+
+        function restoreQuickActionPageScroll() {
+            if (!quickActionBodyStyleSnapshot) return;
+            const body = document.body;
+            const savedX = quickActionScrollX;
+            const savedY = quickActionScrollY;
+            Object.keys(quickActionBodyStyleSnapshot).forEach(property => {
+                body.style[property] = quickActionBodyStyleSnapshot[property];
+            });
+            quickActionBodyStyleSnapshot = null;
+            quickActionScrollX = 0;
+            quickActionScrollY = 0;
+            window.scrollTo(savedX, savedY);
+        }
+
         function openQuickFeature(feature) {
+            if (!['news', 'us-index'].includes(feature)) return;
             const menu = document.getElementById('quickActionsPanel');
             const modal = document.getElementById('quickActionModal');
             const newsPanel = document.getElementById('quickNewsModalPanel');
@@ -3093,12 +3133,14 @@ HTML = """
             const title = document.getElementById('quickActionModalTitle');
             if (menu) menu.style.display = 'none';
             if (!modal) return;
+            lockQuickActionPageScroll();
             activeQuickFeature = feature;
             modal.style.display = 'block';
-            document.body.style.overflow = 'hidden';
+            modal.setAttribute('aria-hidden', 'false');
             if (newsPanel) newsPanel.style.display = feature === 'news' ? 'block' : 'none';
             if (indexPanel) indexPanel.style.display = feature === 'us-index' ? 'block' : 'none';
             if (title) title.textContent = feature === 'news' ? 'News predictions' : 'US30 / NASDAQ session scan';
+            // Deliberately do not call switchTab(): the overlay sits over the current page.
             if (feature === 'news') renderQuickNewsPanel();
             if (feature === 'us-index') {
                 const manualWrap = document.getElementById('quickIndexManualNewsWrap');
@@ -3111,10 +3153,17 @@ HTML = """
         function closeQuickActionModal(event) {
             const modal = document.getElementById('quickActionModal');
             if (event && event.target !== modal) return;
-            if (modal) modal.style.display = 'none';
-            document.body.style.overflow = '';
+            if (modal) {
+                modal.style.display = 'none';
+                modal.setAttribute('aria-hidden', 'true');
+            }
             activeQuickFeature = '';
+            restoreQuickActionPageScroll();
         }
+
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && activeQuickFeature) closeQuickActionModal();
+        });
 
         function renderQuickNewsPanel() {
             const statusEl = document.getElementById('quickNewsCalendarStatus');
@@ -4392,7 +4441,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.8.3',
+        'version': '9.8.4',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
@@ -4405,7 +4454,7 @@ def health():
             'manual_news_acknowledgement_when_providers_unavailable',
             'next_high_impact_us_release_countdown', 'news_event_market_selector',
             'us30_nasdaq_m15_quick_scan', 'three_dot_news_and_index_quick_menu',
-            'quick_action_modal_without_page_navigation',
+            'quick_action_modal_without_page_navigation', 'quick_action_overlay_scroll_position_preserved',
         ],
         'strategy_validation': 'UNVALIDATED_REAL_MT5_DATA',
     })

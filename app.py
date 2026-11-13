@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.8.4 — quick-action overlay scroll fix; existing calendar and scans preserved.
+Elite Alpha EA v9.8.5 — quick-action overlay scroll fix; existing calendar and scans preserved.
 
 Safety changes:
 - No public-market proxy prices or static quote estimates are presented or scanned.
@@ -136,60 +136,28 @@ def _calendar_datetime_utc(value):
         return None
 
 
-def get_economic_calendar_data(force_refresh=False):
-    """Fetch a real U.S. calendar; use the published weekly feed if the primary is blocked.
+def _calendar_provider_access_notice(raw, events):
+    """Reject HTTP-200 provider notices (for example, 'API key needed') as calendar data."""
+    parts=[]
+    if isinstance(raw, dict):
+        for key in ('message','error','detail','status','code'):
+            value=raw.get(key)
+            if value is not None:
+                parts.append(str(value))
+    for item in events if isinstance(events, list) else []:
+        if isinstance(item, dict):
+            for key in ('title','name','event','message','description'):
+                value=item.get(key)
+                if value is not None:
+                    parts.append(str(value))
+    text=' '.join(parts).lower()
+    return bool(re.search(
+        r'api[\s_-]*key.{0,80}(?:required|needed|missing|invalid)|'
+        r'(?:required|needed|missing|invalid).{0,80}api[\s_-]*key|'
+        r'access denied|unauthori[sz]ed|forbidden|rate.?limit', text))
 
-    If all live sources fail, return unavailable and keep the scan's news gate closed.
-    """
-    global ECONOMIC_CALENDAR_CACHE
-    now_epoch = time.time()
-    if (not force_refresh and ECONOMIC_CALENDAR_CACHE.get('fetched_at')
-            and now_epoch - ECONOMIC_CALENDAR_CACHE['fetched_at'] < ECONOMIC_CALENDAR_TTL_SECONDS):
-        return dict(ECONOMIC_CALENDAR_CACHE)
 
-    local_now = johannesburg_now()
-    if local_now.tzinfo is None:
-        local_now = local_now.replace(tzinfo=timezone.utc).astimezone(JOHANNESBURG_TZ or timezone.utc)
-    now_utc = local_now.astimezone(timezone.utc)
-    from_date = local_now.date()
-    to_date = from_date + timedelta(days=7)
-    params = urllib.parse.urlencode({'from':from_date.isoformat(),'to':to_date.isoformat(),
-                                     'country':'US','tz':'Africa/Johannesburg','limit':100})
-    sources = [
-        ('FinanceCalendar.com', FINANCE_CALENDAR_API + '?' + params, FINANCE_CALENDAR_ATTRIBUTION,
-         {'User-Agent':'EliteAlphaEA/9.7 (economic calendar; attribution shown in app)','Accept':'application/json'}),
-        ('Fair Economy / Forex Factory', FAIR_ECONOMY_WEEKLY_API, FAIR_ECONOMY_ATTRIBUTION,
-         {'User-Agent':'Mozilla/5.0 EliteAlphaEA calendar reader','Accept':'application/json'}),
-    ]
-    source_events = None
-    source_name = None
-    source_attribution = None
-    errors = []
-    for name, url, attribution, headers in sources:
-        try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=8) as response:
-                raw = json.loads(response.read().decode('utf-8'))
-            events = raw.get('events', []) if isinstance(raw, dict) else raw
-            if not isinstance(events, list):
-                raise ValueError('Calendar provider returned an unexpected response shape')
-            source_events, source_name, source_attribution = events, name, attribution
-            break
-        except Exception as exc:
-            errors.append(name + ': ' + str(exc)[:120])
-
-    if source_events is None:
-        if ECONOMIC_CALENDAR_CACHE.get('events'):
-            stale = dict(ECONOMIC_CALENDAR_CACHE)
-            stale['status'] = 'stale'
-            stale['message'] = 'Live calendars failed; showing cached events. Verify event times before use.'
-            stale['error'] = ' | '.join(errors)
-            return stale
-        return {'events':[],'fetched_at':0,'updated_at':None,'status':'unavailable',
-                'message':'All live calendar sources are unavailable. News-gated scans remain WAIT.',
-                'source':'unavailable','attribution_url':FINANCE_CALENDAR_ATTRIBUTION,
-                'error':' | '.join(errors)}
-
+def _normalize_economic_calendar_events(source_events, source_name, source_attribution, now_utc):
     country_to_currency={'US':'USD','GB':'GBP','UK':'GBP','EU':'EUR','JP':'JPY','CA':'CAD','AU':'AUD','NZ':'NZD','CH':'CHF','CN':'CNY'}
     currency_to_country={'USD':'US','GBP':'GB','EUR':'EU','JPY':'JP','CAD':'CA','AUD':'AU','NZD':'NZ','CHF':'CH','CNY':'CN'}
     normalized=[]
@@ -235,10 +203,81 @@ def get_economic_calendar_data(force_refresh=False):
             'url':event_url,
         })
     normalized.sort(key=lambda e:e.get('release_at_utc') or '9999')
-    normalized=normalized[:10]
-    ECONOMIC_CALENDAR_CACHE={'events':normalized,'fetched_at':now_epoch,
+    return normalized[:10]
+
+
+def get_economic_calendar_data(force_refresh=False):
+    """Fetch a real U.S. calendar, falling through to the weekly source when needed.
+
+    Some providers return HTTP 200 with an API-key notice instead of calendar data.
+    A source is only selected after its rows are validated and normalized. If all
+    sources fail, keep the news gate closed; never invent a calendar event.
+    """
+    global ECONOMIC_CALENDAR_CACHE
+    now_epoch = time.time()
+    if (not force_refresh and ECONOMIC_CALENDAR_CACHE.get('fetched_at')
+            and now_epoch - ECONOMIC_CALENDAR_CACHE['fetched_at'] < ECONOMIC_CALENDAR_TTL_SECONDS):
+        return dict(ECONOMIC_CALENDAR_CACHE)
+
+    local_now = johannesburg_now()
+    if local_now.tzinfo is None:
+        local_now = local_now.replace(tzinfo=timezone.utc).astimezone(JOHANNESBURG_TZ or timezone.utc)
+    now_utc = local_now.astimezone(timezone.utc)
+    from_date = local_now.date()
+    to_date = from_date + timedelta(days=7)
+    params = urllib.parse.urlencode({'from':from_date.isoformat(),'to':to_date.isoformat(),
+                                     'country':'US','tz':'Africa/Johannesburg','limit':100})
+    sources = [
+        ('FinanceCalendar.com', FINANCE_CALENDAR_API + '?' + params, FINANCE_CALENDAR_ATTRIBUTION,
+         {'User-Agent':'EliteAlphaEA/9.7 (economic calendar; attribution shown in app)','Accept':'application/json'}),
+        ('Fair Economy / Forex Factory', FAIR_ECONOMY_WEEKLY_API, FAIR_ECONOMY_ATTRIBUTION,
+         {'User-Agent':'Mozilla/5.0 EliteAlphaEA calendar reader','Accept':'application/json'}),
+    ]
+    selected_name = None
+    selected_attribution = None
+    selected_events = []
+    valid_empty_source = None
+    errors = []
+    for name, url, attribution, headers in sources:
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=8) as response:
+                raw = json.loads(response.read().decode('utf-8'))
+            events = raw.get('events', []) if isinstance(raw, dict) else raw
+            if not isinstance(events, list):
+                raise ValueError('Calendar provider returned an unexpected response shape')
+            if _calendar_provider_access_notice(raw, events):
+                raise ValueError('Provider returned an access/API-key notice, not calendar rows')
+
+            candidate_events = _normalize_economic_calendar_events(events, name, attribution, now_utc)
+            if candidate_events:
+                selected_name, selected_attribution = name, attribution
+                selected_events = candidate_events
+                break
+            # Do not stop at a syntactically valid but empty/non-matching response;
+            # try the backup first. If all providers have no relevant events, keep
+            # the last valid source attribution and report an honest empty calendar.
+            valid_empty_source = (name, attribution)
+        except Exception as exc:
+            errors.append(name + ': ' + str(exc)[:160])
+
+    if selected_name is None and valid_empty_source:
+        selected_name, selected_attribution = valid_empty_source
+    if selected_name is None:
+        if ECONOMIC_CALENDAR_CACHE.get('events'):
+            stale = dict(ECONOMIC_CALENDAR_CACHE)
+            stale['status'] = 'stale'
+            stale['message'] = 'Live calendars failed; showing cached events. Verify event times before use.'
+            stale['error'] = ' | '.join(errors)
+            return stale
+        return {'events':[],'fetched_at':0,'updated_at':None,'status':'unavailable',
+                'message':'All live calendar sources failed validation or are unavailable. News-gated scans remain WAIT.',
+                'source':'unavailable','attribution_url':FINANCE_CALENDAR_ATTRIBUTION,
+                'error':' | '.join(errors)}
+
+    ECONOMIC_CALENDAR_CACHE={'events':selected_events,'fetched_at':now_epoch,
         'updated_at':local_now.strftime('%Y-%m-%d %H:%M:%S SAST'),'status':'live','message':'',
-        'source':source_name,'attribution_url':source_attribution}
+        'source':selected_name,'attribution_url':selected_attribution}
     return dict(ECONOMIC_CALENDAR_CACHE)
 
 
@@ -853,6 +892,18 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
     factors = analysis.get('factors', {})
     if manual_news_override and 'News Clear' in factors:
         factors['News Clear']['detail'] = 'Manual calendar check acknowledged; live provider unavailable. Verify external event times.'
+    if not candle_status.get('ready'):
+        # The factor engine can calculate from cached bars; never label those old
+        # values as current when the bridge freshness check has failed.
+        missing_frames = [tf for tf,item in candle_status.get('timeframes',{}).items() if not item.get('ready')]
+        freshness_detail = 'Fresh closed MT5 candles unavailable' + (': ' + ', '.join(missing_frames) if missing_frames else '') + '. Reconnect the bridge; candle checks are not scored.'
+        for item in factors.values():
+            if isinstance(item, dict):
+                item['available'] = False
+                item['pass'] = None
+                item['detail'] = freshness_detail
+        analysis['candidate'] = False
+        analysis['pattern'] = None
     available = sum(1 for item in factors.values() if item.get('available'))
     passed = sum(1 for item in factors.values() if item.get('available') and item.get('pass'))
     check_ratio_pct = round(100 * passed / available) if available else None
@@ -866,6 +917,9 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
 
     if price is None:
         reason = 'WAIT: no fresh exact Exness quote. Connect the MT5 bridge.'
+        missing_frames = [tf for tf,item in candle_status.get('timeframes',{}).items() if not item.get('ready')]
+        if missing_frames:
+            reason += ' Fresh closed candles are also missing on ' + ', '.join(missing_frames) + '.'
         direction = 'WAIT'
     elif not candle_status['ready']:
         missing = [tf for tf,item in candle_status['timeframes'].items() if not item['ready']]
@@ -2227,7 +2281,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.8.4</div>
+            <div class="scanner-name">Precision Scanner v9.8.5</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2346,7 +2400,7 @@ HTML = """
             <div class="auto-scan-result" id="autoScanResult"></div>
         </div>
 
-        <!-- v9.8.4: focused US index M15 scan shortcut -->
+        <!-- v9.8.5: focused US index M15 scan shortcut -->
         <div class="setup-instructions" id="usIndexQuickPanel" style="display:none;margin:14px 0;border-color:rgba(0,212,170,.30);">
             <h4>📈 US30 / NASDAQ Session Scan</h4>
             <div style="font-size:11px;color:#aab5bf;line-height:1.45;margin:5px 0 10px;">Choose an index for a live Exness M15 scan. The US cash open shifts between 15:30 and 16:30 SAST with U.S. daylight saving. A scan reports only closed-bar rules; time alone does not predict direction.</div>
@@ -2652,7 +2706,7 @@ HTML = """
         <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.4</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.5</span></div>
             <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
             <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
             <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
@@ -4441,7 +4495,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.8.4',
+        'version': '9.8.5',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
@@ -4455,6 +4509,8 @@ def health():
             'next_high_impact_us_release_countdown', 'news_event_market_selector',
             'us30_nasdaq_m15_quick_scan', 'three_dot_news_and_index_quick_menu',
             'quick_action_modal_without_page_navigation', 'quick_action_overlay_scroll_position_preserved',
+            'calendar_provider_notice_and_empty_response_fallback',
+            'stale_candle_checks_marked_unavailable',
         ],
         'strategy_validation': 'UNVALIDATED_REAL_MT5_DATA',
     })

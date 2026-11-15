@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.8.5 — quick-action overlay scroll fix; existing calendar and scans preserved.
+Elite Alpha EA v9.8.6 — quick-action overlay scroll fix; existing calendar and scans preserved.
 
 Safety changes:
 - No public-market proxy prices or static quote estimates are presented or scanned.
@@ -878,8 +878,8 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
         copy['_dt_utc'] = _calendar_datetime_utc(event.get('release_at_utc'))
         events.append(copy)
 
-    manual_news_override = bool(manual_news_clear and calendar.get('status') == 'unavailable')
-    rule_calendar_status = 'live' if manual_news_override else calendar.get('status', 'unavailable')
+    manual_news_override = bool(manual_news_clear and calendar.get('status') in ('unavailable','stale'))
+    rule_calendar_status = 'live' if calendar.get('status') == 'live' or manual_news_override else 'unavailable'
     analysis = evaluate_smc_factors(
         symbol=symbol,
         price=price or 0,
@@ -891,7 +891,7 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
     )
     factors = analysis.get('factors', {})
     if manual_news_override and 'News Clear' in factors:
-        factors['News Clear']['detail'] = 'Manual calendar check acknowledged; live provider unavailable. Verify external event times.'
+        factors['News Clear']['detail'] = 'Manual calendar check acknowledged; live provider unavailable or stale. Verify current external event times.'
     if not candle_status.get('ready'):
         # The factor engine can calculate from cached bars; never label those old
         # values as current when the bridge freshness check has failed.
@@ -934,7 +934,7 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
     else:
         reason = f'UNVALIDATED CANDIDATE: {passed}/{available} available SMC checks pass. This uses live MT5 data, but the rule has not passed historical/backtest validation.'
         if manual_news_override:
-            reason += ' Live calendar was unavailable; user manually acknowledged checking news.'
+            reason += ' Live calendar was unavailable or stale; user manually acknowledged checking news.'
 
     entry = sl = tp = None
     if direction in ('BUY','SELL') and price is not None and pattern:
@@ -2265,8 +2265,8 @@ HTML = """
                     <option value="US30m" selected>US30 · US30m</option><option value="USTECm">NASDAQ · USTECm</option>
                 </select>
                 <div id="quickIndexManualNewsWrap" style="display:none;margin-top:10px;padding:9px;border:1px solid rgba(255,204,128,.28);border-radius:8px;color:#ffdda3;font-size:10px;line-height:1.45;">
-                    Calendar source unavailable. Only tick this after independently checking that no related high-impact release is near.
-                    <label style="display:block;margin-top:6px;font-weight:700;"><input id="manualNewsCheckQuick" type="checkbox" onchange="syncManualNewsCheck('quick')"> I checked the calendar manually for this scan</label>
+                    Calendar source is unavailable or stale. Check a trusted calendar yourself; never use this to bypass a known high-impact release.
+                    <label style="display:block;margin-top:6px;font-weight:700;"><input id="manualNewsCheckQuick" type="checkbox" onchange="syncManualNewsCheck('quick')"> I checked the calendar manually for this one scan</label>
                 </div>
                 <button type="button" onclick="runQuickIndexScan()" style="width:100%;margin-top:10px;padding:11px;background:linear-gradient(135deg,#00d4aa,#0096ff);border:0;border-radius:9px;color:#001015;font-weight:900;">Scan selected index (M15)</button>
                 <div id="quickIndexScanResult" style="margin-top:10px;"></div>
@@ -2281,7 +2281,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.8.5</div>
+            <div class="scanner-name">Precision Scanner v9.8.6</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2400,7 +2400,7 @@ HTML = """
             <div class="auto-scan-result" id="autoScanResult"></div>
         </div>
 
-        <!-- v9.8.5: focused US index M15 scan shortcut -->
+        <!-- v9.8.6: focused US index M15 scan shortcut -->
         <div class="setup-instructions" id="usIndexQuickPanel" style="display:none;margin:14px 0;border-color:rgba(0,212,170,.30);">
             <h4>📈 US30 / NASDAQ Session Scan</h4>
             <div style="font-size:11px;color:#aab5bf;line-height:1.45;margin:5px 0 10px;">Choose an index for a live Exness M15 scan. The US cash open shifts between 15:30 and 16:30 SAST with U.S. daylight saving. A scan reports only closed-bar rules; time alone does not predict direction.</div>
@@ -2474,8 +2474,8 @@ HTML = """
                 <div style="margin-top:6px;color:#a89ab2;font-size:9px;line-height:1.35;">No fixed confidence or pre-news order levels. Verify the release and post-news price action.</div>
             </div>
             <div id="manualNewsOverrideHome" style="display:none;margin:8px 0;padding:9px;border:1px solid rgba(255,204,128,.28);border-radius:8px;background:rgba(255,204,128,.045);font-size:10px;line-height:1.45;color:#ffdda3;">
-                Calendar source is offline. If you personally checked a trusted calendar and confirmed no related high-impact event is near, tick this manual acknowledgement; otherwise leave it off and scans stay WAIT.
-                <label style="display:block;margin-top:7px;font-weight:700;"><input id="manualNewsCheckHome" type="checkbox" onchange="syncManualNewsCheck('home')"> I checked the calendar manually; allow the technical scan without live news data</label>
+                Calendar source is unavailable or stale. Check a trusted calendar yourself. Tick only if no related high-impact release is near; this acknowledges one scan only.
+                <label style="display:block;margin-top:7px;font-weight:700;"><input id="manualNewsCheckHome" type="checkbox" onchange="syncManualNewsCheck('home')"> I checked the calendar manually; allow one technical scan</label>
             </div>
             <div id="newsList"></div>
             <div style="font-size:10px;color:#777;margin-top:8px;">Calendar source: <a id="calendarAttributionLink" href="https://www.financecalendar.com" target="_blank" rel="noopener" style="color:#00d4aa;">Loading source…</a></div>
@@ -2589,8 +2589,8 @@ HTML = """
                 <div style="font-size: 11px; color: #888; margin-top: 5px;">No public proxy or estimate is used. Without exact price and candle history, the result remains WAIT.</div>
             </div>
             <div id="manualNewsOverrideScan" style="display:none;margin:-3px 0 12px;padding:9px;border:1px solid rgba(255,204,128,.28);border-radius:8px;background:rgba(255,204,128,.045);font-size:10px;line-height:1.45;color:#ffdda3;">
-                Calendar source is offline. Only use this after checking a trusted economic calendar yourself; never use it to bypass a known NFP/FOMC release.
-                <label style="display:block;margin-top:7px;font-weight:700;"><input id="manualNewsCheckScan" type="checkbox" onchange="syncManualNewsCheck('scan')"> I checked the calendar manually; allow the technical scan without live news data</label>
+                Calendar source is unavailable or stale. Check a trusted economic calendar; never use this to bypass a known NFP/FOMC release. This acknowledgement lasts for one scan only.
+                <label style="display:block;margin-top:7px;font-weight:700;"><input id="manualNewsCheckScan" type="checkbox" onchange="syncManualNewsCheck('scan')"> I checked the calendar manually; allow one technical scan</label>
             </div>
 
 
@@ -2706,7 +2706,7 @@ HTML = """
         <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.5</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.6</span></div>
             <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
             <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
             <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
@@ -3198,7 +3198,7 @@ HTML = """
             if (feature === 'news') renderQuickNewsPanel();
             if (feature === 'us-index') {
                 const manualWrap = document.getElementById('quickIndexManualNewsWrap');
-                if (manualWrap) manualWrap.style.display = calendarStatusCache === 'unavailable' ? 'block' : 'none';
+                if (manualWrap) manualWrap.style.display = ['unavailable','stale'].includes(calendarStatusCache) ? 'block' : 'none';
                 const manualBox = document.getElementById('manualNewsCheckQuick');
                 if (manualBox) manualBox.checked = manualNewsCheckState;
             }
@@ -3453,7 +3453,7 @@ HTML = """
                         sourceLink.textContent = data.source || 'Calendar unavailable';
                         sourceLink.href = data.attribution_url || 'https://www.financecalendar.com';
                     }
-                    const manualOverrideAvailable = data.status === 'unavailable';
+                    const manualOverrideAvailable = ['unavailable','stale'].includes(data.status);
                     const homeOverride = document.getElementById('manualNewsOverrideHome');
                     const scanOverride = document.getElementById('manualNewsOverrideScan');
                     const quickOverride = document.getElementById('quickIndexManualNewsWrap');
@@ -3480,16 +3480,36 @@ HTML = """
                         const dateLabel = shortCalendarDate(event.date_local);
                         const timeLabel = event.time_local || 'Time TBC';
                         const title = event.title || 'Economic event';
-                        return `<button class="news-item" type="button" onclick="showNewsScenario(${index})" style="width:100%;text-align:left;background:transparent;color:#ddd;border:0;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:start;padding:9px 2px;">
-                            <span><strong style="color:#fff;">${escapeHtml(dateLabel)} · ${escapeHtml(timeLabel)} SAST</strong><span style="display:block;margin-top:3px;line-height:1.35;">${escapeHtml(event.currency || event.country || '')} · ${escapeHtml(title)}</span><small style="display:block;color:#888;margin-top:3px;">Tap for scenario · consensus ${escapeHtml(event.consensus ?? 'not published')}</small></span>
+                        const scenarioAttrs = calendarStatusCache === 'live' ? `onclick="showNewsScenario(${index})"` : 'disabled aria-disabled="true"';
+                        const scenarioHint = calendarStatusCache === 'live' ? `Tap for scenario · consensus ${escapeHtml(event.consensus ?? 'not published')}` : 'Stale calendar · refresh before viewing a scenario';
+                        return `<button class="news-item" type="button" ${scenarioAttrs} style="width:100%;text-align:left;background:transparent;color:#ddd;border:0;border-bottom:1px solid rgba(255,255,255,.06);cursor:${calendarStatusCache === 'live' ? 'pointer' : 'default'};display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:start;padding:9px 2px;">
+                            <span><strong style="color:#fff;">${escapeHtml(dateLabel)} · ${escapeHtml(timeLabel)} SAST</strong><span style="display:block;margin-top:3px;line-height:1.35;">${escapeHtml(event.currency || event.country || '')} · ${escapeHtml(title)}</span><small style="display:block;color:#888;margin-top:3px;">${scenarioHint}</small></span>
                             <span class="${cls}">${escapeHtml(impact)}</span>
                         </button>`;
                     }).join('');
                 })
                 .catch(() => {
+                    economicEventsCache = [];
+                    calendarStatusCache = 'unavailable';
+                    calendarSourceCache = 'unavailable';
+                    renderNextMacroRelease();
+                    renderQuickNewsPanel();
                     const status = document.getElementById('newsStatus');
                     const list = document.getElementById('newsList');
-                    if (status) status.textContent = '⚠️ Live calendar unavailable.';
+                    const eventSelect = document.getElementById('calendarEventSelect');
+                    const scenarioButton = document.getElementById('showNewsScenarioButton');
+                    const sourceLink = document.getElementById('calendarAttributionLink');
+                    const homeOverride = document.getElementById('manualNewsOverrideHome');
+                    const scanOverride = document.getElementById('manualNewsOverrideScan');
+                    const quickOverride = document.getElementById('quickIndexManualNewsWrap');
+                    if (eventSelect) { eventSelect.innerHTML = '<option value="">No verified live event</option>'; eventSelect.disabled = true; }
+                    if (scenarioButton) scenarioButton.disabled = true;
+                    if (sourceLink) { sourceLink.textContent = 'Calendar unavailable'; sourceLink.href = 'https://www.financecalendar.com'; }
+                    if (homeOverride) homeOverride.style.display = 'block';
+                    if (scanOverride) scanOverride.style.display = 'block';
+                    if (quickOverride) quickOverride.style.display = 'block';
+                    syncManualNewsCheck('reset');
+                    if (status) { status.textContent = '⚠️ Live calendar request failed; verify news manually.'; status.style.color = '#ffd700'; }
                     if (list) list.innerHTML = '<div style="color:#aaa;font-size:12px;">No placeholder events are shown while the feed is unavailable.</div>';
                 });
         }
@@ -4374,6 +4394,8 @@ def api_news_scenario():
     if symbol not in SYMBOL_CONFIG:
         return jsonify({'error': 'Unknown symbol'}), 400
     calendar_data = get_economic_calendar_data()
+    if calendar_data.get('status') != 'live':
+        return jsonify({'error': 'The live calendar is unavailable or stale. Refresh it before viewing a news scenario.'}), 503
     event = next((e for e in calendar_data.get('events', []) if e.get('id') == event_id), None)
     if not event:
         return jsonify({'error': 'Event is no longer in the live calendar. Refresh the event list.'}), 404
@@ -4495,7 +4517,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.8.5',
+        'version': '9.8.6',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
@@ -4510,7 +4532,7 @@ def health():
             'us30_nasdaq_m15_quick_scan', 'three_dot_news_and_index_quick_menu',
             'quick_action_modal_without_page_navigation', 'quick_action_overlay_scroll_position_preserved',
             'calendar_provider_notice_and_empty_response_fallback',
-            'stale_candle_checks_marked_unavailable',
+            'stale_candle_checks_marked_unavailable', 'stale_calendar_fails_closed',
         ],
         'strategy_validation': 'UNVALIDATED_REAL_MT5_DATA',
     })

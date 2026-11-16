@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.8.6 — quick-action overlay scroll fix; existing calendar and scans preserved.
+Elite Alpha EA v9.8.7 — quick-action overlay scroll fix; existing calendar and scans preserved.
 
 Safety changes:
 - No public-market proxy prices or static quote estimates are presented or scanned.
@@ -99,17 +99,27 @@ def get_mt5_candle_status(symbol):
     }
 
 # ============================================
-# v9.0: LIVE ECONOMIC CALENDAR
-# FinanceCalendar API is keyless for this usage; the UI includes the required
-# visible source attribution. Cache for 5 minutes to keep requests low.
+# LIVE ECONOMIC CALENDAR
+# API credentials are read only from private environment configuration; never
+# place a provider key in source, browser HTML, or logs. Attribution stays visible.
 # ============================================
 
 FINANCE_CALENDAR_API = 'https://www.financecalendar.com/wp-json/fc/v1/calendar'
 FINANCE_CALENDAR_ATTRIBUTION = 'https://www.financecalendar.com'
+FINANCE_CALENDAR_API_KEY = os.environ.get('FINANCE_CALENDAR_API_KEY', '').strip()
 FAIR_ECONOMY_WEEKLY_API = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json'
 FAIR_ECONOMY_ATTRIBUTION = 'https://www.forexfactory.com/calendar'
 ECONOMIC_CALENDAR_CACHE = {'events': [], 'fetched_at': 0.0, 'status': 'empty', 'source': None, 'attribution_url': None}
-ECONOMIC_CALENDAR_TTL_SECONDS = 300
+try:
+    # Eight hours keeps the bounded schedule tier below its monthly request cap.
+    # Paid/API-key users may tune this in Render without putting a key in the repo.
+    ECONOMIC_CALENDAR_TTL_SECONDS = max(300, int(os.environ.get('ECONOMIC_CALENDAR_TTL_SECONDS', '28800')))
+except (TypeError, ValueError):
+    ECONOMIC_CALENDAR_TTL_SECONDS = 28800
+try:
+    ECONOMIC_CALENDAR_FAILURE_TTL_SECONDS = max(60, int(os.environ.get('ECONOMIC_CALENDAR_FAILURE_TTL_SECONDS', '900')))
+except (TypeError, ValueError):
+    ECONOMIC_CALENDAR_FAILURE_TTL_SECONDS = 900
 ECONOMIC_CALENDAR_COUNTRIES = 'US'
 
 
@@ -155,6 +165,31 @@ def _calendar_provider_access_notice(raw, events):
         r'api[\s_-]*key.{0,80}(?:required|needed|missing|invalid)|'
         r'(?:required|needed|missing|invalid).{0,80}api[\s_-]*key|'
         r'access denied|unauthori[sz]ed|forbidden|rate.?limit', text))
+
+
+def _calendar_public_diagnostic(error):
+    """Map provider exceptions to safe, concise UI text without exposing raw URLs or secrets."""
+    if not error:
+        return None
+    messages=[]
+    for entry in str(error).split(' | '):
+        source, _, detail = entry.partition(':')
+        source = source.strip() or 'Calendar provider'
+        text = detail.lower()
+        if ('api' in text and 'key' in text) or '401' in text or '403' in text or 'unauthor' in text or 'forbidden' in text:
+            reason = 'requires a valid API key/access'
+        elif '429' in text or 'rate' in text:
+            reason = 'rate-limited the request'
+        elif 'timed out' in text or 'timeout' in text:
+            reason = 'request timed out'
+        elif 'unexpected response' in text or 'validation' in text:
+            reason = 'returned data the app could not validate'
+        else:
+            reason = 'did not return usable calendar data'
+        item = source + ': ' + reason
+        if item not in messages:
+            messages.append(item)
+    return '; '.join(messages)[:300] if messages else None
 
 
 def _normalize_economic_calendar_events(source_events, source_name, source_attribution, now_utc):
@@ -215,8 +250,12 @@ def get_economic_calendar_data(force_refresh=False):
     """
     global ECONOMIC_CALENDAR_CACHE
     now_epoch = time.time()
+    cached_status = ECONOMIC_CALENDAR_CACHE.get('status')
+    cache_ttl = (ECONOMIC_CALENDAR_TTL_SECONDS if cached_status == 'live'
+                 else ECONOMIC_CALENDAR_FAILURE_TTL_SECONDS if cached_status in ('stale','unavailable')
+                 else 0)
     if (not force_refresh and ECONOMIC_CALENDAR_CACHE.get('fetched_at')
-            and now_epoch - ECONOMIC_CALENDAR_CACHE['fetched_at'] < ECONOMIC_CALENDAR_TTL_SECONDS):
+            and now_epoch - ECONOMIC_CALENDAR_CACHE['fetched_at'] < cache_ttl):
         return dict(ECONOMIC_CALENDAR_CACHE)
 
     local_now = johannesburg_now()
@@ -224,12 +263,15 @@ def get_economic_calendar_data(force_refresh=False):
         local_now = local_now.replace(tzinfo=timezone.utc).astimezone(JOHANNESBURG_TZ or timezone.utc)
     now_utc = local_now.astimezone(timezone.utc)
     from_date = local_now.date()
-    to_date = from_date + timedelta(days=7)
+    # The provider's bounded schedule endpoint covers today through today + 6.
+    to_date = from_date + timedelta(days=6)
     params = urllib.parse.urlencode({'from':from_date.isoformat(),'to':to_date.isoformat(),
-                                     'country':'US','tz':'Africa/Johannesburg','limit':100})
+                                     'country':'US','tz':'Africa/Johannesburg','limit':20})
+    finance_headers = {'User-Agent':'EliteAlphaEA/9.8 (economic calendar; attribution shown in app)','Accept':'application/json'}
+    if FINANCE_CALENDAR_API_KEY:
+        finance_headers['X-API-Key'] = FINANCE_CALENDAR_API_KEY
     sources = [
-        ('FinanceCalendar.com', FINANCE_CALENDAR_API + '?' + params, FINANCE_CALENDAR_ATTRIBUTION,
-         {'User-Agent':'EliteAlphaEA/9.7 (economic calendar; attribution shown in app)','Accept':'application/json'}),
+        ('FinanceCalendar.com', FINANCE_CALENDAR_API + '?' + params, FINANCE_CALENDAR_ATTRIBUTION, finance_headers),
         ('Fair Economy / Forex Factory', FAIR_ECONOMY_WEEKLY_API, FAIR_ECONOMY_ATTRIBUTION,
          {'User-Agent':'Mozilla/5.0 EliteAlphaEA calendar reader','Accept':'application/json'}),
     ]
@@ -267,17 +309,25 @@ def get_economic_calendar_data(force_refresh=False):
         if ECONOMIC_CALENDAR_CACHE.get('events'):
             stale = dict(ECONOMIC_CALENDAR_CACHE)
             stale['status'] = 'stale'
+            stale['fetched_at'] = now_epoch
             stale['message'] = 'Live calendars failed; showing cached events. Verify event times before use.'
             stale['error'] = ' | '.join(errors)
-            return stale
-        return {'events':[],'fetched_at':0,'updated_at':None,'status':'unavailable',
+            stale['diagnostic'] = _calendar_public_diagnostic(stale['error'])
+            ECONOMIC_CALENDAR_CACHE = stale
+            return dict(stale)
+        unavailable = {'events':[],'fetched_at':now_epoch,'updated_at':None,
+                'last_attempt_at':local_now.strftime('%Y-%m-%d %H:%M:%S SAST'),'status':'unavailable',
                 'message':'All live calendar sources failed validation or are unavailable. News-gated scans remain WAIT.',
                 'source':'unavailable','attribution_url':FINANCE_CALENDAR_ATTRIBUTION,
                 'error':' | '.join(errors)}
+        unavailable['diagnostic'] = _calendar_public_diagnostic(unavailable['error'])
+        ECONOMIC_CALENDAR_CACHE = unavailable
+        return dict(unavailable)
 
     ECONOMIC_CALENDAR_CACHE={'events':selected_events,'fetched_at':now_epoch,
         'updated_at':local_now.strftime('%Y-%m-%d %H:%M:%S SAST'),'status':'live','message':'',
-        'source':selected_name,'attribution_url':selected_attribution}
+        'source':selected_name,'attribution_url':selected_attribution,
+        'error':' | '.join(errors),'diagnostic':None}
     return dict(ECONOMIC_CALENDAR_CACHE)
 
 
@@ -2281,7 +2331,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.8.6</div>
+            <div class="scanner-name">Precision Scanner v9.8.7</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2400,7 +2450,7 @@ HTML = """
             <div class="auto-scan-result" id="autoScanResult"></div>
         </div>
 
-        <!-- v9.8.6: focused US index M15 scan shortcut -->
+        <!-- v9.8.7: focused US index M15 scan shortcut -->
         <div class="setup-instructions" id="usIndexQuickPanel" style="display:none;margin:14px 0;border-color:rgba(0,212,170,.30);">
             <h4>📈 US30 / NASDAQ Session Scan</h4>
             <div style="font-size:11px;color:#aab5bf;line-height:1.45;margin:5px 0 10px;">Choose an index for a live Exness M15 scan. The US cash open shifts between 15:30 and 16:30 SAST with U.S. daylight saving. A scan reports only closed-bar rules; time alone does not predict direction.</div>
@@ -2706,7 +2756,7 @@ HTML = """
         <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.6</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.7</span></div>
             <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
             <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
             <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
@@ -2737,6 +2787,7 @@ HTML = """
         let economicEventsCache = [];
         let calendarStatusCache = 'empty';
         let calendarSourceCache = 'unavailable';
+        let calendarDiagnosticCache = '';
         let activeNewsEventIndex = -1;
         let manualNewsCheckState = false;
         let newsPredictionPanelOpen = false;
@@ -3231,7 +3282,7 @@ HTML = """
                 const msg = calendarStatusCache === 'stale'
                     ? 'Calendar is stale; verify release details before using a scenario.'
                     : 'Calendar feed is unavailable. No current event direction can be inferred.';
-                statusEl.textContent = (calendarSourceCache || 'Calendar') + ' · ' + msg;
+                statusEl.textContent = (calendarSourceCache || 'Calendar') + ' · ' + msg + (calendarDiagnosticCache ? ' · ' + calendarDiagnosticCache : '');
                 statusEl.style.color = '#ffd36a';
                 eventSelect.innerHTML = '<option value="">No verified live event</option>';
                 eventSelect.disabled = true;
@@ -3427,6 +3478,7 @@ HTML = """
                     economicEventsCache = Array.isArray(data.events) ? data.events : [];
                     calendarStatusCache = data.status || 'unavailable';
                     calendarSourceCache = data.source || 'unavailable';
+                    calendarDiagnosticCache = data.diagnostic || '';
                     renderNextMacroRelease();
                     const eventSelect = document.getElementById('calendarEventSelect');
                     const scenarioSelector = document.getElementById('newsScenarioSelector');
@@ -3462,16 +3514,20 @@ HTML = """
                     if (quickOverride) quickOverride.style.display = manualOverrideAvailable ? 'block' : 'none';
                     if (!manualOverrideAvailable) syncManualNewsCheck('reset');
                     if (status) {
-                        status.textContent = data.status === 'live'
+                        const stateMessage = data.status === 'live'
                             ? 'Live calendar · updated ' + (data.updated_at || 'just now')
                             : data.status === 'stale'
                                 ? '⚠️ ' + (data.message || 'Showing cached calendar data; verify before use.')
                                 : '⚠️ ' + (data.message || 'Live calendar unavailable; no placeholder events shown.');
+                        status.textContent = stateMessage + (data.diagnostic ? ' · ' + data.diagnostic : '');
                         status.style.color = data.status === 'live' ? '#8fc7bb' : '#ffd700';
                     }
                     if (!list) return;
                     if (economicEventsCache.length === 0) {
-                        list.innerHTML = `<div style="color:#aaa;font-size:12px;line-height:1.5;">${escapeHtml(data.status === 'unavailable' ? (data.message || 'Calendar unavailable.') : 'No medium/high-impact events listed in the next 7 days. This does not mean trading is risk-free.')}</div>`;
+                        const emptyNote = data.status === 'unavailable'
+                            ? 'No verified event cards are available. See the calendar warning above.'
+                            : 'No matching medium/high-impact events are listed in the current seven-day feed. This does not mean trading is risk-free.';
+                        list.innerHTML = `<div style="color:#aaa;font-size:12px;line-height:1.5;">${escapeHtml(emptyNote)}</div>`;
                         return;
                     }
                     list.innerHTML = economicEventsCache.map((event, index) => {
@@ -3492,6 +3548,7 @@ HTML = """
                     economicEventsCache = [];
                     calendarStatusCache = 'unavailable';
                     calendarSourceCache = 'unavailable';
+                    calendarDiagnosticCache = 'The browser could not reach the calendar endpoint.';
                     renderNextMacroRelease();
                     renderQuickNewsPanel();
                     const status = document.getElementById('newsStatus');
@@ -3509,8 +3566,8 @@ HTML = """
                     if (scanOverride) scanOverride.style.display = 'block';
                     if (quickOverride) quickOverride.style.display = 'block';
                     syncManualNewsCheck('reset');
-                    if (status) { status.textContent = '⚠️ Live calendar request failed; verify news manually.'; status.style.color = '#ffd700'; }
-                    if (list) list.innerHTML = '<div style="color:#aaa;font-size:12px;">No placeholder events are shown while the feed is unavailable.</div>';
+                    if (status) { status.textContent = '⚠️ Live calendar request failed; verify news manually. ' + calendarDiagnosticCache; status.style.color = '#ffd700'; }
+                    if (list) list.innerHTML = '<div style="color:#aaa;font-size:12px;">No verified event cards are available. See the warning above.</div>';
                 });
         }
 
@@ -4378,6 +4435,9 @@ def api_session():
 def api_news():
     """Live calendar data only; never claim an empty feed means trading is safe."""
     data = get_economic_calendar_data()
+    diagnostic = data.get('diagnostic')
+    if data.get('status') != 'live' and not diagnostic:
+        diagnostic = _calendar_public_diagnostic(data.get('error'))
     return jsonify({
         'events': data.get('events', []),
         'status': data.get('status', 'unavailable'),
@@ -4385,6 +4445,7 @@ def api_news():
         'updated_at': data.get('updated_at'),
         'source': data.get('source') or 'unavailable',
         'attribution_url': data.get('attribution_url') or FINANCE_CALENDAR_ATTRIBUTION,
+        'diagnostic': diagnostic,
     })
 
 @app.route('/api/news-scenario')
@@ -4517,7 +4578,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.8.6',
+        'version': '9.8.7',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
@@ -4533,6 +4594,8 @@ def health():
             'quick_action_modal_without_page_navigation', 'quick_action_overlay_scroll_position_preserved',
             'calendar_provider_notice_and_empty_response_fallback',
             'stale_candle_checks_marked_unavailable', 'stale_calendar_fails_closed',
+            'finance_calendar_api_key_header_support', 'calendar_provider_failure_diagnostics',
+            'calendar_duplicate_error_message_removed', 'calendar_failure_backoff_cache',
         ],
         'strategy_validation': 'UNVALIDATED_REAL_MT5_DATA',
     })

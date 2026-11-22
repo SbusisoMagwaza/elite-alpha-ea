@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.8.8 — scan wait-reason accuracy; existing strategy and UI preserved.
+Elite Alpha EA v9.8.9 — distinguish MT5 and calendar readiness; preserve candidate rules.
 
 Safety changes:
 - No public-market proxy prices or static quote estimates are presented or scanned.
@@ -61,7 +61,8 @@ MT5_CANDLES = {}
 STRATEGY_BACKTEST_CACHE = {}
 MT5_CANDLE_MAX_AGE_SECONDS = 180
 MT5_TIMEFRAMES = ('M15', 'H1', 'H4', 'D1')
-MT5_CANDLE_MIN_COUNTS = {'M15': 40, 'H1': 40, 'H4': 30, 'D1': 30}
+# Live HTF alignment uses EMA50 on H1/H4/D1; readiness must supply at least 50 bars on each.
+MT5_CANDLE_MIN_COUNTS = {'M15': 40, 'H1': 50, 'H4': 50, 'D1': 50}
 MT5_CANDLE_MAX_PER_SERIES = 600
 
 def get_mt5_quote(symbol, max_age_seconds=10):
@@ -901,18 +902,21 @@ def _has_fvg(candles, start_index, end_index, direction):
 
 
 def format_scan_wait_reason(core_gates):
-    """Separate unavailable inputs from available setup checks that failed."""
+    """Separate unavailable market/news inputs from setup rules that failed."""
     unavailable=[]
+    unavailable_names=[]
     failed=[]
     for gate in core_gates:
         label=f"{gate['name']}: {gate.get('detail') or 'No detail supplied'}"
         if not gate.get('available'):
             unavailable.append(label)
+            unavailable_names.append(gate['name'])
         elif not gate.get('pass'):
             failed.append(label)
     parts=[]
     if unavailable:
-        parts.append('inputs unavailable — ' + ' · '.join(unavailable))
+        kind='news/calendar data unavailable' if set(unavailable_names)=={'News Clear'} else 'required inputs unavailable'
+        parts.append(kind + ' — ' + ' · '.join(unavailable))
     if failed:
         parts.append('setup conditions not met — ' + ' · '.join(failed))
     return 'WAIT: ' + '; '.join(parts) + '.' if parts else 'WAIT: The live candle conditions do not form a complete candidate.'
@@ -1025,12 +1029,20 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
     elif risk_rejected:
         wait_state = 'RISK'
         signal_mode = 'WAIT_RISK'
-    elif price is None or not quote or not candle_status.get('ready') or any(not gate['available'] for gate in core_gates):
-        wait_state = 'DATA'
-        signal_mode = 'WAIT_DATA'
+    elif price is None or not quote or not candle_status.get('ready'):
+        wait_state = 'MARKET_DATA'
+        signal_mode = 'WAIT_MARKET_DATA'
     else:
-        wait_state = 'SETUP'
-        signal_mode = 'WAIT_SETUP'
+        unavailable_names=[gate['name'] for gate in core_gates if not gate['available']]
+        if unavailable_names == ['News Clear']:
+            wait_state = 'NEWS'
+            signal_mode = 'WAIT_NEWS'
+        elif unavailable_names:
+            wait_state = 'INPUTS'
+            signal_mode = 'WAIT_INPUTS'
+        else:
+            wait_state = 'SETUP'
+            signal_mode = 'WAIT_SETUP'
 
     return {
         'symbol': symbol,
@@ -2364,7 +2376,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.8.8</div>
+            <div class="scanner-name">Precision Scanner v9.8.9</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2483,7 +2495,7 @@ HTML = """
             <div class="auto-scan-result" id="autoScanResult"></div>
         </div>
 
-        <!-- v9.8.8: focused US index M15 scan shortcut preserved -->
+        <!-- v9.8.9: focused US index M15 scan shortcut preserved -->
         <div class="setup-instructions" id="usIndexQuickPanel" style="display:none;margin:14px 0;border-color:rgba(0,212,170,.30);">
             <h4>📈 US30 / NASDAQ Session Scan</h4>
             <div style="font-size:11px;color:#aab5bf;line-height:1.45;margin:5px 0 10px;">Choose an index for a live Exness M15 scan. The US cash open shifts between 15:30 and 16:30 SAST with U.S. daylight saving. A scan reports only closed-bar rules; time alone does not predict direction.</div>
@@ -2789,7 +2801,7 @@ HTML = """
         <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.8</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.9</span></div>
             <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
             <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
             <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
@@ -3782,7 +3794,9 @@ HTML = """
                 ? 'Liquidity sweep → BOS/CHoCH → displacement' + (factors['Fair Value Gap']?.pass ? ' + FVG' : '')
                 : 'No complete setup confirmed';
             const scorePctText = ratioPct === null ? '—' : ratioPct + '%';
-            const waitTitle = data.wait_state === 'DATA' ? 'WAIT — REQUIRED DATA UNAVAILABLE'
+            const waitTitle = data.wait_state === 'MARKET_DATA' ? 'WAIT — MT5 MARKET DATA UNAVAILABLE'
+                : data.wait_state === 'NEWS' ? 'WAIT — NEWS CALENDAR UNAVAILABLE'
+                : data.wait_state === 'INPUTS' ? 'WAIT — REQUIRED INPUTS UNAVAILABLE'
                 : data.wait_state === 'RISK' ? 'WAIT — CANDIDATE INVALIDATED'
                 : 'WAIT — SETUP NOT CONFIRMED';
             const plan = candidate ? `<section style="margin-top:12px;padding:13px;border:1px solid rgba(0,212,170,.30);background:rgba(0,212,170,.055);border-radius:11px;">
@@ -4614,7 +4628,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.8.8',
+        'version': '9.8.9',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
@@ -4622,7 +4636,7 @@ def health():
             'strategy_validation_status_endpoint', 'screenshot_symbol_price_ocr',
             'manual_candidate_signal_history', 'trigger_timeframe_backtest_wiring',
             'no_public_account_identifier_or_default_balance', 'compact_session_label_and_sast_clock',
-            'detailed_smc_scan_reasons', 'wait_data_vs_setup_classification', 'separate_sweep_and_bos_diagnostics', 'displacement_requires_confirmed_break', 'checklist_ratio_not_probability',
+            'detailed_smc_scan_reasons', 'wait_data_vs_setup_classification', 'calendar_vs_mt5_wait_classification', 'ema50_candle_readiness_thresholds', 'separate_sweep_and_bos_diagnostics', 'displacement_requires_confirmed_break', 'checklist_ratio_not_probability',
             'focus_symbol_quote_and_candle_readiness_panel', 'economic_calendar_fallback_feed',
             'manual_news_acknowledgement_when_providers_unavailable',
             'next_high_impact_us_release_countdown', 'news_event_market_selector',

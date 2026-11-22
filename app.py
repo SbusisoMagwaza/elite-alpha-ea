@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.8.7 — quick-action overlay scroll fix; existing calendar and scans preserved.
+Elite Alpha EA v9.8.8 — scan wait-reason accuracy; existing strategy and UI preserved.
 
 Safety changes:
 - No public-market proxy prices or static quote estimates are presented or scanned.
@@ -900,6 +900,24 @@ def _has_fvg(candles, start_index, end_index, direction):
     return False
 
 
+def format_scan_wait_reason(core_gates):
+    """Separate unavailable inputs from available setup checks that failed."""
+    unavailable=[]
+    failed=[]
+    for gate in core_gates:
+        label=f"{gate['name']}: {gate.get('detail') or 'No detail supplied'}"
+        if not gate.get('available'):
+            unavailable.append(label)
+        elif not gate.get('pass'):
+            failed.append(label)
+    parts=[]
+    if unavailable:
+        parts.append('inputs unavailable — ' + ' · '.join(unavailable))
+    if failed:
+        parts.append('setup conditions not met — ' + ' · '.join(failed))
+    return 'WAIT: ' + '; '.join(parts) + '.' if parts else 'WAIT: The live candle conditions do not form a complete candidate.'
+
+
 def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='M15', manual_news_clear=False):
     """Evaluate 20 explicit candle-derived factors; emit only unvalidated candidates."""
     if symbol not in SYMBOL_CONFIG:
@@ -966,27 +984,27 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
     direction = pattern.get('direction') if analysis.get('candidate') and pattern else 'WAIT'
 
     if price is None:
-        reason = 'WAIT: no fresh exact Exness quote. Connect the MT5 bridge.'
+        reason = 'WAIT: No fresh exact Exness quote was received within the 10-second freshness window.'
         missing_frames = [tf for tf,item in candle_status.get('timeframes',{}).items() if not item.get('ready')]
         if missing_frames:
             reason += ' Fresh closed candles are also missing on ' + ', '.join(missing_frames) + '.'
         direction = 'WAIT'
     elif not candle_status['ready']:
         missing = [tf for tf,item in candle_status['timeframes'].items() if not item['ready']]
-        reason = 'WAIT: waiting for fresh closed candles on ' + ', '.join(missing) + '.'
+        reason = 'WAIT: Fresh closed candles are not ready on ' + ', '.join(missing) + '.'
         direction = 'WAIT'
     elif not quote:
-        reason = 'WAIT: screenshot price is reference-only; a fresh MT5 quote is required for a candidate.'
+        reason = 'WAIT: The screenshot price is reference-only; a fresh MT5 bridge quote is required for a candidate.'
         direction = 'WAIT'
     elif direction == 'WAIT':
-        blockers = [f"{gate['name']}: {gate['detail']}" for gate in core_gates if not gate['available'] or not gate['pass']]
-        reason = 'WAIT: Required checks missing — ' + ' · '.join(blockers) + '.' if blockers else 'WAIT: The live candle conditions do not form a candidate.'
+        reason = format_scan_wait_reason(core_gates)
     else:
         reason = f'UNVALIDATED CANDIDATE: {passed}/{available} available SMC checks pass. This uses live MT5 data, but the rule has not passed historical/backtest validation.'
         if manual_news_override:
             reason += ' Live calendar was unavailable or stale; user manually acknowledged checking news.'
 
     entry = sl = tp = None
+    risk_rejected = False
     if direction in ('BUY','SELL') and price is not None and pattern:
         atr_value = analysis.get('atr') or 0
         buffer = atr_value * 0.15
@@ -994,11 +1012,25 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
         risk = price - stop if direction == 'BUY' else stop - price
         if risk <= 0 or (atr_value and risk > 6 * atr_value):
             direction = 'WAIT'
-            reason = 'WAIT: live quote is too far from the sweep invalidation level.'
+            risk_rejected = True
+            reason = 'WAIT: live quote is too far from the sweep invalidation level; candidate discarded.'
         else:
             entry = round(price, 5)
             sl = round(stop, 5)
             tp = round(price + 2*risk if direction == 'BUY' else price - 2*risk, 5)
+
+    if direction in ('BUY','SELL') and entry is not None:
+        wait_state = 'CANDIDATE'
+        signal_mode = 'UNVALIDATED_CANDIDATE_REAL_MT5'
+    elif risk_rejected:
+        wait_state = 'RISK'
+        signal_mode = 'WAIT_RISK'
+    elif price is None or not quote or not candle_status.get('ready') or any(not gate['available'] for gate in core_gates):
+        wait_state = 'DATA'
+        signal_mode = 'WAIT_DATA'
+    else:
+        wait_state = 'SETUP'
+        signal_mode = 'WAIT_SETUP'
 
     return {
         'symbol': symbol,
@@ -1016,8 +1048,9 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
         'core_gates': core_gates,
         'manual_news_override': manual_news_override,
         'grade': '—',
-        'strategy': 'SMC Factor Engine v1 · unvalidated',
-        'signal_mode': 'UNVALIDATED_CANDIDATE_REAL_MT5' if direction in ('BUY','SELL') else 'WAIT',
+        'strategy': 'SMC Factor Engine v1.1 (timeframe-selectable) · unvalidated',
+        'signal_mode': signal_mode,
+        'wait_state': wait_state,
         'entry': entry,
         'sl': sl,
         'tp': tp,
@@ -2331,7 +2364,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.8.7</div>
+            <div class="scanner-name">Precision Scanner v9.8.8</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2450,7 +2483,7 @@ HTML = """
             <div class="auto-scan-result" id="autoScanResult"></div>
         </div>
 
-        <!-- v9.8.7: focused US index M15 scan shortcut -->
+        <!-- v9.8.8: focused US index M15 scan shortcut preserved -->
         <div class="setup-instructions" id="usIndexQuickPanel" style="display:none;margin:14px 0;border-color:rgba(0,212,170,.30);">
             <h4>📈 US30 / NASDAQ Session Scan</h4>
             <div style="font-size:11px;color:#aab5bf;line-height:1.45;margin:5px 0 10px;">Choose an index for a live Exness M15 scan. The US cash open shifts between 15:30 and 16:30 SAST with U.S. daylight saving. A scan reports only closed-bar rules; time alone does not predict direction.</div>
@@ -2756,7 +2789,7 @@ HTML = """
         <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.7</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.8</span></div>
             <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
             <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
             <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
@@ -3749,6 +3782,9 @@ HTML = """
                 ? 'Liquidity sweep → BOS/CHoCH → displacement' + (factors['Fair Value Gap']?.pass ? ' + FVG' : '')
                 : 'No complete setup confirmed';
             const scorePctText = ratioPct === null ? '—' : ratioPct + '%';
+            const waitTitle = data.wait_state === 'DATA' ? 'WAIT — REQUIRED DATA UNAVAILABLE'
+                : data.wait_state === 'RISK' ? 'WAIT — CANDIDATE INVALIDATED'
+                : 'WAIT — SETUP NOT CONFIRMED';
             const plan = candidate ? `<section style="margin-top:12px;padding:13px;border:1px solid rgba(0,212,170,.30);background:rgba(0,212,170,.055);border-radius:11px;">
                 <div style="color:#ffcc80;font-weight:800;font-size:11px;letter-spacing:.8px;margin-bottom:9px;">RULE-BASED CANDIDATE · NOT VALIDATED</div>
                 <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;">
@@ -3758,9 +3794,9 @@ HTML = """
                 </div>
                 <div style="text-align:right;color:#9da7b1;font-size:10px;margin-top:7px;">Rule target ${escapeHtml(data.rr || '—')} · checklist ratio is not a win probability</div>
             </section>` : `<section style="margin-top:12px;padding:13px;border-left:4px solid #ffd36a;background:rgba(255,204,128,.055);border-radius:8px;">
-                <div style="font-size:12px;color:#ffe3a3;font-weight:800;">WAIT — NO TRADE PLAN</div>
+                <div style="font-size:12px;color:#ffe3a3;font-weight:800;">${waitTitle}</div>
                 <div style="font-size:12px;color:#d8d0c0;line-height:1.5;margin-top:5px;">${escapeHtml(data.signal_reason || 'Required closed-bar conditions have not aligned.')}</div>
-                ${blockerText ? `<div style="font-size:10px;color:#ffcc80;margin-top:7px;">Required checks still waiting: ${escapeHtml(blockerText)}</div>` : ''}
+                ${blockerText ? `<div style="font-size:10px;color:#ffcc80;margin-top:7px;">Unresolved core checks: ${escapeHtml(blockerText)}</div>` : ''}
             </section>`;
             const manualNewsNotice = data.manual_news_override
                 ? `<div style="margin-top:9px;padding:9px;border:1px solid rgba(255,204,128,.35);border-radius:8px;background:rgba(255,204,128,.06);color:#ffdda3;font-size:10px;line-height:1.45;">⚠ Manual news acknowledgement used because the live calendar was unavailable. Verify an external calendar yourself; do not trade around NFP/FOMC if unsure.</div>`
@@ -4578,7 +4614,7 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.8.7',
+        'version': '9.8.8',
         'features': [
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
@@ -4586,7 +4622,7 @@ def health():
             'strategy_validation_status_endpoint', 'screenshot_symbol_price_ocr',
             'manual_candidate_signal_history', 'trigger_timeframe_backtest_wiring',
             'no_public_account_identifier_or_default_balance', 'compact_session_label_and_sast_clock',
-            'detailed_smc_scan_reasons', 'checklist_ratio_not_probability',
+            'detailed_smc_scan_reasons', 'wait_data_vs_setup_classification', 'separate_sweep_and_bos_diagnostics', 'displacement_requires_confirmed_break', 'checklist_ratio_not_probability',
             'focus_symbol_quote_and_candle_readiness_panel', 'economic_calendar_fallback_feed',
             'manual_news_acknowledgement_when_providers_unavailable',
             'next_high_impact_us_release_countdown', 'news_event_market_selector',

@@ -1,5 +1,5 @@
 """
-Elite Alpha EA v9.8.9 — distinguish MT5 and calendar readiness; preserve candidate rules.
+Elite Alpha EA v9.9.0 — validate source timestamps; preserve candidate rules.
 
 Safety changes:
 - No public-market proxy prices or static quote estimates are presented or scanned.
@@ -35,6 +35,8 @@ import urllib.parse
 from smc_factors import evaluate_smc_factors
 
 app = Flask(__name__)
+# Bound the read-only bridge payload; the expected 7-symbol/4-timeframe snapshot is below this.
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 
 # ============================================
 # v9.0: SYMBOL METADATA — NEVER USED AS A MARKET QUOTE
@@ -52,51 +54,158 @@ SYMBOL_CONFIG = {
     'US30m':   {'pip': 1.0, 'lot_value': 1.0},
 }
 
-# v8.9.2: read-only quote bridge retained in v9.0. The EA sends bid/ask; it cannot trade.
+# Read-only MT5 bridge. The EA sends bid/ask and closed candles; it cannot trade.
 MT5_BRIDGE_TOKEN = os.environ.get('MT5_BRIDGE_TOKEN', '')
 MT5_QUOTES = {}
 MT5_QUOTES_LAST_UPDATE = None
+MT5_BRIDGE_LAST_DATA_UPDATE = None
 # Keyed by (symbol, timeframe); each record stores closed OHLC bars only.
 MT5_CANDLES = {}
 STRATEGY_BACKTEST_CACHE = {}
 MT5_CANDLE_MAX_AGE_SECONDS = 180
 MT5_TIMEFRAMES = ('M15', 'H1', 'H4', 'D1')
+MT5_TIMEFRAME_SECONDS = {'M15': 900, 'H1': 3600, 'H4': 14400, 'D1': 86400}
+# A recently re-sent snapshot is not enough: last closed candle must also be recent.
+MT5_CANDLE_MAX_BAR_AGE_SECONDS = {'M15': 3600, 'H1': 10800, 'H4': 43200, 'D1': 172800}
+MT5_CANDLE_FUTURE_TOLERANCE_SECONDS = 300
+MT5_QUOTE_FUTURE_TOLERANCE_SECONDS = 3
 # Live HTF alignment uses EMA50 on H1/H4/D1; readiness must supply at least 50 bars on each.
 MT5_CANDLE_MIN_COUNTS = {'M15': 40, 'H1': 50, 'H4': 50, 'D1': 50}
 MT5_CANDLE_MAX_PER_SERIES = 600
 
-def get_mt5_quote(symbol, max_age_seconds=10):
-    """Return a fresh quote pushed by the user's MT5 terminal, if available."""
+
+def get_mt5_quote_status(symbol, max_age_seconds=10, now=None):
+    """Explain whether the last received quote is usable, without inferring terminal state."""
+    now = time.time() if now is None else float(now)
     quote = MT5_QUOTES.get(symbol)
     if not quote:
-        return None
-    if time.time() - quote.get('received_at', 0) > max_age_seconds:
-        return None
-    return quote
+        return {'status': 'NO_QUOTE_RECEIVED', 'usable': False,
+                'received_age_seconds': None, 'tick_age_seconds': None,
+                'reason': 'No quote for this symbol has reached the app.'}
+    try:
+        received_age = now - float(quote.get('received_at', 0))
+        if not math.isfinite(received_age):
+            received_age = None
+    except (TypeError, ValueError, OverflowError):
+        received_age = None
+    tick_time = quote.get('tick_time_utc_sec')
+    try:
+        tick_age = now - float(tick_time) if tick_time is not None else None
+        if tick_age is not None and not math.isfinite(tick_age):
+            tick_age = None
+    except (TypeError, ValueError, OverflowError):
+        tick_age = None
+    try:
+        bid = float(quote.get('bid', 0))
+        ask = float(quote.get('ask', 0))
+        valid_bid_ask = math.isfinite(bid) and math.isfinite(ask) and bid > 0 and ask >= bid
+    except (TypeError, ValueError, OverflowError):
+        valid_bid_ask = False
+    result = {
+        'usable': False,
+        'received_age_seconds': round(received_age, 1) if received_age is not None else None,
+        'tick_age_seconds': round(tick_age, 1) if tick_age is not None else None,
+    }
+    if received_age is None or received_age < -MT5_QUOTE_FUTURE_TOLERANCE_SECONDS:
+        result.update(status='CLOCK_SKEW', reason='Quote receive timestamp is ahead of the app clock; clock alignment must be checked.')
+    elif received_age > max_age_seconds:
+        result.update(status='RECEIVE_STALE', reason=f'Last quote reached the app {received_age:.1f}s ago; the freshness limit is {max_age_seconds}s.')
+    elif not valid_bid_ask:
+        result.update(status='INVALID_QUOTE', reason='The last received bid/ask pair is invalid.')
+    elif tick_time is None:
+        result.update(status='TICK_TIME_UNKNOWN', reason='The quote has no usable MT5 tick timestamp and broker UTC offset.')
+    elif tick_age is None:
+        result.update(status='TICK_TIME_UNKNOWN', reason='The MT5 tick timestamp could not be interpreted.')
+    elif tick_age < -MT5_QUOTE_FUTURE_TOLERANCE_SECONDS:
+        result.update(status='CLOCK_SKEW', reason=f'MT5 tick timestamp is {-tick_age:.1f}s ahead of the app clock; verify clock/UTC-offset alignment.')
+    elif tick_age > max_age_seconds:
+        result.update(status='TICK_STALE', reason=f'The MT5 tick itself is {tick_age:.1f}s old; the freshness limit is {max_age_seconds}s.')
+    else:
+        result.update(status='FRESH', usable=True, reason='Fresh MT5 bid/ask and source tick timestamp are available.')
+    return result
+
+
+def get_mt5_quote(symbol, max_age_seconds=10):
+    """Return only a recently received quote whose own MT5 tick time is also fresh."""
+    quote = MT5_QUOTES.get(symbol)
+    status = get_mt5_quote_status(symbol, max_age_seconds=max_age_seconds)
+    return quote if quote and status['usable'] else None
+
 
 def get_mt5_candle_status(symbol):
-    """Describe which fresh, closed candle series have reached Render."""
+    """Report receipt freshness and the age/clock quality of each closed candle series."""
     now = time.time()
     frames = {}
     for timeframe in MT5_TIMEFRAMES:
         record = MT5_CANDLES.get((symbol, timeframe))
-        age = round(now - record.get('received_at', 0), 1) if record else None
+        try:
+            age = round(now - float(record.get('received_at', 0)), 1) if record else None
+            if age is not None and not math.isfinite(age):
+                age = None
+        except (TypeError, ValueError, OverflowError):
+            age = None
         candles = record.get('candles', []) if record else []
-        fresh = bool(record and age is not None and age <= MT5_CANDLE_MAX_AGE_SECONDS)
+        received_recently = bool(record and age is not None and -MT5_CANDLE_FUTURE_TOLERANCE_SECONDS <= age <= MT5_CANDLE_MAX_AGE_SECONDS)
         minimum = MT5_CANDLE_MIN_COUNTS[timeframe]
+        latest = candles[-1] if candles else None
+        latest_utc = latest.get('time_utc') if latest else None
+        bar_age = None
+        timestamp_status = 'UNKNOWN'
+        if latest_utc is not None:
+            try:
+                bar_close = float(latest_utc) + MT5_TIMEFRAME_SECONDS[timeframe]
+                bar_age = now - bar_close
+                if not math.isfinite(bar_close) or not math.isfinite(bar_age):
+                    bar_age = None
+                    timestamp_status = 'INVALID'
+                elif bar_age < -MT5_CANDLE_FUTURE_TOLERANCE_SECONDS:
+                    timestamp_status = 'FUTURE'
+                elif bar_age > MT5_CANDLE_MAX_BAR_AGE_SECONDS[timeframe]:
+                    timestamp_status = 'STALE'
+                else:
+                    timestamp_status = 'FRESH'
+            except (TypeError, ValueError, OverflowError):
+                bar_age = None
+                timestamp_status = 'INVALID'
+        if not record:
+            reason = 'No candle series has reached the app.'
+        elif not received_recently:
+            reason = (f'Last candle update reached the app {age:.1f}s ago; the receive limit is {MT5_CANDLE_MAX_AGE_SECONDS}s.'
+                     if age is not None else 'Candle receipt time is missing or invalid.')
+        elif not candles:
+            reason = 'The received candle series is empty.'
+        elif timestamp_status == 'UNKNOWN':
+            reason = 'Broker-to-UTC candle timestamps are missing; the time-normalized bridge payload is required.'
+        elif timestamp_status == 'FUTURE':
+            reason = f'The latest closed {timeframe} candle timestamp is {-bar_age:.1f}s ahead of the app clock.'
+        elif timestamp_status == 'STALE':
+            reason = f'The latest closed {timeframe} candle is {bar_age:.1f}s old; the limit is {MT5_CANDLE_MAX_BAR_AGE_SECONDS[timeframe]}s.'
+        elif timestamp_status == 'INVALID':
+            reason = 'The latest candle timestamp is invalid.'
+        elif len(candles) < minimum:
+            reason = f'Need at least {minimum} closed {timeframe} bars; received {len(candles)}.'
+        else:
+            reason = f'{len(candles)} recent closed {timeframe} bars with time-normalized timestamps.'
         frames[timeframe] = {
-            'available': fresh,
-            'bars': len(candles) if fresh else 0,
+            'available': bool(received_recently and candles),
+            'received_recently': received_recently,
+            'bars': len(candles) if received_recently else 0,
             'minimum_bars': minimum,
             'age_seconds': age,
-            'latest_bar_time': candles[-1]['time'] if fresh and candles else None,
-            'ready': bool(fresh and len(candles) >= minimum),
+            'latest_bar_time': latest.get('time') if latest else None,
+            'latest_bar_time_utc': latest_utc,
+            'bar_age_seconds': round(bar_age, 1) if bar_age is not None else None,
+            'timestamp_status': timestamp_status,
+            'timestamp_valid': timestamp_status == 'FRESH',
+            'reason': reason,
+            'ready': bool(received_recently and candles and timestamp_status == 'FRESH' and len(candles) >= minimum),
         }
     return {
         'symbol': symbol,
         'timeframes': frames,
         'ready': all(frames[tf]['ready'] for tf in MT5_TIMEFRAMES),
         'max_age_seconds': MT5_CANDLE_MAX_AGE_SECONDS,
+        'max_bar_age_seconds': dict(MT5_CANDLE_MAX_BAR_AGE_SECONDS),
     }
 
 # ============================================
@@ -930,16 +1039,19 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
     if timeframe not in MT5_TIMEFRAMES:
         timeframe = 'M15'
     candle_status = get_mt5_candle_status(symbol)
+    quote_status = get_mt5_quote_status(symbol)
     quote = get_mt5_quote(symbol)
     if quote and float(quote.get('price', 0) or 0) > 0:
         price = float(quote['price'])
-        price_source = 'MT5 live bridge'
+        price_source = 'MT5 live bridge midpoint'
     else:
         try:
             screenshot = float(custom_price) if custom_price is not None else None
-        except (TypeError, ValueError):
+            if screenshot is not None and (not math.isfinite(screenshot) or screenshot <= 0):
+                screenshot = None
+        except (TypeError, ValueError, OverflowError):
             screenshot = None
-        price = screenshot if screenshot and screenshot > 0 else None
+        price = screenshot if screenshot is not None else None
         price_source = 'MT5 screenshot' if price is not None else 'unavailable'
 
     candles = {tf: (MT5_CANDLES.get((symbol, tf), {}).get('candles', [])) for tf in MT5_TIMEFRAMES}
@@ -965,10 +1077,13 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
     if manual_news_override and 'News Clear' in factors:
         factors['News Clear']['detail'] = 'Manual calendar check acknowledged; live provider unavailable or stale. Verify current external event times.'
     if not candle_status.get('ready'):
-        # The factor engine can calculate from cached bars; never label those old
-        # values as current when the bridge freshness check has failed.
-        missing_frames = [tf for tf,item in candle_status.get('timeframes',{}).items() if not item.get('ready')]
-        freshness_detail = 'Fresh closed MT5 candles unavailable' + (': ' + ', '.join(missing_frames) if missing_frames else '') + '. Reconnect the bridge; candle checks are not scored.'
+        # Cached bars may still be analyzed for diagnostics, but are never called current.
+        missing_details = [
+            f"{tf}: {item.get('reason') or 'not ready'}"
+            for tf, item in candle_status.get('timeframes', {}).items()
+            if not item.get('ready')
+        ]
+        freshness_detail = 'Time-normalized closed MT5 candles are not ready' + (': ' + '; '.join(missing_details) if missing_details else '') + '. Candle checks are not scored.'
         for item in factors.values():
             if isinstance(item, dict):
                 item['available'] = False
@@ -988,17 +1103,25 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
     direction = pattern.get('direction') if analysis.get('candidate') and pattern else 'WAIT'
 
     if price is None:
-        reason = 'WAIT: No fresh exact Exness quote was received within the 10-second freshness window.'
-        missing_frames = [tf for tf,item in candle_status.get('timeframes',{}).items() if not item.get('ready')]
-        if missing_frames:
-            reason += ' Fresh closed candles are also missing on ' + ', '.join(missing_frames) + '.'
+        reason = 'WAIT: ' + quote_status.get('reason', 'No fresh exact Exness quote is available to this scan.')
+        missing_details = [
+            f"{tf}: {item.get('reason') or 'not ready'}"
+            for tf, item in candle_status.get('timeframes', {}).items()
+            if not item.get('ready')
+        ]
+        if missing_details:
+            reason += ' Candle data: ' + '; '.join(missing_details) + '.'
         direction = 'WAIT'
     elif not candle_status['ready']:
-        missing = [tf for tf,item in candle_status['timeframes'].items() if not item['ready']]
-        reason = 'WAIT: Fresh closed candles are not ready on ' + ', '.join(missing) + '.'
+        missing_details = [
+            f"{tf}: {item.get('reason') or 'not ready'}"
+            for tf, item in candle_status['timeframes'].items()
+            if not item['ready']
+        ]
+        reason = 'WAIT: Closed candle series are not ready: ' + '; '.join(missing_details) + '.'
         direction = 'WAIT'
     elif not quote:
-        reason = 'WAIT: The screenshot price is reference-only; a fresh MT5 bridge quote is required for a candidate.'
+        reason = 'WAIT: The screenshot price is reference-only; ' + quote_status.get('reason', 'a fresh MT5 quote is not available.')
         direction = 'WAIT'
     elif direction == 'WAIT':
         reason = format_scan_wait_reason(core_gates)
@@ -1009,19 +1132,24 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
 
     entry = sl = tp = None
     risk_rejected = False
+    entry_side = None
     if direction in ('BUY','SELL') and price is not None and pattern:
+        # A manual BUY enters at the ask; a manual SELL enters at the bid.
+        entry_side = 'ASK' if direction == 'BUY' else 'BID'
+        entry_reference = float(quote[entry_side.lower()]) if quote else price
         atr_value = analysis.get('atr') or 0
         buffer = atr_value * 0.15
         stop = pattern['extreme'] - buffer if direction == 'BUY' else pattern['extreme'] + buffer
-        risk = price - stop if direction == 'BUY' else stop - price
+        risk = entry_reference - stop if direction == 'BUY' else stop - entry_reference
         if risk <= 0 or (atr_value and risk > 6 * atr_value):
             direction = 'WAIT'
+            entry_side = None
             risk_rejected = True
-            reason = 'WAIT: live quote is too far from the sweep invalidation level; candidate discarded.'
+            reason = 'WAIT: the side-specific live quote is too far from the sweep invalidation level; candidate discarded.'
         else:
-            entry = round(price, 5)
+            entry = round(entry_reference, 5)
             sl = round(stop, 5)
-            tp = round(price + 2*risk if direction == 'BUY' else price - 2*risk, 5)
+            tp = round(entry_reference + 2*risk if direction == 'BUY' else entry_reference - 2*risk, 5)
 
     if direction in ('BUY','SELL') and entry is not None:
         wait_state = 'CANDIDATE'
@@ -1050,7 +1178,9 @@ def auto_scan_symbol(symbol, custom_price=None, min_confidence=None, timeframe='
         'trigger_timeframe': timeframe,
         'price': round(price,5) if price is not None else None,
         'price_source': price_source,
+        'quote_status': quote_status,
         'direction': direction,
+        'entry_side': entry_side,
         'confidence': None,
         'setup_score': passed,
         'setup_total': 20,
@@ -2376,7 +2506,7 @@ HTML = """
                 <img src="/static/robot_small.jpg" alt="Elite Alpha EA Robot">
             </div>
             <div class="app-title-home">Elite Alpha EA</div>
-            <div class="scanner-name">Precision Scanner v9.8.9</div>
+            <div class="scanner-name">Precision Scanner v9.9.0</div>
             <div class="app-tagline">Precision Trading, Zero Emotion</div>
         </div>
 
@@ -2495,7 +2625,7 @@ HTML = """
             <div class="auto-scan-result" id="autoScanResult"></div>
         </div>
 
-        <!-- v9.8.9: focused US index M15 scan shortcut preserved -->
+        <!-- v9.9.0: focused US index M15 scan shortcut preserved -->
         <div class="setup-instructions" id="usIndexQuickPanel" style="display:none;margin:14px 0;border-color:rgba(0,212,170,.30);">
             <h4>📈 US30 / NASDAQ Session Scan</h4>
             <div style="font-size:11px;color:#aab5bf;line-height:1.45;margin:5px 0 10px;">Choose an index for a live Exness M15 scan. The US cash open shifts between 15:30 and 16:30 SAST with U.S. daylight saving. A scan reports only closed-bar rules; time alone does not predict direction.</div>
@@ -2801,7 +2931,7 @@ HTML = """
         <!-- App Info -->
         <div class="setup-instructions">
             <h4>📱 About Elite Alpha EA</h4>
-            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.8.9</span></div>
+            <div class="info-row"><span class="label">Version:</span><span class="value" style="color: #00d4aa;">v9.9.0</span></div>
             <div class="info-row"><span class="label">Data bridge:</span><span class="value">MT5 · read-only</span></div>
             <div class="info-row"><span class="label">Strategy:</span><span class="value">SMC rules · unvalidated</span></div>
             <div class="info-row"><span class="label">Supported symbols:</span><span class="value">7 · Gold is the default</span></div>
@@ -2905,7 +3035,7 @@ HTML = """
                         priceEl.textContent = '—';
                         sourceEl.textContent = selectedSymbol === 'ALL'
                             ? 'Select one symbol to view its exact Exness price.'
-                            : '🔴 No exact Exness quote. Keep MT5 bridge connected or upload a current MT5 chart.';
+                            : '⏳ ' + (info && info.reason ? info.reason : 'No fresh exact Exness quote has reached this scan.');
                     }
                 })
                 .catch(() => {
@@ -3419,10 +3549,10 @@ HTML = """
                     livePricesCache = data;
                     const item = data[symbol];
                     const live = item && item.source === 'mt5' && Number(item.price) > 0;
-                    badge.textContent = live ? 'LIVE' : 'NO FEED';
+                    badge.textContent = live ? 'LIVE' : 'NO FRESH QUOTE';
                     badge.style.color = live ? '#00d4aa' : '#ffcc80';
                 })
-                .catch(() => { badge.textContent = 'NO FEED'; badge.style.color = '#ffcc80'; });
+                .catch(() => { badge.textContent = 'STATUS UNAVAILABLE'; badge.style.color = '#ffcc80'; });
         }
 
         function loadFeedDiagnostics() {
@@ -3435,9 +3565,11 @@ HTML = """
                 .then(data => {
                     const focusSymbols = ['XAUUSDm','US30m','USTECm'];
                     const quoteMap = data.quotes || {};
+                    const quoteStateMap = data.quote_status || {};
                     const candleMap = data.candles || {};
                     const rows = focusSymbols.map(symbol => {
                         const quote = quoteMap[symbol];
+                        const quoteState = quoteStateMap[symbol] || {};
                         const candle = candleMap[symbol] || {};
                         const frames = candle.timeframes || {};
                         const quoteOk = !!(quote && Number(quote.price) > 0);
@@ -3450,7 +3582,7 @@ HTML = """
                         const ready = quoteOk && ['M15','H1','H4','D1'].every(tf => frames[tf] && frames[tf].ready === true);
                         const quoteText = quoteOk
                             ? `LIVE ${formatPriceForSymbol(symbol, quote.price)} · ${Number(quote.age_seconds || 0).toFixed(1)}s`
-                            : 'NO FRESH QUOTE';
+                            : escapeHtml(quoteState.reason || 'No fresh exact quote has reached the app.');
                         return `<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06);">
                             <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
                                 <strong style="color:#e7edf2;font-size:12px;">${escapeHtml(symbol)}</strong>
@@ -3461,10 +3593,20 @@ HTML = """
                         </div>`;
                     }).join('');
                     const allQuotes = focusSymbols.every(symbol => !!quoteMap[symbol]);
-                    statusEl.textContent = data.configured
-                        ? (allQuotes ? 'Bridge token configured · fresh quotes received for all three focus markets.' : 'Bridge token configured · waiting for fresh quotes on one or more focus markets.')
-                        : 'MT5 bridge token is not configured on the server.';
-                    statusEl.style.color = allQuotes ? '#00d4aa' : '#ffd36a';
+                    const serverTimeMs = Date.parse(data.server_time_utc || '');
+                    const clockDiffMs = Number.isFinite(serverTimeMs) ? serverTimeMs - Date.now() : null;
+                    const clockWarning = clockDiffMs !== null && Math.abs(clockDiffMs) > 120000
+                        ? ` ⚠ App/device clock difference: ${Math.round(Math.abs(clockDiffMs) / 60000)} min; verify time alignment.`
+                        : '';
+                    const bridgeMessage = !data.configured
+                        ? 'MT5 bridge token is not configured on the server.'
+                        : allQuotes
+                            ? 'Fresh timestamp-validated quotes are available for all three focus markets.'
+                            : data.bridge_data_recent
+                                ? 'Recent bridge data reached the app, but one or more fresh quotes are missing. Physical terminal connection state is not observable here.'
+                                : 'No recent bridge payload reached the app. Physical terminal connection state is not observable here.';
+                    statusEl.textContent = bridgeMessage + clockWarning;
+                    statusEl.style.color = clockWarning ? '#ffcc80' : allQuotes ? '#00d4aa' : '#ffd36a';
                     contentEl.innerHTML = rows;
                 })
                 .catch(() => {
@@ -4224,7 +4366,7 @@ HTML = """
             const result = document.getElementById('result');
             result.style.display = 'block';
             if (!price) {
-                result.innerHTML = `<div style="text-align:center;padding:18px;color:#ddd;background:rgba(0,0,0,.25);border-radius:12px;"><strong style="color:#ffd700;font-size:28px;">WAIT</strong><p>No exact Exness quote is available. Keep MT5 connected or upload a current chart.</p></div>`;
+                result.innerHTML = `<div style="text-align:center;padding:18px;color:#ddd;background:rgba(0,0,0,.25);border-radius:12px;"><strong style="color:#ffd700;font-size:28px;">WAIT</strong><p>No fresh exact Exness quote has reached this scan. This does not determine your terminal’s connection state.</p></div>`;
                 return;
             }
             result.innerHTML = '<div style="text-align:center;padding:14px;color:#00d4aa;">Evaluating the same closed-candle SMC checks as the Precision Scan…</div>';
@@ -4285,7 +4427,7 @@ def home():
 @app.route('/api/mt5/quotes', methods=['POST'])
 def api_mt5_quotes():
     """Receive read-only ticks and optional closed MT5 OHLC bars from the bridge EA."""
-    global MT5_QUOTES, MT5_QUOTES_LAST_UPDATE, MT5_CANDLES
+    global MT5_QUOTES, MT5_QUOTES_LAST_UPDATE, MT5_BRIDGE_LAST_DATA_UPDATE, MT5_CANDLES
     if not MT5_BRIDGE_TOKEN:
         return jsonify({'error': 'MT5 bridge is not configured on the server'}), 503
 
@@ -4311,8 +4453,19 @@ def api_mt5_quotes():
     if not quotes and not series:
         return jsonify({'error': 'payload must contain quotes or candle series'}), 400
 
+    try:
+        broker_utc_offset_min = int(payload.get('broker_utc_offset_min'))
+        offset_known = abs(broker_utc_offset_min) <= 14 * 60
+    except (TypeError, ValueError, OverflowError):
+        broker_utc_offset_min = 0
+        offset_known = False
+    if not offset_known:
+        broker_utc_offset_min = 0
+
     now = time.time()
     accepted_quotes = 0
+    fresh_quotes = 0
+    quote_time_unknown = 0
     for item in quotes:
         if not isinstance(item, dict):
             continue
@@ -4322,28 +4475,32 @@ def api_mt5_quotes():
         try:
             bid = float(item.get('bid', 0) or 0)
             ask = float(item.get('ask', 0) or 0)
-            price = (bid + ask) / 2.0 if bid > 0 and ask > 0 else (bid if bid > 0 else ask)
-            if not all(math.isfinite(x) for x in (bid, ask, price)) or price <= 0:
+            if not all(math.isfinite(x) for x in (bid, ask)) or bid <= 0 or ask <= 0 or ask < bid:
                 continue
-        except (TypeError, ValueError):
+            price = (bid + ask) / 2.0
+            raw_tick_time = item.get('time_sec')
+            tick_time_sec = int(float(raw_tick_time)) if raw_tick_time is not None else None
+            if tick_time_sec is not None and tick_time_sec <= 0:
+                tick_time_sec = None
+        except (TypeError, ValueError, OverflowError):
             continue
+        tick_time_utc_sec = (tick_time_sec - broker_utc_offset_min * 60
+                             if tick_time_sec is not None and offset_known else None)
         MT5_QUOTES[symbol] = {
-            'price': round(price, 5),
-            'bid': round(bid, 5),
-            'ask': round(ask, 5),
-            'tick_time_sec': item.get('time_sec'),
+            'price': round(price, 8),
+            'bid': round(bid, 8),
+            'ask': round(ask, 8),
+            'tick_time_sec': tick_time_sec,
+            'tick_time_utc_sec': tick_time_utc_sec,
             'received_at': now,
             'server': str(payload.get('server', '')),
             'account': str(payload.get('account', '')),
         }
         accepted_quotes += 1
-
-    try:
-        broker_offset_min = int(payload.get('broker_utc_offset_min'))
-        offset_known = True
-    except (TypeError, ValueError):
-        broker_offset_min = 0
-        offset_known = False
+        if tick_time_utc_sec is None:
+            quote_time_unknown += 1
+        elif get_mt5_quote_status(symbol, now=now)['usable']:
+            fresh_quotes += 1
 
     accepted_series = 0
     accepted_candles = 0
@@ -4376,15 +4533,18 @@ def api_mt5_quotes():
                 tick_volume = int(float(volume_raw)) if volume_raw is not None else None
                 spread_raw = candle.get('spread_points')
                 spread_points = int(float(spread_raw)) if spread_raw is not None else None
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 continue
             if stamp <= 0 or not all(math.isfinite(x) for x in (o, h, low, close)):
+                continue
+            if ((tick_volume is not None and tick_volume < 0)
+                    or (spread_points is not None and spread_points < 0)):
                 continue
             if min(o, h, low, close) <= 0 or h < max(o, low, close) or low > min(o, h, close):
                 continue
             by_time[stamp] = {
                 'time': stamp,
-                'time_utc': stamp - broker_offset_min * 60 if offset_known else None,
+                'time_utc': stamp - broker_utc_offset_min * 60 if offset_known else None,
                 'open': o, 'high': h, 'low': low, 'close': close,
                 'tick_volume': tick_volume,
                 'spread_points': spread_points,
@@ -4398,7 +4558,7 @@ def api_mt5_quotes():
             'received_at': now,
             'server': str(payload.get('server', '')),
             'account': str(payload.get('account', '')),
-            'broker_utc_offset_min': broker_offset_min if offset_known else None,
+            'broker_utc_offset_min': broker_utc_offset_min if offset_known else None,
             'point': point_size,
         }
         accepted_series += 1
@@ -4406,12 +4566,16 @@ def api_mt5_quotes():
 
     if accepted_quotes:
         MT5_QUOTES_LAST_UPDATE = now
+    if accepted_quotes or accepted_series:
+        MT5_BRIDGE_LAST_DATA_UPDATE = now
     if not accepted_quotes and not accepted_series:
         return jsonify({'error': 'No valid quote or candle data accepted'}), 422
 
     return jsonify({
         'status': 'ok',
         'accepted': accepted_quotes,
+        'accepted_fresh_quotes': fresh_quotes,
+        'quotes_without_usable_tick_time': quote_time_unknown,
         'accepted_series': accepted_series,
         'accepted_candles': accepted_candles,
         'received_at': now,
@@ -4419,8 +4583,12 @@ def api_mt5_quotes():
 
 @app.route('/api/mt5/status')
 def api_mt5_status():
+    now = time.time()
     fresh = {}
+    quote_statuses = {}
     for symbol in SYMBOL_CONFIG:
+        state = get_mt5_quote_status(symbol, now=now)
+        quote_statuses[symbol] = state
         quote = get_mt5_quote(symbol)
         if quote:
             fresh[symbol] = {
@@ -4428,13 +4596,33 @@ def api_mt5_status():
                 'bid': quote['bid'],
                 'ask': quote['ask'],
                 'server': quote.get('server', ''),
-                'age_seconds': round(time.time() - quote.get('received_at', time.time()), 1),
+                'age_seconds': round(now - quote.get('received_at', now), 1),
+                'tick_age_seconds': state.get('tick_age_seconds'),
             }
     candle_status = {symbol: get_mt5_candle_status(symbol) for symbol in SYMBOL_CONFIG}
     candles_ready = all(info['ready'] for info in candle_status.values())
+    bridge_age = now - MT5_BRIDGE_LAST_DATA_UPDATE if MT5_BRIDGE_LAST_DATA_UPDATE is not None else None
+    bridge_recent = bool(bridge_age is not None and -MT5_CANDLE_FUTURE_TOLERANCE_SECONDS <= bridge_age <= MT5_CANDLE_MAX_AGE_SECONDS)
+    if not MT5_BRIDGE_TOKEN:
+        connection_status = 'TOKEN_NOT_CONFIGURED'
+    elif fresh:
+        connection_status = 'FRESH_QUOTES_AVAILABLE'
+    elif bridge_recent:
+        connection_status = 'BRIDGE_DATA_RECENT_NO_FRESH_QUOTE'
+    else:
+        connection_status = 'NO_RECENT_BRIDGE_DATA'
     return jsonify({
         'configured': bool(MT5_BRIDGE_TOKEN),
+        # Backward-compatible alias: this means fresh, timestamp-validated quotes,
+        # not the physical connection state of the user's MT5 terminal.
         'connected': bool(fresh),
+        'connection_status': connection_status,
+        'physical_terminal_state': 'NOT_OBSERVABLE_FROM_SERVER',
+        'server_time_utc': datetime.now(timezone.utc).isoformat(),
+        'fresh_quotes_available': bool(fresh),
+        'quote_status': quote_statuses,
+        'bridge_data_recent': bridge_recent,
+        'bridge_data_age_seconds': round(bridge_age, 1) if bridge_age is not None else None,
         'quotes': fresh,
         'candles_connected': any(any(tf['available'] for tf in item['timeframes'].values()) for item in candle_status.values()),
         'candles_ready_all_symbols': candles_ready,
@@ -4452,13 +4640,16 @@ def api_mt5_candles_status():
         'candles': {item: get_mt5_candle_status(item) for item in SYMBOL_CONFIG},
         'required_timeframes': list(MT5_TIMEFRAMES),
         'max_age_seconds': MT5_CANDLE_MAX_AGE_SECONDS,
+        'max_bar_age_seconds': dict(MT5_CANDLE_MAX_BAR_AGE_SECONDS),
     })
 
 @app.route('/api/prices')
 def api_prices():
-    """Return exact MT5 prices only. No external proxy or static-price fallback."""
+    """Return exact, source-time-validated MT5 prices only; no proxy fallback."""
     prices = {}
+    now = time.time()
     for symbol in SYMBOL_CONFIG:
+        quote_status = get_mt5_quote_status(symbol, now=now)
         quote = get_mt5_quote(symbol)
         if quote:
             prices[symbol] = {
@@ -4467,13 +4658,20 @@ def api_prices():
                 'ask': quote['ask'],
                 'change': None,
                 'source': 'mt5',
-                'age_seconds': round(time.time() - quote.get('received_at', time.time()), 1),
+                'age_seconds': round(now - quote.get('received_at', now), 1),
+                'tick_age_seconds': quote_status.get('tick_age_seconds'),
+                'quote_status': quote_status.get('status'),
+                'reason': quote_status.get('reason'),
                 'server': quote.get('server', ''),
             }
         else:
             prices[symbol] = {
                 'price': None, 'bid': None, 'ask': None, 'change': None,
-                'source': 'unavailable', 'age_seconds': None, 'server': '',
+                'source': 'unavailable', 'age_seconds': quote_status.get('received_age_seconds'),
+                'tick_age_seconds': quote_status.get('tick_age_seconds'),
+                'quote_status': quote_status.get('status'),
+                'reason': quote_status.get('reason'),
+                'server': '',
             }
     return jsonify(prices)
 
@@ -4579,9 +4777,11 @@ def api_auto_scan():
     if timeframe not in MT5_TIMEFRAMES:
         return jsonify({'error': 'Timeframe must be M15, H1, H4, or D1'}), 400
     try:
-        parsed_price = float(custom_price) if custom_price else None
-    except (TypeError, ValueError):
+        parsed_price = float(custom_price) if custom_price not in (None, '') else None
+    except (TypeError, ValueError, OverflowError):
         return jsonify({'error': 'Invalid screenshot price parameter'}), 400
+    if parsed_price is not None and (not math.isfinite(parsed_price) or parsed_price <= 0):
+        return jsonify({'error': 'Screenshot price must be a finite positive number'}), 400
     manual_news_clear = request.args.get('manual_news_clear', '').lower() in ('1', 'true', 'yes')
     result = auto_scan_symbol(symbol, custom_price=parsed_price, timeframe=timeframe, manual_news_clear=manual_news_clear)
     if result:
@@ -4618,8 +4818,13 @@ def api_drawdown_status():
       - daily_pnl: today's P&L (negative = loss)
       - weekly_pnl: this week's P&L
     """
-    daily_pnl = float(request.args.get('daily_pnl', 0))
-    weekly_pnl = float(request.args.get('weekly_pnl', 0))
+    try:
+        daily_pnl = float(request.args.get('daily_pnl', 0))
+        weekly_pnl = float(request.args.get('weekly_pnl', 0))
+    except (TypeError, ValueError, OverflowError):
+        return jsonify({'error': 'daily_pnl and weekly_pnl must be finite numbers'}), 400
+    if not math.isfinite(daily_pnl) or not math.isfinite(weekly_pnl):
+        return jsonify({'error': 'daily_pnl and weekly_pnl must be finite numbers'}), 400
     balance = ACCOUNT_CONFIG['balance']
     return jsonify(check_drawdown_status(daily_pnl, weekly_pnl, balance))
 
@@ -4628,8 +4833,13 @@ def health():
     return jsonify({
         'status': 'online',
         'app': 'Elite Alpha EA',
-        'version': '9.8.9',
+        'version': '9.9.0',
+        'server_time_utc': datetime.now(timezone.utc).isoformat(),
         'features': [
+            'source_timestamp_freshness_validation', 'mt5_quote_tick_time_and_utc_offset_check',
+            'candle_close_time_staleness_and_future_skew_check', 'physical_terminal_state_not_inferred_from_api',
+            'app_device_clock_skew_diagnostic',
+            'spread_aware_side_specific_candidate_entry_price', 'pytest_discoverable_regression_tests',
             'read_only_mt5_quotes', 'read_only_mt5_closed_ohlc', 'exact_prices_only',
             'live_attributed_economic_calendar', 'conditional_news_scenarios',
             'deterministic_20_factor_engine_unvalidated', 'no_uncalibrated_confidence_percent',
